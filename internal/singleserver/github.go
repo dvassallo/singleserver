@@ -154,7 +154,7 @@ func (c *GitHubClient) CreateCommitStatus(repo string, sha string, token string,
 		Description: description,
 		Context:     "Single Server",
 	}
-	return c.request("POST", fmt.Sprintf("/repos/%s/statuses/%s", repo, sha), "token "+token, body, nil)
+	return c.request("POST", fmt.Sprintf("/repos/%s/statuses/%s", repo, sha), "Bearer "+token, body, nil)
 }
 
 func (c *GitHubClient) ConvertManifestCode(code string) (*GitHubAppSecrets, string, error) {
@@ -248,7 +248,7 @@ func (c *GitHubClient) request(method string, path string, authorization string,
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", "singleserver")
-	req.Header.Set("X-GitHub-Api-Version", "2026-03-10")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	if authorization != "" {
 		req.Header.Set("Authorization", authorization)
 	}
