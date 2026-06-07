@@ -130,10 +130,16 @@ Install the daemon binary as both `/usr/local/bin/singleserverd` and `/usr/local
 ```sh
 singleserver list
 singleserver status
+singleserver add owner/repo --host example.com --host www.example.com
 singleserver deploy dvassallo/fullsend
 singleserver render-deploy smallbets/userbase-homepage
 singleserver logs fullsend
 ```
+
+`singleserver add <owner/repo>` validates GitHub App access, checks the repo's
+default branch and `Dockerfile`, appends the app to `/etc/singleserver/apps.yml`,
+and validates the generated Kamal config. Pass `--deploy` to immediately deploy
+the current branch tip and run `doctor` afterward.
 
 `singleserver deploy <owner/repo> [ref]` runs the same deploy path as a push webhook. If `ref` is omitted, Single Server deploys the configured branch or the repository default branch.
 
@@ -143,12 +149,11 @@ for a configured app. It does not inspect or modify the app repository.
 ## Adding An App
 
 1. Install the Single Server GitHub App on the repository owner, if it is not already installed.
-2. Add the repository to `/etc/singleserver/apps.yml`.
-3. Make sure the repository contains a `Dockerfile`.
-4. Run a manual deploy once:
+2. Make sure the repository contains a `Dockerfile`.
+3. Add it from the server:
 
 ```sh
-singleserver deploy owner/repo
+singleserver add owner/repo --host example.com --host www.example.com --deploy
 ```
 
 Future pushes to the configured branch deploy automatically.

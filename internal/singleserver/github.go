@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -52,6 +53,10 @@ type RepositoryResponse struct {
 
 type CommitResponse struct {
 	SHA string `json:"sha"`
+}
+
+type RepositoryContentResponse struct {
+	Type string `json:"type"`
 }
 
 type GitHubClient struct {
@@ -230,6 +235,32 @@ func (c *GitHubClient) CommitSHA(repo string, ref string, token string) (string,
 		return "", errors.New("commit sha is missing")
 	}
 	return commit.SHA, nil
+}
+
+func (c *GitHubClient) RepositoryFileExists(repo string, path string, ref string, token string) (bool, error) {
+	if path == "" {
+		return false, errors.New("path is required")
+	}
+	if ref == "" {
+		return false, errors.New("ref is required")
+	}
+	var content RepositoryContentResponse
+	err := c.request("GET", fmt.Sprintf("/repos/%s/contents/%s?ref=%s", repo, escapeContentPath(path), url.QueryEscape(ref)), "Bearer "+token, nil, &content)
+	if err != nil {
+		if strings.Contains(err.Error(), "Not Found") {
+			return false, nil
+		}
+		return false, err
+	}
+	return content.Type == "file", nil
+}
+
+func escapeContentPath(path string) string {
+	parts := strings.Split(path, "/")
+	for i := range parts {
+		parts[i] = url.PathEscape(parts[i])
+	}
+	return strings.Join(parts, "/")
 }
 
 func (c *GitHubClient) ConvertManifestCode(code string) (*GitHubAppSecrets, string, error) {

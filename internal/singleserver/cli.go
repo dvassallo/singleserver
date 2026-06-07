@@ -26,6 +26,8 @@ func RunCLI(args []string, logger *log.Logger) error {
 		return cliList(os.Stdout)
 	case "status":
 		return cliStatus(os.Stdout)
+	case "add":
+		return cliAdd(args[1:], os.Stdout, logger)
 	case "deploy":
 		return cliDeploy(args[1:], logger)
 	case "render-deploy":
@@ -45,6 +47,7 @@ func printUsage(w io.Writer) {
 Usage:
   singleserver list
   singleserver status
+  singleserver add <owner/repo> [--host host] [--deploy]
   singleserver deploy <owner/repo> [ref]
   singleserver render-deploy <owner/repo>
   singleserver doctor
@@ -53,6 +56,7 @@ Usage:
 Commands:
   list           Show configured apps.
   status         Check the local daemon and configured healthchecks.
+  add            Add a GitHub repository to apps.yml.
   deploy         Deploy a configured app immediately.
   render-deploy  Print the generated Kamal deploy.yml for a configured app.
   doctor         Check config, GitHub App access, checkouts, deploy logs, and healthchecks.
