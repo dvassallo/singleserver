@@ -6,6 +6,7 @@ It receives GitHub App `push` webhooks, checks a central allowlist, fetches the 
 
 For the intended user experience and roadmap, see
 [Working Backwards: The Single Server User Experience](docs/working-backwards.md).
+For a draft marketing homepage, see [www/index.html](www/index.html).
 
 ## Naming
 

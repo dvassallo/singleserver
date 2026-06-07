@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Single Server - Deploy many apps to one VPS</title>
+    <meta name="description" content="Single Server is a tiny deploy control plane for running many GitHub apps on one server.">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #FF3366;
+            --secondary: #00CCFF;
+            --tertiary: #FFCC00;
+            --green: #00D084;
+            --highlight: #f0f0f0;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Space Grotesk', system-ui, sans-serif;
+            line-height: 1.4;
+            padding: 40px 20px;
+            color: #000;
+            background: #fff;
+        }
+
+        main {
+            max-width: 860px;
+            margin: 0 auto;
+            border: 4px solid #000;
+            box-shadow: 12px 12px 0 #000;
+            padding: 40px;
+            background: #fff;
+            position: relative;
+        }
+
+        .github-link {
+            position: absolute;
+            top: 40px;
+            right: 40px;
+            color: #000;
+            transition: transform 0.2s;
+        }
+        .github-link:hover { transform: scale(1.1); }
+        .github-link svg { width: 32px; height: 32px; display: block; }
+
+        h1 {
+            font-size: 4rem;
+            line-height: 0.9;
+            margin-bottom: 20px;
+            font-weight: 700;
+            letter-spacing: 0;
+            text-transform: lowercase;
+            padding-right: 54px;
+        }
+
+        .tagline {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: var(--tertiary);
+            display: inline-block;
+            padding: 5px 10px;
+            transform: rotate(-1deg);
+            border: 2px solid #000;
+            box-shadow: 4px 4px 0 #000;
+        }
+
+        .lede {
+            font-size: 1.25rem;
+            line-height: 1.6;
+            margin-top: 28px;
+            max-width: 710px;
+        }
+
+        section { margin-top: 22px; }
+
+        h2 {
+            font-size: 1.8rem;
+            margin: 40px 0 20px;
+            display: inline-block;
+            line-height: 1.2;
+        }
+
+        h2 a {
+            color: inherit;
+            text-decoration: none;
+            border-bottom: 4px solid var(--primary);
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: border-color 0.2s;
+        }
+
+        h2 a::after {
+            content: "->";
+            font-size: 0.8em;
+            color: #999;
+            transition: color 0.2s, transform 0.2s;
+        }
+
+        h2 a:hover { border-color: var(--secondary); }
+        h2 a:hover::after {
+            color: var(--secondary);
+            transform: translateX(3px);
+        }
+
+        section > p,
+        .feature-desc {
+            font-size: 1.2rem;
+            line-height: 1.6;
+            color: #222;
+        }
+
+        .flow-box {
+            background: var(--highlight);
+            padding: 30px;
+            border: 2px solid #000;
+            margin-top: 15px;
+            box-shadow: 8px 8px 0 rgba(0,0,0,0.1);
+        }
+
+        .flow-row {
+            display: grid;
+            grid-template-columns: 150px 42px 1fr;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 18px;
+        }
+        .flow-row:last-child { margin-bottom: 0; }
+
+        .pill {
+            font-family: monospace;
+            font-weight: 700;
+            font-size: 1rem;
+            background: #fff;
+            padding: 6px 10px;
+            border: 2px solid #000;
+            text-align: center;
+            min-height: 36px;
+        }
+
+        .connector {
+            color: var(--primary);
+            font-weight: 900;
+            font-size: 1.2rem;
+            text-align: center;
+        }
+
+        .result {
+            font-weight: 700;
+            font-size: 1.08rem;
+        }
+
+        .commands-list {
+            display: flex;
+            flex-direction: column;
+            gap: 26px;
+        }
+
+        .command-item {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .step-desc {
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
+
+        .note {
+            margin-top: 18px;
+            font-size: 1rem;
+            line-height: 1.5;
+            color: #111;
+            background: var(--highlight);
+            border-left: 6px solid var(--tertiary);
+            padding: 12px 14px;
+        }
+
+        .code-wrapper {
+            position: relative;
+        }
+
+        .code-block {
+            display: block;
+            background: #000;
+            color: #fff;
+            padding: 15px 48px 15px 20px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 1rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            white-space: nowrap;
+        }
+
+        .code-block span { color: var(--secondary); }
+        .code-block .keyword { color: var(--primary); }
+        .code-block .flag { color: var(--tertiary); }
+
+        .copy-btn {
+            position: absolute;
+            top: 50%;
+            right: 10px;
+            transform: translateY(-50%);
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            color: #fff;
+            cursor: pointer;
+            opacity: 0;
+            transition: all 0.2s;
+            padding: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .code-wrapper:hover .copy-btn { opacity: 1; }
+        .copy-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: #fff;
+        }
+        .copy-btn svg { width: 16px; height: 16px; display: block; }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 16px;
+            margin-top: 14px;
+        }
+
+        .feature {
+            border: 2px solid #000;
+            padding: 18px;
+            background: #fff;
+            box-shadow: 6px 6px 0 var(--highlight);
+        }
+
+        .feature strong {
+            display: block;
+            font-size: 1.1rem;
+            margin-bottom: 6px;
+        }
+
+        .feature p {
+            font-size: 1rem;
+            line-height: 1.5;
+            color: #222;
+        }
+
+        .feature code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            background: var(--highlight);
+            padding: 1px 4px;
+        }
+
+        .status-strip {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+            margin-top: 15px;
+        }
+
+        .status {
+            border: 2px solid #000;
+            padding: 14px;
+            font-weight: 700;
+            min-height: 96px;
+        }
+        .status.built { background: var(--green); }
+        .status.partial { background: var(--tertiary); }
+        .status.next { background: var(--secondary); }
+        .status span {
+            display: block;
+            margin-top: 8px;
+            font-size: 0.9rem;
+            font-weight: 400;
+        }
+
+        footer {
+            margin-top: 80px;
+            font-size: 0.9rem;
+            color: #666;
+            text-align: center;
+            border-top: 2px solid #eee;
+            padding-top: 30px;
+        }
+
+        footer a { color: #000; font-weight: bold; }
+
+        @media (max-width: 700px) {
+            body { padding: 24px 14px; }
+            h1 { font-size: 3rem; }
+            main { padding: 20px; box-shadow: 8px 8px 0 #000; }
+            .github-link { top: 20px; right: 20px; }
+            .tagline { font-size: 1.18rem; }
+            .flow-box { padding: 20px; }
+            .flow-row {
+                grid-template-columns: 1fr;
+                gap: 8px;
+            }
+            .connector {
+                transform: rotate(90deg);
+                height: 22px;
+            }
+            .feature-grid,
+            .status-strip {
+                grid-template-columns: 1fr;
+            }
+            .code-block { font-size: 0.92rem; }
+        }
+    </style>
+</head>
+<body>
+
+<main>
+    <a href="https://github.com/dvassallo/singleserver" class="github-link" aria-label="View on GitHub">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+        </svg>
+    </a>
+
+    <header>
+        <h1>single server</h1>
+        <div class="tagline">One VPS. Many apps. Git push to live.</div>
+        <p class="lede">A tiny deploy control plane for people who want to own their infrastructure without babysitting a different runner, secret, and workflow for every small project.</p>
+    </header>
+
+    <section>
+        <h2><a href="#flow">The whole idea</a></h2>
+        <p>Single Server turns one blank Linux box into a home for many GitHub projects. Each app gets its own Docker container. The server owns deploys. GitHub only sends push events.</p>
+
+        <div class="flow-box" id="flow">
+            <div class="flow-row">
+                <span class="pill">git push</span>
+                <span class="connector">-&gt;</span>
+                <span class="result">GitHub App sends a signed webhook</span>
+            </div>
+            <div class="flow-row">
+                <span class="pill">apps.yml</span>
+                <span class="connector">-&gt;</span>
+                <span class="result">Only allowlisted repos can deploy</span>
+            </div>
+            <div class="flow-row">
+                <span class="pill">kamal</span>
+                <span class="connector">-&gt;</span>
+                <span class="result">Build, swap, healthcheck, commit status</span>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <h2><a href="#commands">Target setup flow</a></h2>
+
+        <div class="commands-list" id="commands">
+            <div class="command-item">
+                <p class="step-desc">Install the host control plane.</p>
+                <div class="code-wrapper">
+                    <code class="code-block">curl -fsSL <span>https://singleserver.com/install.sh</span> | sh</code>
+                    <button class="copy-btn" aria-label="Copy to clipboard">
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="command-item">
+                <p class="step-desc">Point the server at your control domain.</p>
+                <div class="code-wrapper">
+                    <code class="code-block">singleserver <span class="keyword">init</span> <span class="flag">--domain</span> deploy.example.com <span class="flag">--email</span> me@example.com</code>
+                    <button class="copy-btn" aria-label="Copy to clipboard">
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="command-item">
+                <p class="step-desc">Connect GitHub once.</p>
+                <div class="code-wrapper">
+                    <code class="code-block">singleserver <span class="keyword">github connect</span></code>
+                    <button class="copy-btn" aria-label="Copy to clipboard">
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="command-item">
+                <p class="step-desc">Add a repo and deploy it.</p>
+                <div class="code-wrapper">
+                    <code class="code-block">singleserver <span class="keyword">add</span> me/my-app <span class="flag">--host</span> my-app.example.com <span class="flag">--deploy</span></code>
+                    <button class="copy-btn" aria-label="Copy to clipboard">
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+        <p class="note">The core deploy loop is running today. The installer, init, and GitHub connect commands show the target setup flow from the working-backwards roadmap.</p>
+    </section>
+
+    <section>
+        <h2><a href="#features">What you get</a></h2>
+        <div class="feature-grid" id="features">
+            <div class="feature">
+                <strong>Fast deploys</strong>
+                <p>Build on the server, swap containers, healthcheck, and set a commit status. Small apps can deploy in a few seconds.</p>
+            </div>
+            <div class="feature">
+                <strong>One central allowlist</strong>
+                <p><code>apps.yml</code> decides what can deploy. Install the GitHub App broadly without making every repo deployable.</p>
+            </div>
+            <div class="feature">
+                <strong>No repo runners</strong>
+                <p>No GitHub Actions runner per project. No repo deploy keys. No pile of repeated deploy secrets.</p>
+            </div>
+            <div class="feature">
+                <strong>Containers per app</strong>
+                <p>Every project runs in its own Docker container, but the host still stays simple and inspectable.</p>
+            </div>
+            <div class="feature">
+                <strong>Kamal without boilerplate</strong>
+                <p>Single Server generates deploy config from conventions unless an app intentionally ships its own.</p>
+            </div>
+            <div class="feature">
+                <strong>Doctor included</strong>
+                <p>Check the daemon, GitHub App access, checkouts, deploy config, last deploys, and public healthchecks.</p>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <h2><a href="#contract">The app contract</a></h2>
+        <p class="feature-desc">Keep repositories boring. A Single Server app only needs a Dockerfile, one web port, and a health endpoint. Node, Bun, static sites, SQLite-backed apps: all fine.</p>
+
+        <div class="flow-box" id="contract">
+            <div class="flow-row">
+                <span class="pill">Dockerfile</span>
+                <span class="connector">-&gt;</span>
+                <span class="result">Single Server can build it</span>
+            </div>
+            <div class="flow-row">
+                <span class="pill">port 80</span>
+                <span class="connector">-&gt;</span>
+                <span class="result">Default app port, override when needed</span>
+            </div>
+            <div class="flow-row">
+                <span class="pill">/up</span>
+                <span class="connector">-&gt;</span>
+                <span class="result">Default healthcheck path</span>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <h2><a href="#roadmap">Built by working backwards</a></h2>
+        <p class="feature-desc">The core deploy loop is already running. The docs start from the ideal user experience, then turn the missing pieces into the roadmap.</p>
+
+        <div class="status-strip" id="roadmap">
+            <div class="status built">Built now<span>GitHub App push deploys, apps.yml allowlist, generated Kamal config, add, deploy, doctor.</span></div>
+            <div class="status partial">Being shaped<span>App onboarding and diagnostics work today, but should become even more automatic.</span></div>
+            <div class="status next">Next up<span>Installer, init, GitHub connect, DNS, storage, runtime logs, remove, upgrade.</span></div>
+        </div>
+    </section>
+
+    <footer>
+        <p>MIT License - <a href="https://github.com/dvassallo/singleserver">GitHub</a> - <a href="https://github.com/dvassallo/singleserver/blob/main/docs/working-backwards.md">Working backwards docs</a></p>
+    </footer>
+</main>
+
+<script>
+    document.querySelectorAll('.copy-btn').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+            const codeBlock = btn.previousElementSibling;
+            const text = codeBlock.innerText.trim();
+            const originalIcon = btn.innerHTML;
+
+            try {
+                await navigator.clipboard.writeText(text);
+                btn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor" style="color: #00ff88;"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>';
+                setTimeout(() => {
+                    btn.innerHTML = originalIcon;
+                }, 1600);
+            } catch (err) {
+                console.error('Failed to copy:', err);
+            }
+        });
+    });
+</script>
+
+</body>
+</html>
