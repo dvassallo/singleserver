@@ -5,4 +5,9 @@ apps:
     healthcheck: https://fullsend.game/up
   - repo: smallbets/userbase-homepage
     branch: master
-    healthcheck: https://userbase.com/
+    hosts:
+      - userbase.com
+      - www.userbase.com
+      - userbase.dev
+      - www.userbase.dev
+    healthcheck: https://userbase.com/up

@@ -1,0 +1,120 @@
+package singleserver
+
+import (
+	"bytes"
+
+	"gopkg.in/yaml.v3"
+)
+
+type kamalDeployConfig struct {
+	Service       string                 `yaml:"service"`
+	Image         string                 `yaml:"image"`
+	Servers       map[string]kamalServer `yaml:"servers"`
+	SSH           kamalSSH               `yaml:"ssh"`
+	Registry      kamalRegistry          `yaml:"registry"`
+	Builder       kamalBuilder           `yaml:"builder"`
+	Proxy         kamalProxy             `yaml:"proxy"`
+	DeployTimeout int                    `yaml:"deploy_timeout"`
+	DrainTimeout  int                    `yaml:"drain_timeout"`
+}
+
+type kamalServer struct {
+	Hosts   []string           `yaml:"hosts"`
+	Options kamalServerOptions `yaml:"options"`
+}
+
+type kamalServerOptions struct {
+	Init        bool `yaml:"init"`
+	StopTimeout int  `yaml:"stop-timeout"`
+}
+
+type kamalSSH struct {
+	User string   `yaml:"user"`
+	Keys []string `yaml:"keys"`
+}
+
+type kamalRegistry struct {
+	Server   string `yaml:"server"`
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+}
+
+type kamalBuilder struct {
+	Arch    string `yaml:"arch"`
+	Local   bool   `yaml:"local"`
+	Driver  string `yaml:"driver"`
+	Context string `yaml:"context"`
+}
+
+type kamalProxy struct {
+	Hosts          []string              `yaml:"hosts,omitempty"`
+	AppPort        int                   `yaml:"app_port"`
+	SSL            bool                  `yaml:"ssl"`
+	ForwardHeaders bool                  `yaml:"forward_headers"`
+	Healthcheck    kamalProxyHealthcheck `yaml:"healthcheck"`
+}
+
+type kamalProxyHealthcheck struct {
+	Path     string `yaml:"path"`
+	Interval int    `yaml:"interval"`
+	Timeout  int    `yaml:"timeout"`
+}
+
+func GeneratedDeployYAML(app AppConfig) ([]byte, error) {
+	if err := app.Normalize(); err != nil {
+		return nil, err
+	}
+
+	config := kamalDeployConfig{
+		Service: app.Name,
+		Image:   app.Name,
+		Servers: map[string]kamalServer{
+			"web": {
+				Hosts: []string{"127.0.0.1"},
+				Options: kamalServerOptions{
+					Init:        true,
+					StopTimeout: 1,
+				},
+			},
+		},
+		SSH: kamalSSH{
+			User: "deploy",
+			Keys: []string{"~/.ssh/id_ed25519"},
+		},
+		Registry: kamalRegistry{
+			Server:   "127.0.0.1:5555",
+			Username: "dummy",
+			Password: "dummy",
+		},
+		Builder: kamalBuilder{
+			Arch:    "amd64",
+			Local:   true,
+			Driver:  "docker",
+			Context: ".",
+		},
+		Proxy: kamalProxy{
+			Hosts:          app.Hosts,
+			AppPort:        app.AppPort,
+			SSL:            false,
+			ForwardHeaders: true,
+			Healthcheck: kamalProxyHealthcheck{
+				Path:     app.HealthcheckPath,
+				Interval: 1,
+				Timeout:  1,
+			},
+		},
+		DeployTimeout: 10,
+		DrainTimeout:  1,
+	}
+
+	var buf bytes.Buffer
+	encoder := yaml.NewEncoder(&buf)
+	encoder.SetIndent(2)
+	if err := encoder.Encode(config); err != nil {
+		return nil, err
+	}
+	if err := encoder.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}

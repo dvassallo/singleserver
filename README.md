@@ -31,6 +31,7 @@ app name:  repository name
 checkout:  /srv/repos/<app>
 deploy:    kamal setup -q on first deploy, kamal redeploy -q after that
 branch:    repository default branch from the webhook payload
+kamal:     generated from conventions unless config/deploy.yml is tracked
 ```
 
 Use an object only when an app needs overrides:
@@ -40,6 +41,44 @@ apps:
   - repo: dvassallo/fullsend
     branch: master
     healthcheck: https://fullsend.game/up
+    hosts:
+      - fullsend.game
+      - fullsend.assetstacks.com
+```
+
+By convention, a repo needs a `Dockerfile`, but it does not need a Kamal config.
+If the repo tracks `config/deploy.yml`, Single Server uses it as-is. Otherwise,
+Single Server writes a temporary `config/deploy.yml` for the deploy and removes it
+after Kamal exits.
+
+Generated Kamal config defaults:
+
+```text
+service/image:      app name
+server host:        127.0.0.1
+ssh user/key:       deploy, ~/.ssh/id_ed25519
+registry:           127.0.0.1:5555
+builder:            local amd64 Docker builder
+proxy app_port:     80
+proxy ssl:          false
+proxy healthcheck:  /up
+timeouts:           deploy 10s, drain 1s
+```
+
+Optional app overrides for the generated config:
+
+```yaml
+apps:
+  - repo: smallbets/userbase-homepage
+    branch: master
+    hosts:
+      - userbase.com
+      - www.userbase.com
+      - userbase.dev
+      - www.userbase.dev
+    app_port: 80
+    healthcheck_path: /up
+    healthcheck: https://userbase.com/up
 ```
 
 ## Host secrets
@@ -92,16 +131,20 @@ Install the daemon binary as both `/usr/local/bin/singleserverd` and `/usr/local
 singleserver list
 singleserver status
 singleserver deploy dvassallo/fullsend
+singleserver render-deploy smallbets/userbase-homepage
 singleserver logs fullsend
 ```
 
 `singleserver deploy <owner/repo> [ref]` runs the same deploy path as a push webhook. If `ref` is omitted, Single Server deploys the configured branch or the repository default branch.
 
+`singleserver render-deploy <owner/repo>` prints the generated Kamal `deploy.yml`
+for a configured app. It does not inspect or modify the app repository.
+
 ## Adding An App
 
 1. Install the Single Server GitHub App on the repository owner, if it is not already installed.
 2. Add the repository to `/etc/singleserver/apps.yml`.
-3. Make sure the repository contains a Kamal `config/deploy.yml`.
+3. Make sure the repository contains a `Dockerfile`.
 4. Run a manual deploy once:
 
 ```sh

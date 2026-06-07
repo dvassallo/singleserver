@@ -97,6 +97,11 @@ type DeployTiming struct {
 }
 
 func (m *DeployManager) runKamal(req DeployRequest, token string) (DeployTiming, error) {
+	generatedDeployYAML, err := GeneratedDeployYAML(req.App)
+	if err != nil {
+		return DeployTiming{}, err
+	}
+
 	script := `
 set -euo pipefail
 
@@ -110,6 +115,15 @@ repo="$SINGLESERVER_REPO"
 sha="$SINGLESERVER_SHA"
 app_name="$SINGLESERVER_APP_NAME"
 remote_url="https://x-access-token:${SINGLESERVER_GITHUB_TOKEN}@github.com/${repo}.git"
+generated_deploy_file=""
+
+cleanup() {
+  if [ -n "$generated_deploy_file" ]; then
+    rm -f "$generated_deploy_file"
+    rmdir config 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT
 
 mkdir -p "$(dirname "$repo_dir")"
 if [ ! -d "$repo_dir/.git" ]; then
@@ -125,10 +139,16 @@ git remote set-url origin "https://github.com/${repo}.git"
 
 git_done_ms=$(now_ms)
 
-if [ ! -f config/deploy.yml ]; then
-  echo "missing config/deploy.yml"
-  exit 2
+if git ls-files --error-unmatch config/deploy.yml >/dev/null 2>&1; then
+  deploy_config_source=repo
+else
+  rm -f config/deploy.yml
+  mkdir -p config
+  generated_deploy_file=config/deploy.yml
+  printf '%s' "$SINGLESERVER_GENERATED_DEPLOY_YML" > "$generated_deploy_file"
+  deploy_config_source=generated
 fi
+echo "deploy_config=${deploy_config_source}"
 
 if docker ps -a --format '{{.Names}}' | grep -Eq "^${app_name}-"; then
   kamal_command=redeploy
@@ -138,7 +158,7 @@ fi
 
 GITHUB_SHA="$sha" kamal "$kamal_command" -q
 end_ms=$(now_ms)
-echo "timing command=${kamal_command} git_ms=$((git_done_ms - start_ms)) kamal_ms=$((end_ms - git_done_ms)) total_ms=$((end_ms - start_ms))"
+echo "timing command=${kamal_command} config=${deploy_config_source} git_ms=$((git_done_ms - start_ms)) kamal_ms=$((end_ms - git_done_ms)) total_ms=$((end_ms - start_ms))"
 `
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -151,6 +171,7 @@ echo "timing command=${kamal_command} git_ms=$((git_done_ms - start_ms)) kamal_m
 		"SINGLESERVER_REPO="+req.Repo,
 		"SINGLESERVER_SHA="+req.SHA,
 		"SINGLESERVER_GITHUB_TOKEN="+token,
+		"SINGLESERVER_GENERATED_DEPLOY_YML="+string(generatedDeployYAML),
 	)
 
 	var combined lockedBuffer
@@ -158,7 +179,7 @@ echo "timing command=${kamal_command} git_ms=$((git_done_ms - start_ms)) kamal_m
 	command.Stderr = &lineLogger{prefix: "[deploy:" + req.RunID + "] err: ", logger: m.logger, sink: &combined}
 
 	start := time.Now()
-	err := command.Run()
+	err = command.Run()
 	if ctx.Err() == context.DeadlineExceeded {
 		return DeployTiming{}, fmt.Errorf("deploy timed out")
 	}

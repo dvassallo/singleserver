@@ -14,6 +14,12 @@ func TestLoadConfigSupportsStringAndMapApps(t *testing.T) {
   - repo: dvassallo/fullsend
     branch: master
     healthcheck: https://fullsend.game/up
+    hosts:
+      - fullsend.game
+      - fullsend.assetstacks.com
+      - fullsend.game
+    app_port: 3000
+    healthcheck_path: health
 `)
 	if err := os.WriteFile(path, body, 0600); err != nil {
 		t.Fatal(err)
@@ -31,6 +37,15 @@ func TestLoadConfigSupportsStringAndMapApps(t *testing.T) {
 	}
 	if config.Apps[1].Branch != "master" {
 		t.Fatalf("unexpected branch override: %s", config.Apps[1].Branch)
+	}
+	if config.Apps[1].AppPort != 3000 {
+		t.Fatalf("unexpected app_port: %d", config.Apps[1].AppPort)
+	}
+	if config.Apps[1].HealthcheckPath != "/health" {
+		t.Fatalf("unexpected healthcheck_path: %s", config.Apps[1].HealthcheckPath)
+	}
+	if got := len(config.Apps[1].Hosts); got != 2 {
+		t.Fatalf("expected duplicate hosts to be removed, got %d", got)
 	}
 }
 
@@ -62,5 +77,15 @@ func TestAppByRepoIsCaseInsensitive(t *testing.T) {
 	}
 	if app.Name != "fullsend" {
 		t.Fatalf("unexpected app: %s", app.Name)
+	}
+}
+
+func TestNormalizeRejectsURLHosts(t *testing.T) {
+	app := AppConfig{
+		Repo:  "dvassallo/fullsend",
+		Hosts: []string{"https://fullsend.game"},
+	}
+	if err := app.Normalize(); err == nil {
+		t.Fatal("expected URL host to be rejected")
 	}
 }

@@ -20,11 +20,14 @@ type Config struct {
 }
 
 type AppConfig struct {
-	Repo        string `yaml:"repo"`
-	Name        string `yaml:"name"`
-	Branch      string `yaml:"branch"`
-	RepoDir     string `yaml:"path"`
-	Healthcheck string `yaml:"healthcheck"`
+	Repo            string   `yaml:"repo"`
+	Name            string   `yaml:"name"`
+	Branch          string   `yaml:"branch"`
+	RepoDir         string   `yaml:"path"`
+	Healthcheck     string   `yaml:"healthcheck"`
+	Hosts           []string `yaml:"hosts"`
+	AppPort         int      `yaml:"app_port"`
+	HealthcheckPath string   `yaml:"healthcheck_path"`
 }
 
 func (a *AppConfig) UnmarshalYAML(value *yaml.Node) error {
@@ -65,6 +68,39 @@ func (a *AppConfig) Normalize() error {
 		a.RepoDir = "/srv/repos/" + a.Name
 	}
 	a.Healthcheck = strings.TrimSpace(a.Healthcheck)
+	if a.AppPort == 0 {
+		a.AppPort = 80
+	}
+	if a.AppPort < 1 || a.AppPort > 65535 {
+		return fmt.Errorf("invalid app_port for %s: %d", a.Repo, a.AppPort)
+	}
+
+	hosts := make([]string, 0, len(a.Hosts))
+	seenHosts := map[string]bool{}
+	for _, host := range a.Hosts {
+		host = strings.TrimSpace(host)
+		if host == "" {
+			continue
+		}
+		if strings.Contains(host, "://") || strings.Contains(host, "/") {
+			return fmt.Errorf("invalid host for %s: %q", a.Repo, host)
+		}
+		key := strings.ToLower(host)
+		if seenHosts[key] {
+			continue
+		}
+		seenHosts[key] = true
+		hosts = append(hosts, host)
+	}
+	a.Hosts = hosts
+
+	a.HealthcheckPath = strings.TrimSpace(a.HealthcheckPath)
+	if a.HealthcheckPath == "" {
+		a.HealthcheckPath = "/up"
+	}
+	if !strings.HasPrefix(a.HealthcheckPath, "/") {
+		a.HealthcheckPath = "/" + a.HealthcheckPath
+	}
 	return nil
 }
 

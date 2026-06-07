@@ -28,6 +28,8 @@ func RunCLI(args []string, logger *log.Logger) error {
 		return cliStatus(os.Stdout)
 	case "deploy":
 		return cliDeploy(args[1:], logger)
+	case "render-deploy":
+		return cliRenderDeploy(args[1:], os.Stdout)
 	case "logs":
 		return cliLogs(args[1:], os.Stdout)
 	default:
@@ -42,13 +44,15 @@ Usage:
   singleserver list
   singleserver status
   singleserver deploy <owner/repo> [ref]
+  singleserver render-deploy <owner/repo>
   singleserver logs [app]
 
 Commands:
-  list      Show configured apps.
-  status    Check the local daemon and configured healthchecks.
-  deploy    Deploy a configured app immediately.
-  logs      Show recent Single Server journal logs, optionally filtered by app.
+  list           Show configured apps.
+  status         Check the local daemon and configured healthchecks.
+  deploy         Deploy a configured app immediately.
+  render-deploy  Print the generated Kamal deploy.yml for a configured app.
+  logs           Show recent Single Server journal logs, optionally filtered by app.
 `)
 }
 
@@ -153,6 +157,28 @@ func cliDeploy(args []string, logger *log.Logger) error {
 		InstallationID: installationID,
 		RunID:          fmt.Sprintf("%s-manual-%d", app.Name, time.Now().UnixMilli()),
 	})
+}
+
+func cliRenderDeploy(args []string, w io.Writer) error {
+	if len(args) != 1 {
+		return errors.New("usage: singleserver render-deploy <owner/repo>")
+	}
+	repo := strings.TrimSpace(args[0])
+
+	config, err := LoadConfig(envDefault("SINGLESERVER_CONFIG", "/etc/singleserver/apps.yml"))
+	if err != nil {
+		return err
+	}
+	app, ok := config.AppByRepo(repo)
+	if !ok {
+		return fmt.Errorf("%s is not configured", repo)
+	}
+	body, err := GeneratedDeployYAML(*app)
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(body)
+	return err
 }
 
 func cliLogs(args []string, w io.Writer) error {
