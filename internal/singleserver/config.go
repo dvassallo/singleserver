@@ -94,6 +94,15 @@ func LoadConfig(path string) (*Config, error) {
 	return &config, nil
 }
 
+func (c *Config) AppByRepo(repo string) (*AppConfig, bool) {
+	for i := range c.Apps {
+		if strings.EqualFold(c.Apps[i].Repo, repo) {
+			return &c.Apps[i], true
+		}
+	}
+	return nil, false
+}
+
 func (c *Config) AppForPush(payload *PushPayload) (*AppConfig, string, string) {
 	if payload == nil || payload.Repository.FullName == "" {
 		return nil, "", "missing repository"

@@ -60,18 +60,18 @@ func (m *DeployManager) Enqueue(req DeployRequest) string {
 
 func (m *DeployManager) worker(appName string, queue <-chan DeployRequest) {
 	for req := range queue {
-		m.run(req)
+		_ = m.run(req)
 	}
 }
 
-func (m *DeployManager) run(req DeployRequest) {
+func (m *DeployManager) run(req DeployRequest) error {
 	start := time.Now()
 	m.logger.Printf("[deploy:%s] start %s@%s (%s) -> %s", req.RunID, req.Repo, req.SHA, req.Branch, req.App.Name)
 
 	token, err := m.github.DeployToken(req.InstallationID)
 	if err != nil {
 		m.logger.Printf("[deploy:%s] failed to get GitHub token: %v", req.RunID, err)
-		return
+		return err
 	}
 
 	_ = m.github.CreateCommitStatus(req.Repo, req.SHA, token, "pending", "Single Server deploying "+req.App.Name)
@@ -83,11 +83,12 @@ func (m *DeployManager) run(req DeployRequest) {
 	if err != nil {
 		_ = m.github.CreateCommitStatus(req.Repo, req.SHA, token, "failure", "Single Server deploy failed: "+err.Error())
 		m.logger.Printf("[deploy:%s] failed after %dms: %v", req.RunID, time.Since(start).Milliseconds(), err)
-		return
+		return err
 	}
 
 	_ = m.github.CreateCommitStatus(req.Repo, req.SHA, token, "success", fmt.Sprintf("Single Server deployed in %dms", timing.TotalMS))
 	m.logger.Printf("[deploy:%s] success total_ms=%d", req.RunID, timing.TotalMS)
+	return nil
 }
 
 type DeployTiming struct {

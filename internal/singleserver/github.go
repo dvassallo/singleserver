@@ -52,6 +52,18 @@ type StatusRequest struct {
 	Context     string `json:"context"`
 }
 
+type RepositoryInstallation struct {
+	ID int64 `json:"id"`
+}
+
+type RepositoryResponse struct {
+	DefaultBranch string `json:"default_branch"`
+}
+
+type CommitResponse struct {
+	SHA string `json:"sha"`
+}
+
 type GitHubClient struct {
 	httpClient *http.Client
 	stateDir   string
@@ -195,6 +207,46 @@ func (c *GitHubClient) CreateCommitStatus(repo string, sha string, token string,
 		Context:     "Single Server",
 	}
 	return c.request("POST", fmt.Sprintf("/repos/%s/statuses/%s", repo, sha), "Bearer "+token, body, nil)
+}
+
+func (c *GitHubClient) RepositoryInstallationID(repo string) (int64, error) {
+	jwt, err := c.AppJWT()
+	if err != nil {
+		return 0, err
+	}
+	var installation RepositoryInstallation
+	if err := c.request("GET", fmt.Sprintf("/repos/%s/installation", repo), "Bearer "+jwt, nil, &installation); err != nil {
+		return 0, err
+	}
+	if installation.ID == 0 {
+		return 0, errors.New("repository installation id is missing")
+	}
+	return installation.ID, nil
+}
+
+func (c *GitHubClient) RepositoryDefaultBranch(repo string, token string) (string, error) {
+	var repository RepositoryResponse
+	if err := c.request("GET", fmt.Sprintf("/repos/%s", repo), "Bearer "+token, nil, &repository); err != nil {
+		return "", err
+	}
+	if repository.DefaultBranch == "" {
+		return "", errors.New("repository default branch is missing")
+	}
+	return repository.DefaultBranch, nil
+}
+
+func (c *GitHubClient) CommitSHA(repo string, ref string, token string) (string, error) {
+	if ref == "" {
+		return "", errors.New("ref is required")
+	}
+	var commit CommitResponse
+	if err := c.request("GET", fmt.Sprintf("/repos/%s/commits/%s", repo, ref), "Bearer "+token, nil, &commit); err != nil {
+		return "", err
+	}
+	if commit.SHA == "" {
+		return "", errors.New("commit sha is missing")
+	}
+	return commit.SHA, nil
 }
 
 func (c *GitHubClient) SyncRepositoryWebhook(repo string, webhookURL string, webhookSecret string, token string) (string, error) {

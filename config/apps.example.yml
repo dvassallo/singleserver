@@ -1,3 +1,8 @@
 apps:
-  - repo: dvassallo/sillyface-games
-    healthcheck: https://assetstacks.com/
+  - dvassallo/sillyface-games
+  - repo: dvassallo/fullsend
+    branch: master
+    healthcheck: https://fullsend.game/up
+  - repo: smallbets/userbase-homepage
+    branch: master
+    healthcheck: https://userbase.com/

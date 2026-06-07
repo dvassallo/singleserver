@@ -53,3 +53,14 @@ func TestAppForPushUsesDefaultBranch(t *testing.T) {
 		t.Fatalf("unexpected branch: %s", branch)
 	}
 }
+
+func TestAppByRepoIsCaseInsensitive(t *testing.T) {
+	config := &Config{Apps: []AppConfig{{Repo: "dvassallo/fullsend", Name: "fullsend"}}}
+	app, ok := config.AppByRepo("DVASSALLO/FULLSEND")
+	if !ok {
+		t.Fatal("expected app")
+	}
+	if app.Name != "fullsend" {
+		t.Fatalf("unexpected app: %s", app.Name)
+	}
+}
