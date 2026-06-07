@@ -104,7 +104,7 @@ func doctorDeployConfig(w io.Writer, app AppConfig) bool {
 	}
 
 	if _, err := os.Stat(filepath.Join(app.RepoDir, ".git")); err == nil {
-		if err := commandRun(3*time.Second, "git", "-C", app.RepoDir, "ls-files", "--error-unmatch", "config/deploy.yml"); err == nil {
+		if err := gitRun(app.RepoDir, "ls-files", "--error-unmatch", "config/deploy.yml"); err == nil {
 			fmt.Fprintf(w, "%s\tdeploy_config\tok\trepo config/deploy.yml\n", app.Name)
 			return true
 		}
@@ -119,17 +119,17 @@ func doctorCheckout(w io.Writer, app AppConfig) bool {
 		return false
 	}
 
-	branch, err := commandOutput(3*time.Second, "git", "-C", app.RepoDir, "rev-parse", "--abbrev-ref", "HEAD")
+	branch, err := gitOutput(app.RepoDir, "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
 		fmt.Fprintf(w, "%s\tcheckout\tfailed\t%s\n", app.Name, err)
 		return false
 	}
-	sha, err := commandOutput(3*time.Second, "git", "-C", app.RepoDir, "rev-parse", "--short", "HEAD")
+	sha, err := gitOutput(app.RepoDir, "rev-parse", "--short", "HEAD")
 	if err != nil {
 		fmt.Fprintf(w, "%s\tcheckout\tfailed\t%s\n", app.Name, err)
 		return false
 	}
-	status, err := commandOutput(3*time.Second, "git", "-C", app.RepoDir, "status", "--short")
+	status, err := gitOutput(app.RepoDir, "status", "--short")
 	if err != nil {
 		fmt.Fprintf(w, "%s\tcheckout\tfailed\t%s\n", app.Name, err)
 		return false
@@ -183,6 +183,16 @@ func lastDeployStatusFromJournal(appName string, journal string) (string, string
 func commandRun(timeout time.Duration, name string, args ...string) error {
 	_, err := commandOutput(timeout, name, args...)
 	return err
+}
+
+func gitRun(repoDir string, args ...string) error {
+	_, err := gitOutput(repoDir, args...)
+	return err
+}
+
+func gitOutput(repoDir string, args ...string) (string, error) {
+	gitArgs := append([]string{"-c", "safe.directory=" + repoDir, "-C", repoDir}, args...)
+	return commandOutput(3*time.Second, "git", gitArgs...)
 }
 
 func commandOutput(timeout time.Duration, name string, args ...string) (string, error) {
