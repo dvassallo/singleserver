@@ -142,6 +142,9 @@ git_done_ms=$(now_ms)
 if git ls-files --error-unmatch config/deploy.yml >/dev/null 2>&1; then
   deploy_config_source=repo
 else
+  if ! grep -qxF "/config/deploy.yml" .git/info/exclude; then
+    printf '\n/config/deploy.yml\n' >> .git/info/exclude
+  fi
   rm -f config/deploy.yml
   mkdir -p config
   generated_deploy_file=config/deploy.yml
