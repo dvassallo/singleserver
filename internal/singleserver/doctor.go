@@ -54,6 +54,9 @@ func cliDoctor(args []string, w io.Writer) error {
 	if !doctorDisk(w) {
 		failed = true
 	}
+	if !doctorTailscale(w, len(config.Apps)) {
+		failed = true
+	}
 	if !doctorCloudflare(w, config.Apps, apps) {
 		failed = true
 	}
@@ -189,43 +192,49 @@ func doctorCloudflare(w io.Writer, allApps []AppConfig, selectedApps []AppConfig
 		fmt.Fprintf(w, "cloudflare\tfailed\t%s\n", err)
 		return false
 	}
-	if state.TunnelID == "" {
-		if appsHaveHosts(selectedApps) {
-			fmt.Fprintln(w, "cloudflare\tfailed\tconnect Cloudflare first with `singleserver cloudflare connect`")
-			return false
-		}
-		fmt.Fprintln(w, "cloudflare\tskipped\tno tunnel configured")
-		return true
-	}
 
 	failed := false
-	fmt.Fprintf(w, "cloudflare\tstate\tok\tzone=%s\ttunnel=%s\thook=%s\n", valueOrDash(state.ZoneName), state.TunnelID, valueOrDash(state.HookHost))
-	for label, path := range map[string]string{
-		"credentials": state.CredentialsFile,
-		"config":      state.ConfigFile,
-	} {
-		if path == "" {
-			fmt.Fprintf(w, "cloudflare\t%s\tfailed\tmissing path\n", label)
-			failed = true
-			continue
+	if state.ZoneID == "" {
+		if appsHaveHosts(selectedApps) {
+			fmt.Fprintln(w, "cloudflare\tskipped\tconnect Cloudflare with `singleserver cloudflare connect` to verify managed DNS")
+		} else {
+			fmt.Fprintln(w, "cloudflare\tskipped\tno DNS provider configured")
 		}
-		if _, err := os.Stat(path); err != nil {
-			fmt.Fprintf(w, "cloudflare\t%s\tfailed\t%s\n", label, err)
-			failed = true
-			continue
-		}
-		fmt.Fprintf(w, "cloudflare\t%s\tok\t%s\n", label, path)
-	}
-
-	if err := commandRunFunc(5*time.Second, "systemctl", "is-active", "--quiet", "cloudflared-singleserver.service"); err != nil {
-		fmt.Fprintf(w, "cloudflare\tservice\tfailed\t%s\n", err)
-		failed = true
 	} else {
-		fmt.Fprintln(w, "cloudflare\tservice\tok\tcloudflared-singleserver.service")
+		mode := "dns"
+		if state.ServerIP == "" && state.TunnelID != "" {
+			mode = "tunnel"
+		}
+		fmt.Fprintf(w, "cloudflare\tstate\tok\tzone=%s\tmode=%s\tserver_ip=%s\tproxied=%t\n", valueOrDash(state.ZoneName), mode, valueOrDash(state.ServerIP), state.Proxied)
 	}
 
 	routes := map[string]string{}
-	if state.ConfigFile != "" {
+	legacyTunnel := state.ServerIP == "" && state.TunnelID != ""
+	if legacyTunnel {
+		for label, path := range map[string]string{
+			"credentials": state.CredentialsFile,
+			"config":      state.ConfigFile,
+		} {
+			if path == "" {
+				fmt.Fprintf(w, "cloudflare\t%s\tfailed\tmissing path\n", label)
+				failed = true
+				continue
+			}
+			if _, err := os.Stat(path); err != nil {
+				fmt.Fprintf(w, "cloudflare\t%s\tfailed\t%s\n", label, err)
+				failed = true
+				continue
+			}
+			fmt.Fprintf(w, "cloudflare\t%s\tok\t%s\n", label, path)
+		}
+
+		if err := commandRunFunc(5*time.Second, "systemctl", "is-active", "--quiet", "cloudflared-singleserver.service"); err != nil {
+			fmt.Fprintf(w, "cloudflare\tservice\tfailed\t%s\n", err)
+			failed = true
+		} else {
+			fmt.Fprintln(w, "cloudflare\tservice\tok\tcloudflared-singleserver.service")
+		}
+
 		config, err := readCloudflaredConfig(state.ConfigFile)
 		if err != nil {
 			fmt.Fprintf(w, "cloudflare\troutes\tfailed\t%s\n", err)
@@ -241,7 +250,7 @@ func doctorCloudflare(w io.Writer, allApps []AppConfig, selectedApps []AppConfig
 		failed = true
 	}
 
-	if state.HookHost != "" {
+	if legacyTunnel && state.HookHost != "" {
 		if !doctorHostResolves(w, "cloudflare", "hook_dns", state.HookHost) {
 			failed = true
 		}
@@ -256,10 +265,12 @@ func doctorCloudflare(w io.Writer, allApps []AppConfig, selectedApps []AppConfig
 		}
 	}
 
-	expectedHosts := expectedCloudflaredHosts(state.HookHost, allApps)
-	for _, host := range staleCloudflaredHosts(routes, expectedHosts) {
-		fmt.Fprintf(w, "cloudflare\tstale_route\tfailed\t%s -> %s not in apps.yml\n", host, routes[host])
-		failed = true
+	if legacyTunnel {
+		expectedHosts := expectedCloudflaredHosts(state.HookHost, allApps)
+		for _, host := range staleCloudflaredHosts(routes, expectedHosts) {
+			fmt.Fprintf(w, "cloudflare\tstale_route\tfailed\t%s -> %s not in apps.yml\n", host, routes[host])
+			failed = true
+		}
 	}
 
 	for _, app := range selectedApps {
@@ -269,6 +280,9 @@ func doctorCloudflare(w io.Writer, allApps []AppConfig, selectedApps []AppConfig
 			}
 			if cloudflareClient != nil && !doctorCloudflareDNSRecord(w, app.Name, "cloudflare_dns", host, state, cloudflareClient) {
 				failed = true
+			}
+			if !legacyTunnel {
+				continue
 			}
 			if service := routes[strings.ToLower(host)]; service == "" {
 				fmt.Fprintf(w, "%s\ttunnel_route\tfailed\t%s missing from %s\n", app.Name, host, state.ConfigFile)
@@ -283,7 +297,7 @@ func doctorCloudflare(w io.Writer, allApps []AppConfig, selectedApps []AppConfig
 }
 
 func doctorCloudflareClient(w io.Writer, state *CloudflareState) (*CloudflareClient, bool) {
-	if state.ZoneID == "" || state.TunnelID == "" {
+	if state.ZoneID == "" {
 		return nil, true
 	}
 	token := cloudflareTokenFromEnvOrState(state)

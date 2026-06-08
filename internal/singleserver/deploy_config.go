@@ -3,6 +3,7 @@ package singleserver
 import (
 	"bytes"
 	"runtime"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -102,7 +103,7 @@ func GeneratedDeployYAML(app AppConfig) ([]byte, error) {
 		Proxy: kamalProxy{
 			Hosts:          app.Hosts,
 			AppPort:        app.AppPort,
-			SSL:            false,
+			SSL:            len(app.Hosts) > 0 && generatedProxySSL(),
 			ForwardHeaders: true,
 			Healthcheck: kamalProxyHealthcheck{
 				Path:     app.HealthcheckPath,
@@ -139,4 +140,19 @@ func appWithServerSecrets(app AppConfig) (AppConfig, error) {
 	}
 	app.SecretEnvKeys = keys
 	return app, nil
+}
+
+func generatedProxySSL() bool {
+	value := strings.ToLower(strings.TrimSpace(envDefault("SINGLESERVER_PROXY_SSL", "")))
+	switch value {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	}
+	state, err := loadCloudflareState()
+	if err == nil && state.TunnelID != "" && strings.TrimSpace(state.ServerIP) == "" {
+		return false
+	}
+	return true
 }

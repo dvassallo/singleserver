@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,25 +17,49 @@ import (
 func cliInit(args []string, w io.Writer) error {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	fs.SetOutput(w)
-	zoneName := fs.String("zone", defaultCloudflareZone(), "Cloudflare zone to use when multiple zones are available")
-	skipCloudflare := fs.Bool("skip-cloudflare", false, "skip Cloudflare tunnel setup")
+	zoneName := fs.String("cloudflare-zone", defaultCloudflareZone(), "Cloudflare zone to connect when a Cloudflare token is available")
+	zoneAlias := fs.String("zone", "", "deprecated alias for --cloudflare-zone")
+	skipCloudflare := fs.Bool("skip-cloudflare", false, "skip Cloudflare DNS setup")
+	skipTailscale := fs.Bool("skip-tailscale", false, "skip Tailscale setup")
 	if err := fs.Parse(normalizeFlagArgs(args, initFlagTakesValue)); err != nil {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: singleserver init [--zone example.com] [--skip-cloudflare]")
+		return errors.New("usage: singleserver init [--skip-tailscale] [--skip-cloudflare]")
 	}
 
 	if err := ensureBaseFiles(); err != nil {
 		return err
 	}
+	if strings.TrimSpace(*zoneName) == "" && strings.TrimSpace(*zoneAlias) != "" {
+		*zoneName = strings.TrimSpace(*zoneAlias)
+	}
 	fmt.Fprintf(w, "init\tfiles\tok\t%s\n", envDefault("SINGLESERVER_STATE_DIR", "/etc/singleserver"))
+
+	if err := commandRunFunc(10*time.Second, "systemctl", "daemon-reload"); err != nil {
+		return err
+	}
+	if err := commandRunFunc(10*time.Second, "systemctl", "restart", "singleserver.service"); err != nil {
+		return err
+	}
+
+	if !*skipTailscale {
+		if err := cliTailscaleConnect(nil, w); err != nil {
+			fmt.Fprintf(w, "tailscale\tpending\t%s\n", err)
+		}
+	} else {
+		fmt.Fprintln(w, "tailscale\tskipped")
+	}
 
 	if !*skipCloudflare {
 		state, _ := loadCloudflareState()
 		if cloudflareTokenFromEnvOrState(state) != "" {
-			if err := cliCloudflareConnect([]string{"--zone", *zoneName}, w); err != nil {
-				return err
+			cloudflareArgs := []string{}
+			if strings.TrimSpace(*zoneName) != "" {
+				cloudflareArgs = append(cloudflareArgs, "--zone", *zoneName)
+			}
+			if err := cliCloudflareConnect(cloudflareArgs, w); err != nil {
+				fmt.Fprintf(w, "cloudflare\tpending\t%s\n", err)
 			}
 		} else {
 			fmt.Fprintln(w, "cloudflare\tskipped\tset CLOUDFLARE_API_TOKEN and run singleserver cloudflare connect")
@@ -46,6 +71,16 @@ func cliInit(args []string, w io.Writer) error {
 	}
 	if err := commandRunFunc(10*time.Second, "systemctl", "restart", "singleserver.service"); err != nil {
 		return err
+	}
+	if !*skipTailscale {
+		env, err := loadServiceEnv()
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(env["SINGLESERVER_PUBLIC_URL"]) == "" {
+			fmt.Fprintln(w, "github\tconnect\tpending\tconnect Tailscale first, then rerun `singleserver init`")
+			return cliDoctor(nil, w)
+		}
 	}
 	if err := cliGitHubConnect(nil, w); err != nil {
 		return err
@@ -113,13 +148,15 @@ func cliCloudflareConnect(args []string, w io.Writer) error {
 	fs := flag.NewFlagSet("cloudflare connect", flag.ContinueOnError)
 	fs.SetOutput(w)
 	zoneName := fs.String("zone", defaultCloudflareZone(), "Cloudflare zone name")
-	tunnelName := fs.String("tunnel", "singleserver", "Cloudflare tunnel name")
+	serverIP := fs.String("server-ip", strings.TrimSpace(os.Getenv("SINGLESERVER_PUBLIC_IP")), "public server IPv4 address")
+	proxied := fs.Bool("proxied", false, "proxy app DNS records through Cloudflare")
+	tunnelName := fs.String("tunnel", "", "legacy Cloudflare tunnel name")
 	hookHost := fs.String("hook-host", "", "webhook hostname")
 	if err := fs.Parse(normalizeFlagArgs(args, cloudflareFlagTakesValue)); err != nil {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: singleserver cloudflare connect [--zone example.com] [--tunnel singleserver] [--hook-host hooks.example.com]")
+		return errors.New("usage: singleserver cloudflare connect [--zone example.com] [--server-ip 203.0.113.10] [--proxied]")
 	}
 	tunnelNameSet := false
 	fs.Visit(func(f *flag.Flag) {
@@ -146,6 +183,33 @@ func cliCloudflareConnect(args []string, w io.Writer) error {
 	state.AccountID = zone.Account.ID
 	state.ZoneID = zone.ID
 	state.ZoneName = zone.Name
+	state.Proxied = *proxied
+	if !tunnelNameSet && strings.TrimSpace(*hookHost) == "" {
+		if strings.TrimSpace(*serverIP) == "" {
+			detectedIP, err := detectPublicIPv4()
+			if err != nil {
+				return err
+			}
+			state.ServerIP = detectedIP
+		} else {
+			state.ServerIP = strings.TrimSpace(*serverIP)
+		}
+		if err := writeCloudflareState(state); err != nil {
+			return err
+		}
+		env, err := loadServiceEnv()
+		if err != nil {
+			return err
+		}
+		env["SINGLESERVER_PUBLIC_IP"] = state.ServerIP
+		if err := writeServiceEnv(env); err != nil {
+			return err
+		}
+		fmt.Fprintf(w, "cloudflare\tdns\tok\tzone=%s\tserver_ip=%s\tproxied=%t\n", state.ZoneName, state.ServerIP, state.Proxied)
+		return nil
+	}
+
+	state.ServerIP = ""
 	applyCloudflareTunnelName(state, *tunnelName, tunnelNameSet)
 	if strings.TrimSpace(*hookHost) != "" {
 		state.HookHost = strings.TrimSpace(*hookHost)
@@ -306,7 +370,7 @@ func selectCloudflareZone(client *CloudflareClient, name string) (*cloudflareZon
 		return nil, fmt.Errorf("Cloudflare token cannot access zone %s", name)
 	}
 	if len(zones) > 1 && strings.TrimSpace(name) == "" {
-		return nil, errors.New("Cloudflare token can access multiple zones; run singleserver init --zone <domain>")
+		return nil, errors.New("Cloudflare token can access multiple zones; run singleserver cloudflare connect --zone <domain>")
 	}
 	return &zones[0], nil
 }
@@ -384,7 +448,7 @@ func initFlagTakesValue(arg string) bool {
 	if before, _, ok := strings.Cut(name, "="); ok {
 		name = before
 	}
-	return name == "zone"
+	return name == "cloudflare-zone" || name == "zone"
 }
 
 func cloudflareFlagTakesValue(arg string) bool {
@@ -392,7 +456,7 @@ func cloudflareFlagTakesValue(arg string) bool {
 	if before, _, ok := strings.Cut(name, "="); ok {
 		name = before
 	}
-	return name == "zone" || name == "tunnel" || name == "hook-host"
+	return name == "zone" || name == "server-ip" || name == "tunnel" || name == "hook-host"
 }
 
 func githubFlagTakesValue(arg string) bool {
@@ -408,4 +472,22 @@ func defaultCloudflareZone() string {
 		return value
 	}
 	return strings.TrimSpace(os.Getenv("CLOUDFLARE_ZONE"))
+}
+
+func detectPublicIPv4() (string, error) {
+	if value := strings.TrimSpace(os.Getenv("SINGLESERVER_PUBLIC_IP")); value != "" {
+		if ip := net.ParseIP(value); ip == nil || ip.To4() == nil {
+			return "", fmt.Errorf("SINGLESERVER_PUBLIC_IP is not an IPv4 address: %s", value)
+		}
+		return value, nil
+	}
+	output, err := commandOutputFunc(10*time.Second, "curl", "-4", "-fsSL", "https://api.ipify.org")
+	if err != nil {
+		return "", fmt.Errorf("could not detect public IPv4 address; rerun with --server-ip <ip>: %w", err)
+	}
+	ip := strings.TrimSpace(output)
+	if parsed := net.ParseIP(ip); parsed == nil || parsed.To4() == nil {
+		return "", fmt.Errorf("public IPv4 detection returned %q; rerun with --server-ip <ip>", output)
+	}
+	return ip, nil
 }

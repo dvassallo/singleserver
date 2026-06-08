@@ -21,17 +21,22 @@ arch="$(dpkg --print-architecture)"
 case "$arch" in
   amd64) cloudflared_arch=amd64; binary_arch=amd64; go_arch=amd64 ;;
   arm64) cloudflared_arch=arm64; binary_arch=arm64; go_arch=arm64 ;;
-  *) echo "Unsupported architecture for cloudflared: $arch" >&2; exit 1 ;;
+  *) echo "Unsupported architecture: $arch" >&2; exit 1 ;;
 esac
 
-if ! command -v cloudflared >/dev/null 2>&1; then
+if ! command -v tailscale >/dev/null 2>&1; then
+  curl -fsSL https://tailscale.com/install.sh | sh
+fi
+systemctl enable --now tailscaled || true
+
+if [ "${SINGLESERVER_INSTALL_CLOUDFLARED:-0}" = "1" ] && ! command -v cloudflared >/dev/null 2>&1; then
   tmp_deb="/tmp/cloudflared-linux-${cloudflared_arch}.deb"
   curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${cloudflared_arch}.deb" -o "$tmp_deb"
   dpkg -i "$tmp_deb" || apt-get install -f -y
   rm -f "$tmp_deb"
 fi
-cloudflared_path="$(command -v cloudflared)"
-if [ "$cloudflared_path" != "/usr/local/bin/cloudflared" ]; then
+cloudflared_path="$(command -v cloudflared || true)"
+if [ -n "$cloudflared_path" ] && [ "$cloudflared_path" != "/usr/local/bin/cloudflared" ]; then
   ln -sf "$cloudflared_path" /usr/local/bin/cloudflared
 fi
 
@@ -138,7 +143,7 @@ systemctl enable --now singleserver.service
 
 if [ "${SINGLESERVER_SKIP_INIT:-0}" != "1" ]; then
   # SINGLESERVER_INIT_ARGS is intentionally shell-split for flags like:
-  #   SINGLESERVER_INIT_ARGS="--zone example.com"
+  #   SINGLESERVER_INIT_ARGS="--skip-cloudflare"
   # shellcheck disable=SC2086
   /usr/local/bin/singleserver init ${SINGLESERVER_INIT_ARGS:-}
 fi

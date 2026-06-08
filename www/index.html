@@ -296,7 +296,7 @@
 
     <section>
         <h2><a href="#commands">Use it</a></h2>
-        <p>Every command runs on your server. Init connects Cloudflare and GitHub. Add apps with their GitHub URL.</p>
+        <p>Every command runs on your server. Init connects Tailscale and GitHub, and Cloudflare DNS manages app domains when you add them.</p>
 
         <div class="commands-list" id="commands">
             <div class="command-item">
@@ -383,7 +383,7 @@
             </div>
             <div class="feature">
                 <strong>App domains</strong>
-                <p>The server is managed over SSH. Domains are inferred or added when you add apps.</p>
+                <p>Domains are inferred or added when you add apps. Cloudflare DNS points them at your server, and Kamal handles routing and TLS.</p>
             </div>
             <div class="feature">
                 <strong>Tiny Go tool</strong>
@@ -399,7 +399,7 @@
             </div>
             <div class="feature">
                 <strong>Monitor from the host</strong>
-                <p>Use status, logs, and doctor commands from the same server where deploys run.</p>
+                <p>Use Tailscale SSH, status, logs, and doctor commands from the same server where deploys run.</p>
             </div>
         </div>
     </section>

@@ -32,6 +32,8 @@ type CloudflareState struct {
 	HookHost        string `json:"hook_host"`
 	CredentialsFile string `json:"credentials_file"`
 	ConfigFile      string `json:"config_file"`
+	ServerIP        string `json:"server_ip"`
+	Proxied         bool   `json:"proxied"`
 }
 
 type CloudflareClient struct {
@@ -194,6 +196,38 @@ func (c *CloudflareClient) upsertCNAME(zoneID string, hostname string, target st
 	return c.request("PUT", "/zones/"+zoneID+"/dns_records/"+records[0].ID, body, nil)
 }
 
+func (c *CloudflareClient) upsertA(zoneID string, hostname string, target string, proxied bool) error {
+	if records, err := c.dnsRecords(zoneID, hostname, "CNAME"); err != nil {
+		return err
+	} else if len(records) > 0 {
+		contents := make([]string, 0, len(records))
+		for _, record := range records {
+			contents = append(contents, record.Content)
+		}
+		return fmt.Errorf("Cloudflare DNS %s already has a CNAME to %s; remove it before assigning an A record", hostname, strings.Join(contents, ","))
+	}
+	records, err := c.dnsRecords(zoneID, hostname, "A")
+	if err != nil {
+		return err
+	}
+	for _, record := range records {
+		if strings.TrimSpace(record.Content) != target {
+			return fmt.Errorf("Cloudflare DNS %s already points to %s; remove that A record before assigning it to Single Server", hostname, record.Content)
+		}
+	}
+	body := map[string]any{
+		"type":    "A",
+		"name":    hostname,
+		"content": target,
+		"ttl":     1,
+		"proxied": proxied,
+	}
+	if len(records) == 0 {
+		return c.request("POST", "/zones/"+zoneID+"/dns_records", body, nil)
+	}
+	return c.request("PUT", "/zones/"+zoneID+"/dns_records/"+records[0].ID, body, nil)
+}
+
 func (c *CloudflareClient) deleteCNAMEToTarget(zoneID string, hostname string, target string) error {
 	records, err := c.dnsRecords(zoneID, hostname, "CNAME")
 	if err != nil {
@@ -201,6 +235,22 @@ func (c *CloudflareClient) deleteCNAMEToTarget(zoneID string, hostname string, t
 	}
 	for _, record := range records {
 		if !dnsRecordContentMatches(record.Content, target) {
+			continue
+		}
+		if err := c.request("DELETE", "/zones/"+zoneID+"/dns_records/"+record.ID, nil, nil); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *CloudflareClient) deleteAToTarget(zoneID string, hostname string, target string) error {
+	records, err := c.dnsRecords(zoneID, hostname, "A")
+	if err != nil {
+		return err
+	}
+	for _, record := range records {
+		if strings.TrimSpace(record.Content) != target {
 			continue
 		}
 		if err := c.request("DELETE", "/zones/"+zoneID+"/dns_records/"+record.ID, nil, nil); err != nil {
@@ -458,7 +508,7 @@ func defaultAppDomain(appName string) (string, bool, error) {
 	if err != nil {
 		return "", false, err
 	}
-	if state.ZoneName == "" || state.ZoneID == "" || state.TunnelID == "" || state.ConfigFile == "" {
+	if state.ZoneName == "" || state.ZoneID == "" {
 		return "", false, nil
 	}
 	label := dnsLabelFromAppName(appName)
@@ -495,11 +545,13 @@ func dnsLabelFromAppName(appName string) string {
 var syncCloudflareAppDomainFunc = syncCloudflareAppDomain
 
 type cloudflareDomainSyncOps struct {
-	upsertCNAME func(hostname string) error
-	deleteCNAME func(hostname string) error
-	ensureRoute func(hostname string) error
-	removeRoute func(hostname string) error
-	restart     func() error
+	upsertRecord func(hostname string) error
+	deleteRecord func(hostname string) error
+	ensureRoute  func(hostname string) error
+	removeRoute  func(hostname string) error
+	restart      func() error
+	target       string
+	mode         string
 }
 
 func syncCloudflareAppDomain(hostname string, add bool, w io.Writer) error {
@@ -507,7 +559,7 @@ func syncCloudflareAppDomain(hostname string, add bool, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if state.ZoneID == "" || state.TunnelID == "" || state.ConfigFile == "" {
+	if state.ZoneID == "" {
 		fmt.Fprintf(w, "cloudflare\tskipped\tconnect Cloudflare first with `singleserver cloudflare connect`\n")
 		return nil
 	}
@@ -515,12 +567,80 @@ func syncCloudflareAppDomain(hostname string, add bool, w io.Writer) error {
 	if err != nil {
 		return err
 	}
+	ops, err := cloudflareDomainOps(state, client)
+	if err != nil {
+		return err
+	}
+	return syncCloudflareAppDomainWithOps(hostname, add, w, state, ops)
+}
+
+func syncCloudflareAppDomainWithOps(hostname string, add bool, w io.Writer, state *CloudflareState, ops cloudflareDomainSyncOps) error {
+	if add {
+		if err := ops.ensureRoute(hostname); err != nil {
+			return err
+		}
+		if err := ops.upsertRecord(hostname); err != nil {
+			_ = ops.removeRoute(hostname)
+			return err
+		}
+		if err := ops.restart(); err != nil {
+			_ = ops.deleteRecord(hostname)
+			_ = ops.removeRoute(hostname)
+			return err
+		}
+		fmt.Fprintf(w, "cloudflare\tdomain\tok\t%s -> %s\n", hostname, ops.target)
+	} else {
+		if err := ops.removeRoute(hostname); err != nil {
+			return err
+		}
+		if err := ops.deleteRecord(hostname); err != nil {
+			_ = ops.ensureRoute(hostname)
+			return err
+		}
+		if err := ops.restart(); err != nil {
+			_ = ops.ensureRoute(hostname)
+			_ = ops.upsertRecord(hostname)
+			return err
+		}
+		fmt.Fprintf(w, "cloudflare\tdomain\tok\tremoved %s\n", hostname)
+	}
+	return nil
+}
+
+func cloudflareDomainOps(state *CloudflareState, client *CloudflareClient) (cloudflareDomainSyncOps, error) {
+	if strings.TrimSpace(state.ServerIP) != "" {
+		target := strings.TrimSpace(state.ServerIP)
+		return cloudflareDomainSyncOps{
+			target: target,
+			mode:   "a",
+			upsertRecord: func(hostname string) error {
+				return client.upsertA(state.ZoneID, hostname, target, state.Proxied)
+			},
+			deleteRecord: func(hostname string) error {
+				return client.deleteAToTarget(state.ZoneID, hostname, target)
+			},
+			ensureRoute: func(hostname string) error {
+				return nil
+			},
+			removeRoute: func(hostname string) error {
+				return nil
+			},
+			restart: func() error {
+				return nil
+			},
+		}, nil
+	}
+	if state.TunnelID == "" || state.ConfigFile == "" {
+		return cloudflareDomainSyncOps{}, errors.New("Cloudflare DNS is connected but no server IP is configured; run `singleserver cloudflare connect --server-ip <ip>`")
+	}
 	target := state.TunnelID + ".cfargotunnel.com"
-	ops := cloudflareDomainSyncOps{
-		upsertCNAME: func(hostname string) error {
+	return cloudflareDomainSyncOps{
+		target: target,
+		mode:   "tunnel",
+		upsertRecord: func(hostname string) error {
 			return client.upsertCNAME(state.ZoneID, hostname, target, true)
 		},
-		deleteCNAME: func(hostname string) error {
+		deleteRecord: func(hostname string) error {
 			return client.deleteCNAMEToTarget(state.ZoneID, hostname, target)
 		},
 		ensureRoute: func(hostname string) error {
@@ -532,39 +652,5 @@ func syncCloudflareAppDomain(hostname string, add bool, w io.Writer) error {
 		restart: func() error {
 			return commandRunFunc(10*time.Second, "systemctl", "restart", "cloudflared-singleserver.service")
 		},
-	}
-	return syncCloudflareAppDomainWithOps(hostname, add, w, state, ops)
-}
-
-func syncCloudflareAppDomainWithOps(hostname string, add bool, w io.Writer, state *CloudflareState, ops cloudflareDomainSyncOps) error {
-	if add {
-		if err := ops.ensureRoute(hostname); err != nil {
-			return err
-		}
-		if err := ops.upsertCNAME(hostname); err != nil {
-			_ = ops.removeRoute(hostname)
-			return err
-		}
-		if err := ops.restart(); err != nil {
-			_ = ops.deleteCNAME(hostname)
-			_ = ops.removeRoute(hostname)
-			return err
-		}
-		fmt.Fprintf(w, "cloudflare\tdomain\tok\t%s -> %s.cfargotunnel.com\n", hostname, state.TunnelID)
-	} else {
-		if err := ops.removeRoute(hostname); err != nil {
-			return err
-		}
-		if err := ops.deleteCNAME(hostname); err != nil {
-			_ = ops.ensureRoute(hostname)
-			return err
-		}
-		if err := ops.restart(); err != nil {
-			_ = ops.ensureRoute(hostname)
-			_ = ops.upsertCNAME(hostname)
-			return err
-		}
-		fmt.Fprintf(w, "cloudflare\tdomain\tok\tremoved %s\n", hostname)
-	}
-	return nil
+	}, nil
 }

@@ -325,7 +325,7 @@ func cliDomainChange(args []string, add bool, w io.Writer, logger *log.Logger) e
 	}
 	fs := flag.NewFlagSet("domains "+command, flag.ContinueOnError)
 	fs.SetOutput(w)
-	noDeploy := fs.Bool("no-deploy", false, "update config and routing without deploying")
+	noDeploy := fs.Bool("no-deploy", false, "update config and DNS without deploying")
 	if err := fs.Parse(normalizeFlagArgs(args, noFlagValues)); err != nil {
 		return err
 	}
@@ -457,27 +457,9 @@ func verifyDomains(args []string, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	routes := map[string]string{}
 	var cloudflareClient *CloudflareClient
 	failed := false
-	if state.TunnelID == "" {
-		if appsHaveHosts(apps) {
-			fmt.Fprintln(w, "cloudflare\tfailed\tconnect Cloudflare first with `singleserver cloudflare connect`")
-			failed = true
-		}
-	} else if state.ConfigFile == "" {
-		fmt.Fprintln(w, "cloudflare\troutes\tfailed\tmissing config file")
-		failed = true
-	} else {
-		cloudflaredConfig, err := readCloudflaredConfig(state.ConfigFile)
-		if err != nil {
-			fmt.Fprintf(w, "cloudflare\troutes\tfailed\t%s\n", err)
-			failed = true
-		} else {
-			routes = cloudflaredRoutes(cloudflaredConfig)
-		}
-	}
-	if state.ZoneID != "" && state.TunnelID != "" {
+	if state.ZoneID != "" {
 		if token := cloudflareTokenFromEnvOrState(state); token != "" {
 			client, err := newCloudflareClient(token)
 			if err != nil {
@@ -487,6 +469,8 @@ func verifyDomains(args []string, w io.Writer) error {
 				cloudflareClient = client
 			}
 		}
+	} else if appsHaveHosts(apps) {
+		fmt.Fprintln(w, "cloudflare\tskipped\tconnect Cloudflare with `singleserver cloudflare connect` to verify managed DNS")
 	}
 
 	for _, app := range apps {
@@ -506,15 +490,6 @@ func verifyDomains(args []string, w io.Writer) error {
 					fmt.Fprintf(w, "%s\tcloudflare_dns\tok\t%s -> %s\n", app.Name, host, target)
 				}
 			}
-			if state.TunnelID == "" || state.ConfigFile == "" {
-				continue
-			}
-			if service := routes[strings.ToLower(host)]; service == "" {
-				fmt.Fprintf(w, "%s\ttunnel_route\tfailed\t%s missing from %s\n", app.Name, host, state.ConfigFile)
-				failed = true
-			} else {
-				fmt.Fprintf(w, "%s\ttunnel_route\tok\t%s -> %s\n", app.Name, host, service)
-			}
 		}
 	}
 	if failed {
@@ -526,6 +501,29 @@ func verifyDomains(args []string, w io.Writer) error {
 var verifyCloudflareDNSRecordFunc = verifyCloudflareDNSRecord
 
 func verifyCloudflareDNSRecord(host string, state *CloudflareState, client *CloudflareClient) (string, error) {
+	if strings.TrimSpace(state.ServerIP) != "" {
+		target := strings.TrimSpace(state.ServerIP)
+		records, err := client.dnsRecords(state.ZoneID, host, "A")
+		if err != nil {
+			return target, err
+		}
+		for _, record := range records {
+			if strings.TrimSpace(record.Content) == target {
+				return target, nil
+			}
+		}
+		if len(records) == 0 {
+			return target, fmt.Errorf("missing A record to %s", target)
+		}
+		contents := make([]string, 0, len(records))
+		for _, record := range records {
+			contents = append(contents, record.Content)
+		}
+		return target, fmt.Errorf("A record points to %s, expected %s", strings.Join(contents, ","), target)
+	}
+	if strings.TrimSpace(state.TunnelID) == "" {
+		return "", errors.New("no Cloudflare DNS target configured; run `singleserver cloudflare connect --server-ip <ip>`")
+	}
 	target := state.TunnelID + ".cfargotunnel.com"
 	records, err := client.dnsRecords(state.ZoneID, host, "CNAME")
 	if err != nil {

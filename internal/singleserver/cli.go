@@ -39,6 +39,11 @@ func RunCLI(args []string, logger *log.Logger) error {
 			return cliGitHubConnect(args[2:], os.Stdout)
 		}
 		return errors.New("usage: singleserver github connect [--name \"Single Server\"] [--public]")
+	case "tailscale":
+		if len(args) >= 2 && args[1] == "connect" {
+			return cliTailscaleConnect(args[2:], os.Stdout)
+		}
+		return errors.New("usage: singleserver tailscale connect")
 	case "cloudflare":
 		if len(args) >= 2 && args[1] == "connect" {
 			return cliCloudflareConnect(args[2:], os.Stdout)
@@ -82,9 +87,10 @@ func printUsage(w io.Writer) {
 
 Usage:
   singleserver version
-  singleserver init [--zone example.com] [--skip-cloudflare]
+  singleserver init [--skip-tailscale] [--skip-cloudflare]
+  singleserver tailscale connect [--auth-key <key>] [--hostname <name>] [--no-funnel]
   singleserver github connect [--name "Single Server"] [--public]
-  singleserver cloudflare connect [--zone example.com] [--tunnel singleserver] [--hook-host hooks.example.com]
+  singleserver cloudflare connect [--zone example.com] [--server-ip 203.0.113.10] [--proxied]
   singleserver list
   singleserver status
   singleserver add <github-url> [options]
@@ -103,8 +109,9 @@ Usage:
 Commands:
   version        Print the installed Single Server version.
   init           Create base server state, connect providers when configured, and print GitHub setup URL.
+  tailscale      Connect Tailscale SSH and expose the GitHub webhook through Funnel.
   github         Repair or print the GitHub App setup URL.
-  cloudflare     Create or repair the Cloudflare Tunnel and webhook DNS route.
+  cloudflare     Connect Cloudflare DNS for app domains.
   list           Show configured apps.
   status         Check the local daemon and configured healthchecks.
   add            Add a GitHub repository to apps.yml.

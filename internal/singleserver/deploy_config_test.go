@@ -8,6 +8,8 @@ import (
 )
 
 func TestGeneratedDeployYAMLUsesConventionsAndOverrides(t *testing.T) {
+	t.Setenv("SINGLESERVER_STATE_DIR", t.TempDir())
+
 	body, err := GeneratedDeployYAML(AppConfig{
 		Repo:            "smallbets/userbase-homepage",
 		Hosts:           []string{"userbase.com", "www.userbase.com"},
@@ -47,7 +49,7 @@ func TestGeneratedDeployYAMLUsesConventionsAndOverrides(t *testing.T) {
 	if proxy["app_port"] != 8080 {
 		t.Fatalf("unexpected app_port: %v", proxy["app_port"])
 	}
-	if proxy["ssl"] != false {
+	if proxy["ssl"] != true {
 		t.Fatalf("unexpected ssl: %v", proxy["ssl"])
 	}
 	if proxy["forward_headers"] != true {
@@ -65,7 +67,33 @@ func TestGeneratedDeployYAMLUsesConventionsAndOverrides(t *testing.T) {
 	}
 }
 
+func TestGeneratedDeployYAMLDisablesSSLForLegacyCloudflareTunnel(t *testing.T) {
+	t.Setenv("SINGLESERVER_STATE_DIR", t.TempDir())
+	if err := writeCloudflareState(&CloudflareState{TunnelID: "tunnel"}); err != nil {
+		t.Fatal(err)
+	}
+
+	body, err := GeneratedDeployYAML(AppConfig{
+		Repo:  "smallbets/userbase-homepage",
+		Hosts: []string{"userbase.com"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var config map[string]any
+	if err := yaml.Unmarshal(body, &config); err != nil {
+		t.Fatal(err)
+	}
+	proxy := config["proxy"].(map[string]any)
+	if proxy["ssl"] != false {
+		t.Fatalf("unexpected ssl: %v", proxy["ssl"])
+	}
+}
+
 func TestGeneratedDeployYAMLOmitsEmptyProxyHosts(t *testing.T) {
+	t.Setenv("SINGLESERVER_STATE_DIR", t.TempDir())
+
 	body, err := GeneratedDeployYAML(AppConfig{Repo: "dvassallo/sillyface-games"})
 	if err != nil {
 		t.Fatal(err)

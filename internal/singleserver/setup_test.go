@@ -53,6 +53,50 @@ func TestGitHubConnectStoresPublicAppFlag(t *testing.T) {
 	}
 }
 
+func TestTailscaleConnectStoresFunnelPublicURL(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("SINGLESERVER_STATE_DIR", dir)
+	t.Setenv("SINGLESERVER_CONFIG", filepath.Join(dir, "apps.yml"))
+	originalOutput := commandOutputFunc
+	originalRun := commandRunFunc
+	t.Cleanup(func() {
+		commandOutputFunc = originalOutput
+		commandRunFunc = originalRun
+	})
+	commandOutputFunc = func(timeout time.Duration, name string, args ...string) (string, error) {
+		if name != "tailscale" {
+			t.Fatalf("unexpected output command: %s %s", name, strings.Join(args, " "))
+		}
+		switch strings.Join(args, " ") {
+		case "version":
+			return "1.84.0", nil
+		case "status --json":
+			return `{"BackendState":"Running","Self":{"DNSName":"assetstacks.example.ts.net.","HostName":"assetstacks"}}`, nil
+		default:
+			t.Fatalf("unexpected tailscale output args: %s", strings.Join(args, " "))
+		}
+		return "", nil
+	}
+	commandRunFunc = func(timeout time.Duration, name string, args ...string) error {
+		return nil
+	}
+
+	var out bytes.Buffer
+	if err := cliTailscaleConnect(nil, &out); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(filepath.Join(dir, "singleserver.env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "SINGLESERVER_PUBLIC_URL='https://assetstacks.example.ts.net'") {
+		t.Fatalf("public URL not stored:\n%s", body)
+	}
+	if !strings.Contains(out.String(), "tailscale\tfunnel\tok\thttps://assetstacks.example.ts.net -> 127.0.0.1:8787") {
+		t.Fatalf("funnel output missing:\n%s", out.String())
+	}
+}
+
 func TestSetupGitHubAppManifestCanBePublic(t *testing.T) {
 	t.Setenv("SINGLESERVER_GITHUB_APP_PUBLIC", "true")
 	server := &Server{

@@ -75,7 +75,7 @@ func TestSyncCloudflareAddRollsBackRouteWhenDNSFails(t *testing.T) {
 			calls = append(calls, "ensure:"+hostname)
 			return nil
 		},
-		upsertCNAME: func(hostname string) error {
+		upsertRecord: func(hostname string) error {
 			calls = append(calls, "upsert:"+hostname)
 			return errors.New("dns failed")
 		},
@@ -83,7 +83,7 @@ func TestSyncCloudflareAddRollsBackRouteWhenDNSFails(t *testing.T) {
 			calls = append(calls, "remove:"+hostname)
 			return nil
 		},
-		deleteCNAME: func(hostname string) error {
+		deleteRecord: func(hostname string) error {
 			calls = append(calls, "delete:"+hostname)
 			return nil
 		},
@@ -107,6 +107,46 @@ func TestSyncCloudflareAddRollsBackRouteWhenDNSFails(t *testing.T) {
 	}
 }
 
+func TestSyncCloudflareAddDirectDNS(t *testing.T) {
+	state := &CloudflareState{ServerIP: "203.0.113.10"}
+	calls := []string{}
+	ops := cloudflareDomainSyncOps{
+		target: "203.0.113.10",
+		upsertRecord: func(hostname string) error {
+			calls = append(calls, "upsert:"+hostname)
+			return nil
+		},
+		deleteRecord: func(hostname string) error {
+			calls = append(calls, "delete:"+hostname)
+			return nil
+		},
+		ensureRoute: func(hostname string) error {
+			calls = append(calls, "ensure:"+hostname)
+			return nil
+		},
+		removeRoute: func(hostname string) error {
+			calls = append(calls, "remove:"+hostname)
+			return nil
+		},
+		restart: func() error {
+			calls = append(calls, "restart")
+			return nil
+		},
+	}
+
+	var out bytes.Buffer
+	if err := syncCloudflareAppDomainWithOps("app.example.com", true, &out, state, ops); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"ensure:app.example.com", "upsert:app.example.com", "restart"}
+	if !reflect.DeepEqual(calls, want) {
+		t.Fatalf("calls = %#v, want %#v", calls, want)
+	}
+	if !strings.Contains(out.String(), "cloudflare\tdomain\tok\tapp.example.com -> 203.0.113.10") {
+		t.Fatalf("unexpected output: %s", out.String())
+	}
+}
+
 func TestSyncCloudflareRemoveRollsBackRouteWhenDNSFails(t *testing.T) {
 	state := &CloudflareState{TunnelID: "tunnel"}
 	calls := []string{}
@@ -115,7 +155,7 @@ func TestSyncCloudflareRemoveRollsBackRouteWhenDNSFails(t *testing.T) {
 			calls = append(calls, "ensure:"+hostname)
 			return nil
 		},
-		upsertCNAME: func(hostname string) error {
+		upsertRecord: func(hostname string) error {
 			calls = append(calls, "upsert:"+hostname)
 			return nil
 		},
@@ -123,7 +163,7 @@ func TestSyncCloudflareRemoveRollsBackRouteWhenDNSFails(t *testing.T) {
 			calls = append(calls, "remove:"+hostname)
 			return nil
 		},
-		deleteCNAME: func(hostname string) error {
+		deleteRecord: func(hostname string) error {
 			calls = append(calls, "delete:"+hostname)
 			return errors.New("dns failed")
 		},
