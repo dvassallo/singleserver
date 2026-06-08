@@ -43,6 +43,7 @@ func cliEnv(args []string, w io.Writer) error {
 			return err
 		}
 		fmt.Fprintf(w, "%s\tenv\tok\tset %s\n", app.Name, key)
+		fmt.Fprintf(w, "%s\tnext\tdeploy with `singleserver deploy %s`\n", app.Name, app.Repo)
 	case "list":
 		if len(args) != 2 {
 			return errors.New("usage: singleserver env list <app>")
@@ -71,6 +72,7 @@ func cliEnv(args []string, w io.Writer) error {
 			return err
 		}
 		fmt.Fprintf(w, "%s\tenv\tok\tunset %s\n", app.Name, key)
+		fmt.Fprintf(w, "%s\tnext\tdeploy with `singleserver deploy %s`\n", app.Name, app.Repo)
 	default:
 		return fmt.Errorf("unknown env command %q", command)
 	}

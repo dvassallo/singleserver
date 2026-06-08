@@ -180,6 +180,10 @@ for a configured app. It does not inspect or modify the app repository.
 deploy the app so Kamal picks up the changed proxy hosts. Pass `--no-deploy` to
 stage the domain change without applying it to the running app immediately.
 
+`singleserver env set <app> KEY=value` and `singleserver env unset <app> KEY`
+update server-side app secrets. Env changes are injected by Kamal on the next
+deploy, so the command prints the deploy command to run when you are ready.
+
 `singleserver storage enable <app>` creates the host storage directory, updates
 `apps.yml`, and deploys the app so Kamal mounts it into the running container.
 Pass `--no-deploy` to stage the storage config without applying it immediately.

@@ -694,14 +694,14 @@
                 <div class="command-heading">
                     <span class="command-name">Manage environment</span>
                     <code class="command-usage">singleserver env &lt;subcommand&gt; &lt;app&gt; ...</code>
-                    <p class="command-description">Sets, lists, and removes app environment variables and secrets on the server. Secrets stay out of GitHub repositories.</p>
+                    <p class="command-description">Sets, lists, and removes app environment variables and secrets on the server. Secrets stay out of GitHub repositories and are injected into the app on the next deploy.</p>
                 </div>
                 <div class="command-details">
                     <p class="option-heading">Subcommands for <code>singleserver env</code></p>
                     <ul class="option-list">
-                        <li><code>set &lt;app&gt; KEY=value</code><span>Write or replace one app environment value in the server-side env file.</span></li>
+                        <li><code>set &lt;app&gt; KEY=value</code><span>Write or replace one app environment value in the server-side env file, then print the deploy command that will apply it.</span></li>
                         <li><code>list &lt;app&gt;</code><span>Print environment values currently stored for the app.</span></li>
-                        <li><code>unset &lt;app&gt; KEY</code><span>Remove one app environment value from the server-side env file.</span></li>
+                        <li><code>unset &lt;app&gt; KEY</code><span>Remove one app environment value from the server-side env file, then print the deploy command that will apply the removal.</span></li>
                     </ul>
                 </div>
             </div>

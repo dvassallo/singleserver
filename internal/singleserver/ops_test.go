@@ -91,6 +91,9 @@ func TestEnvCommandWritesServerSideEnv(t *testing.T) {
 	if err := cliEnv([]string{"set", "fullsend", "DATABASE_URL=sqlite:///storage/app.db"}, &out); err != nil {
 		t.Fatal(err)
 	}
+	if !strings.Contains(out.String(), "fullsend\tnext\tdeploy with `singleserver deploy dvassallo/fullsend`") {
+		t.Fatalf("expected next deploy message, got:\n%s", out.String())
+	}
 	values, err := loadAppEnv("fullsend")
 	if err != nil {
 		t.Fatal(err)

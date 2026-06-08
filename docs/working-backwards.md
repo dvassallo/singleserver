@@ -338,6 +338,9 @@ singleserver env unset my-app OLD_KEY
 ```
 
 Secrets should live on the server, not in GitHub repositories.
+Environment changes should be visible to the next deploy. The command should
+print the deploy command to run when the operator is ready, rather than forcing a
+deploy after every single variable change.
 
 ### Manage Storage
 
