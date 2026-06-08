@@ -97,11 +97,11 @@ type DeployTiming struct {
 }
 
 func (m *DeployManager) runKamal(req DeployRequest, token string) (DeployTiming, error) {
-	secretKeys, err := appSecretKeys(req.App.Name)
+	app, err := appWithServerSecrets(req.App)
 	if err != nil {
 		return DeployTiming{}, err
 	}
-	req.App.SecretEnvKeys = secretKeys
+	req.App = app
 	generatedDeployYAML, err := GeneratedDeployYAML(req.App)
 	if err != nil {
 		return DeployTiming{}, err

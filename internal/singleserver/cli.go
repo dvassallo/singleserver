@@ -307,12 +307,11 @@ func cliRenderDeploy(args []string, w io.Writer) error {
 	if !ok {
 		return fmt.Errorf("%s is not configured", repo)
 	}
-	keys, err := appSecretKeys(app.Name)
+	renderApp, err := appWithServerSecrets(*app)
 	if err != nil {
 		return err
 	}
-	app.SecretEnvKeys = keys
-	body, err := GeneratedDeployYAML(*app)
+	body, err := GeneratedDeployYAML(renderApp)
 	if err != nil {
 		return err
 	}

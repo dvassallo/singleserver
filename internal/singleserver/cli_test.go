@@ -1,6 +1,9 @@
 package singleserver
 
 import (
+	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -96,6 +99,27 @@ func TestDeployOutputHelpers(t *testing.T) {
 	}
 	if got := appLiveURL(AppConfig{Repo: "dvassallo/fullsend", Name: "fullsend"}); got != "" {
 		t.Fatalf("expected no live URL, got %q", got)
+	}
+}
+
+func TestRenderDeployIncludesServerSideEnvSecrets(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "apps.yml")
+	t.Setenv("SINGLESERVER_CONFIG", configPath)
+	t.Setenv("SINGLESERVER_STATE_DIR", dir)
+	if err := os.WriteFile(configPath, []byte("apps:\n  - dvassallo/fullsend\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeAppEnv("fullsend", map[string]string{"DATABASE_URL": "sqlite:///storage/app.db"}); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := cliRenderDeploy([]string{"dvassallo/fullsend"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "secret:\n    - DATABASE_URL") {
+		t.Fatalf("expected rendered deploy config to include secret key, got:\n%s", out.String())
 	}
 }
 

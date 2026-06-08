@@ -113,6 +113,31 @@ func TestDoctorGitHubSetupOK(t *testing.T) {
 	}
 }
 
+func TestDoctorDeployConfigFailsOnInvalidServerSideEnv(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("SINGLESERVER_STATE_DIR", dir)
+	envDir := filepath.Join(dir, "env")
+	if err := os.MkdirAll(envDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(envDir, "fullsend.env"), []byte("not valid\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	ok := doctorDeployConfig(&out, AppConfig{Repo: "dvassallo/fullsend", Name: "fullsend"})
+
+	if ok {
+		t.Fatal("expected invalid env file to fail deploy config check")
+	}
+	if !strings.Contains(out.String(), "fullsend\tdeploy_config\tfailed") {
+		t.Fatalf("expected deploy_config failure output, got:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "invalid env line") {
+		t.Fatalf("expected invalid env detail, got:\n%s", out.String())
+	}
+}
+
 func TestCloudflaredRoutes(t *testing.T) {
 	config := &cloudflaredConfig{
 		Ingress: []cloudflaredIngress{

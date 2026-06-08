@@ -131,3 +131,12 @@ func GeneratedDeployYAML(app AppConfig) ([]byte, error) {
 	}
 	return buf.Bytes(), nil
 }
+
+func appWithServerSecrets(app AppConfig) (AppConfig, error) {
+	keys, err := appSecretKeys(app.Name)
+	if err != nil {
+		return AppConfig{}, err
+	}
+	app.SecretEnvKeys = keys
+	return app, nil
+}

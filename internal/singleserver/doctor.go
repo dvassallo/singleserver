@@ -397,7 +397,12 @@ func doctorGitHubInstallation(w io.Writer, github *GitHubClient, app AppConfig) 
 }
 
 func doctorDeployConfig(w io.Writer, app AppConfig) bool {
-	if _, err := GeneratedDeployYAML(app); err != nil {
+	renderApp, err := appWithServerSecrets(app)
+	if err != nil {
+		fmt.Fprintf(w, "%s\tdeploy_config\tfailed\t%s\n", app.Name, err)
+		return false
+	}
+	if _, err := GeneratedDeployYAML(renderApp); err != nil {
 		fmt.Fprintf(w, "%s\tdeploy_config\tfailed\t%s\n", app.Name, err)
 		return false
 	}
