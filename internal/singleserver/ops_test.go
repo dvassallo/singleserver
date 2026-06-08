@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -93,5 +94,90 @@ func TestEnvCommandWritesServerSideEnv(t *testing.T) {
 	}
 	if values["DATABASE_URL"] != "sqlite:///storage/app.db" {
 		t.Fatalf("unexpected DATABASE_URL: %q", values["DATABASE_URL"])
+	}
+}
+
+func TestBackupAndRestoreStorageReplacesDirectory(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "apps.yml")
+	storagePath := filepath.Join(dir, "storage")
+	backupRoot := filepath.Join(dir, "backups")
+	t.Setenv("SINGLESERVER_CONFIG", configPath)
+	t.Setenv("SINGLESERVER_BACKUP_DIR", backupRoot)
+	if err := os.MkdirAll(filepath.Join(storagePath, "nested"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(storagePath, "data.txt"), []byte("old"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(storagePath, "nested", "keep.txt"), []byte("keep"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, []byte(`apps:
+  - repo: dvassallo/fullsend
+    storage:
+      path: `+storagePath+`
+      mount: /storage
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := cliBackup([]string{"fullsend"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	fields := strings.Fields(out.String())
+	if len(fields) < 4 {
+		t.Fatalf("unexpected backup output: %q", out.String())
+	}
+	backupPath := fields[3]
+
+	if err := os.WriteFile(filepath.Join(storagePath, "data.txt"), []byte("new"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(storagePath, "extra.txt"), []byte("extra"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if err := cliRestore([]string{"fullsend", backupPath, "--yes", "--no-restart"}, &out); err != nil {
+		t.Fatal(err)
+	}
+
+	body, err := os.ReadFile(filepath.Join(storagePath, "data.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != "old" {
+		t.Fatalf("expected restored content, got %q", string(body))
+	}
+	if _, err := os.Stat(filepath.Join(storagePath, "extra.txt")); !os.IsNotExist(err) {
+		t.Fatalf("expected extra file removed, stat err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(storagePath, "nested", "keep.txt")); err != nil {
+		t.Fatalf("expected nested file restored: %v", err)
+	}
+}
+
+func TestRestoreRequiresConfirmation(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "apps.yml")
+	storagePath := filepath.Join(dir, "storage")
+	t.Setenv("SINGLESERVER_CONFIG", configPath)
+	if err := os.MkdirAll(storagePath, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, []byte(`apps:
+  - repo: dvassallo/fullsend
+    storage:
+      path: `+storagePath+`
+      mount: /storage
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	err := cliRestore([]string{"fullsend", filepath.Join(dir, "missing.tar.gz"), "--no-restart"}, &out)
+	if err == nil || !strings.Contains(err.Error(), "--yes") {
+		t.Fatalf("expected --yes confirmation error, got %v", err)
 	}
 }

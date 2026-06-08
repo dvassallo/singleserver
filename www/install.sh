@@ -13,7 +13,7 @@ repo_dir="${SINGLESERVER_REPO_DIR:-/srv/repos/singleserver}"
 export DEBIAN_FRONTEND=noninteractive
 
 apt-get update
-apt-get install -y ca-certificates curl git build-essential ruby-full golang-go docker.io openssh-server
+apt-get install -y ca-certificates curl git build-essential ruby-full golang-go docker.io openssh-server sqlite3
 
 if ! command -v kamal >/dev/null 2>&1; then
   gem install kamal --no-document

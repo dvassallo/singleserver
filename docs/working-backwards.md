@@ -338,7 +338,7 @@ Secrets should live on the server, not in GitHub repositories.
 ```sh
 singleserver storage enable my-app --mount /storage
 singleserver backup my-app
-singleserver restore my-app backup-id
+singleserver restore my-app backup-id --yes
 ```
 
 SQLite apps should have a first-class backup path.
@@ -419,7 +419,7 @@ Status key:
 | Ingress setup | Built | The installer and `cloudflare connect` set up host-level cloudflared and keep tunnel config aligned with `apps.yml`. |
 | App domain management | Built | Add/remove/list/verify hosts after app creation; add/remove deploy by default and support `--no-deploy`. |
 | App environment variables | Built | Central server-side env/secrets management exists through `singleserver env`. |
-| Persistent storage | Partial | Storage mounts plus tar backup/restore exist. SQLite-specific backup safety and restore confirmation/restart UX still need hardening. |
+| Persistent storage | Built | Storage mounts, SQLite-aware backups, explicit restore confirmation, rollback copy retention, and container restart behavior are built. Off-server backup destinations can be added later. |
 | Runtime logs | Built | `singleserver logs <app> --runtime` streams app container logs. |
 | App removal | Built | Removes config, proxy routes, containers, and optionally storage. |
 | Upgrade command | Built | Re-runs the installer, restarts the service, and runs `doctor`. |

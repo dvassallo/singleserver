@@ -142,6 +142,8 @@ singleserver deploy dvassallo/fullsend
 singleserver render-deploy smallbets/userbase-homepage
 singleserver logs fullsend
 singleserver domains add fullsend play.example.com
+singleserver backup fullsend
+singleserver restore fullsend 20260608T181500Z --yes
 ```
 
 `singleserver add <github-url>` validates GitHub App access, checks the repo's
@@ -160,6 +162,12 @@ for a configured app. It does not inspect or modify the app repository.
 <domain>` update `apps.yml`, Cloudflare DNS, Cloudflare Tunnel routing, and then
 deploy the app so Kamal picks up the changed proxy hosts. Pass `--no-deploy` to
 stage the domain change without applying it to the running app immediately.
+
+`singleserver backup <app>` archives the app's configured persistent storage
+under `/srv/backups/<app>`. SQLite database files are copied with SQLite's backup
+API before the archive is written. `singleserver restore <app> <backup-id> --yes`
+replaces the storage directory, keeps the previous copy next to it, and restarts
+the app containers unless `--no-restart` is passed.
 
 ## Adding An App
 

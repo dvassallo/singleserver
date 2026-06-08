@@ -724,15 +724,22 @@
                 <div class="command-heading">
                     <span class="command-name">Back up an app</span>
                     <code class="command-usage">singleserver backup &lt;app&gt;</code>
-                    <p class="command-description">Creates an app backup from its configured persistent storage. SQLite apps should have a first-class, low-drama backup path.</p>
+                    <p class="command-description">Creates a timestamped <code>.tar.gz</code> backup from the app's configured persistent storage. SQLite databases are copied through SQLite's backup API before the archive is written.</p>
                 </div>
             </div>
 
             <div class="command-entry">
                 <div class="command-heading">
                     <span class="command-name">Restore an app</span>
-                    <code class="command-usage">singleserver restore &lt;app&gt; &lt;backup-id-or-path&gt;</code>
-                    <p class="command-description">Restores an app backup after confirmation and restarts the app with the restored data.</p>
+                    <code class="command-usage">singleserver restore &lt;app&gt; &lt;backup-id-or-path&gt; --yes [options]</code>
+                    <p class="command-description">Restores an app backup after explicit confirmation, replaces the storage directory, keeps the previous storage directory as a rollback copy, and restarts the app containers with the restored data.</p>
+                </div>
+                <div class="command-details">
+                    <p class="option-heading">Options for <code>singleserver restore</code></p>
+                    <ul class="option-list">
+                        <li><code>--yes</code><span>Required. Confirms that the current storage directory should be replaced.</span></li>
+                        <li><code>--no-restart</code><span>Restore files without stopping or restarting app containers. Use only when you have already stopped the app yourself.</span></li>
+                    </ul>
                 </div>
             </div>
 
@@ -807,6 +814,7 @@
             <li><strong><code>SINGLESERVER_CONFIG</code></strong><span><span class="setting-default">Default: <code>/etc/singleserver/apps.yml</code>.</span> Main app config path.</span></li>
             <li><strong><code>SINGLESERVER_STATE_DIR</code></strong><span><span class="setting-default">Default: <code>/etc/singleserver</code>.</span> Directory for GitHub App credentials, Cloudflare state, setup tokens, and Single Server state.</span></li>
             <li><strong><code>SINGLESERVER_PORT</code></strong><span><span class="setting-default">Default: <code>8787</code>.</span> Local daemon port. The daemon listens on <code>127.0.0.1</code> and Cloudflare Tunnel forwards webhook/setup traffic to it.</span></li>
+            <li><strong><code>SINGLESERVER_BACKUP_DIR</code></strong><span><span class="setting-default">Default: <code>/srv/backups</code>.</span> Root directory for app storage backups.</span></li>
             <li><strong><code>SINGLESERVER_PUBLIC_URL</code></strong><span><span class="setting-default">Managed by <code>init</code>.</span> Public URL used in GitHub webhook setup, normally <code>https://hooks.&lt;zone&gt;</code>.</span></li>
             <li><strong><code>SINGLESERVER_SETUP_TOKEN</code></strong><span><span class="setting-default">Managed by <code>init</code>.</span> Token used to protect provider setup pages while GitHub and Cloudflare are being connected.</span></li>
             <li><strong><code>SINGLESERVER_GITHUB_APP_NAME</code></strong><span><span class="setting-default">Default: <code>Single Server</code>.</span> GitHub App display name used by the setup page.</span></li>

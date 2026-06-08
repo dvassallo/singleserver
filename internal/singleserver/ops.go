@@ -128,24 +128,29 @@ func cliBackup(args []string, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	backupDir := filepath.Join("/srv/backups", app.Name)
-	if err := os.MkdirAll(backupDir, 0700); err != nil {
+	result, err := createStorageBackup(app.Name, storage.Path, filepath.Join(backupRoot(), app.Name))
+	if err != nil {
 		return err
 	}
-	backupID := time.Now().UTC().Format("20060102T150405Z")
-	backupPath := filepath.Join(backupDir, backupID+".tar.gz")
-	if err := commandRun(10*time.Minute, "tar", "-C", storage.Path, "-czf", backupPath, "."); err != nil {
-		return err
-	}
-	fmt.Fprintf(w, "%s\tbackup\tok\t%s\n", app.Name, backupPath)
+	fmt.Fprintf(w, "%s\tbackup\tok\t%s\tfiles=%d\tsqlite=%d\n", app.Name, result.Path, result.Files, result.SQLiteFiles)
 	return nil
 }
 
 func cliRestore(args []string, w io.Writer) error {
-	if len(args) != 2 {
-		return errors.New("usage: singleserver restore <app> <backup-id-or-path>")
+	fs := flag.NewFlagSet("restore", flag.ContinueOnError)
+	fs.SetOutput(w)
+	yes := fs.Bool("yes", false, "confirm destructive restore")
+	noRestart := fs.Bool("no-restart", false, "restore files without restarting app containers")
+	if err := fs.Parse(normalizeFlagArgs(args, noFlagValues)); err != nil {
+		return err
 	}
-	app, err := configuredApp(args[0])
+	if fs.NArg() != 2 {
+		return errors.New("usage: singleserver restore <app> <backup-id-or-path> --yes [--no-restart]")
+	}
+	if !*yes {
+		return errors.New("restore replaces app storage; rerun with --yes to confirm")
+	}
+	app, err := configuredApp(fs.Arg(0))
 	if err != nil {
 		return err
 	}
@@ -153,20 +158,10 @@ func cliRestore(args []string, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	backupPath := args[1]
-	if !strings.Contains(backupPath, "/") {
-		backupPath = filepath.Join("/srv/backups", app.Name, backupPath+".tar.gz")
-	}
-	if _, err := os.Stat(backupPath); err != nil {
+	backupPath := resolveBackupPath(app.Name, fs.Arg(1))
+	if err := restoreStorageBackup(app.Name, storage.Path, backupPath, *noRestart, w); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(storage.Path, 0700); err != nil {
-		return err
-	}
-	if err := commandRun(10*time.Minute, "tar", "-C", storage.Path, "-xzf", backupPath); err != nil {
-		return err
-	}
-	fmt.Fprintf(w, "%s\trestore\tok\t%s\n", app.Name, backupPath)
 	return nil
 }
 
@@ -443,6 +438,30 @@ func stopAppContainers(appName string) error {
 	return commandRun(30*time.Second, "docker", args...)
 }
 
+func stopRunningAppContainers(appName string) ([]string, error) {
+	out, err := commandOutput(5*time.Second, "docker", "ps", "--format", "{{.Names}}")
+	if err != nil {
+		return nil, err
+	}
+	names := matchingAppContainerNames(appName, out)
+	if len(names) == 0 {
+		return nil, nil
+	}
+	args := append([]string{"stop"}, names...)
+	if err := commandRun(30*time.Second, "docker", args...); err != nil {
+		return nil, err
+	}
+	return names, nil
+}
+
+func startContainers(names []string) error {
+	if len(names) == 0 {
+		return nil
+	}
+	args := append([]string{"start"}, names...)
+	return commandRun(30*time.Second, "docker", args...)
+}
+
 func appContainerName(appName string) (string, error) {
 	out, err := commandOutput(5*time.Second, "docker", "ps", "--format", "{{.Names}}")
 	if err != nil {
@@ -460,6 +479,20 @@ func appContainerName(appName string) (string, error) {
 		return name, nil
 	}
 	return "", fmt.Errorf("no running container found for %s", appName)
+}
+
+func matchingAppContainerNames(appName string, output string) []string {
+	names := []string{}
+	for _, name := range strings.Split(output, "\n") {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		if strings.HasPrefix(name, appName+"-") || name == appName {
+			names = append(names, name)
+		}
+	}
+	return names
 }
 
 func runningAppContainers() (map[string]string, error) {

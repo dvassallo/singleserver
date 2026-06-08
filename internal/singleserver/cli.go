@@ -85,7 +85,7 @@ Usage:
   singleserver env <set|list|unset> ...
   singleserver storage enable <app> [--mount /storage] [--path /srv/storage/app]
   singleserver backup <app>
-  singleserver restore <app> <backup-id-or-path>
+  singleserver restore <app> <backup-id-or-path> --yes [--no-restart]
   singleserver remove <app> [--delete-storage]
   singleserver upgrade
 
