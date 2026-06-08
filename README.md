@@ -21,6 +21,17 @@ Daemon:      singleserver.service
 GitHub App:  single-server
 ```
 
+## Install
+
+Run this as root on a Linux server:
+
+```sh
+curl -fsSL https://singleserver.com/install.sh | sh
+```
+
+The installer downloads the hosted Linux binary by default. Set
+`SINGLESERVER_INSTALL_FROM_SOURCE=1` to build from a Git checkout instead.
+
 ## Minimal config
 
 ```yaml

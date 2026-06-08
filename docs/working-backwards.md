@@ -414,7 +414,7 @@ Status key:
 | Generated Kamal config | Built | Repos do not need `config/deploy.yml` unless they want custom behavior. |
 | `singleserver add` | Built | Adds apps, validates GitHub access, checks `Dockerfile`, deploys by default, supports `--no-deploy`, infers default domains from Cloudflare, and configures DNS/tunnel routing. |
 | `singleserver doctor` | Built | Checks daemon, config, Docker, disk, Cloudflare Tunnel, DNS, stale routes, GitHub App access, checkouts, deploy config, last deploy, and healthchecks. |
-| Installer script | Built | Installs Docker, Kamal, cloudflared, Single Server, systemd service, local registry, base config, and runs `init`. Public distribution still needs the final `singleserver.com/install.sh` hosting/release path. |
+| Installer script | Built | `https://singleserver.com/install.sh` installs Docker, Kamal, cloudflared, the hosted Single Server binary, the systemd service, local registry, base config, and runs `init`. Source builds remain available as an explicit fallback. |
 | `singleserver init` | Built | Creates base host state, connects Cloudflare when a token is present, restarts the daemon, prints the GitHub App setup URL, runs `doctor`, and reports GitHub setup as pending until browser approval is completed. |
 | `singleserver github connect` | Built | Repair command that prints the GitHub App setup URL and can set a custom GitHub App display name. |
 | DNS provider integration | Built | Cloudflare DNS and Cloudflare Tunnel are first-class for webhook and app routes. |

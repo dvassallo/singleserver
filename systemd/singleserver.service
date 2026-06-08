@@ -5,7 +5,7 @@ Wants=network-online.target docker.service
 
 [Service]
 Type=simple
-WorkingDirectory=/srv/repos/singleserver
+WorkingDirectory=/etc/singleserver
 EnvironmentFile=/etc/singleserver/singleserver.env
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 ExecStart=/usr/local/bin/singleserverd
