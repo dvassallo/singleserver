@@ -73,3 +73,31 @@ func TestGeneratedDeployYAMLOmitsEmptyProxyHosts(t *testing.T) {
 		t.Fatalf("unexpected default healthcheck path: %v", healthcheck["path"])
 	}
 }
+
+func TestGeneratedDeployYAMLIncludesSecretsAndStorage(t *testing.T) {
+	body, err := GeneratedDeployYAML(AppConfig{
+		Repo:          "dvassallo/fullsend",
+		SecretEnvKeys: []string{"ADMIN_PASSWORD", "STRIPE_SECRET_KEY"},
+		Storage: &StorageConfig{
+			Path:  "/srv/storage/fullsend",
+			Mount: "/storage",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var config map[string]any
+	if err := yaml.Unmarshal(body, &config); err != nil {
+		t.Fatal(err)
+	}
+	env := config["env"].(map[string]any)
+	secrets := env["secret"].([]any)
+	if len(secrets) != 2 || secrets[0] != "ADMIN_PASSWORD" || secrets[1] != "STRIPE_SECRET_KEY" {
+		t.Fatalf("unexpected secrets: %#v", secrets)
+	}
+	volumes := config["volumes"].([]any)
+	if len(volumes) != 1 || volumes[0] != "/srv/storage/fullsend:/storage" {
+		t.Fatalf("unexpected volumes: %#v", volumes)
+	}
+}

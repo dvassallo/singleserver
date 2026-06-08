@@ -12,7 +12,7 @@ func TestParseAddArgsAllowsFlagsAfterRepo(t *testing.T) {
 		"smallbets/userbase-homepage",
 		"--host", "userbase.com",
 		"--host=www.userbase.com",
-		"--deploy",
+		"--no-deploy",
 		"--app-port", "8080",
 	}, io.Discard)
 	if err != nil {
@@ -24,8 +24,8 @@ func TestParseAddArgsAllowsFlagsAfterRepo(t *testing.T) {
 	if len(opts.hosts) != 2 || opts.hosts[0] != "userbase.com" || opts.hosts[1] != "www.userbase.com" {
 		t.Fatalf("unexpected hosts: %#v", opts.hosts)
 	}
-	if !opts.deploy {
-		t.Fatal("expected deploy")
+	if !opts.noDeploy {
+		t.Fatal("expected no-deploy")
 	}
 	if !opts.appPortSet || opts.appPort != 8080 {
 		t.Fatalf("unexpected app port: set=%v value=%d", opts.appPortSet, opts.appPort)

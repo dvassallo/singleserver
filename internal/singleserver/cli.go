@@ -3,12 +3,12 @@ package singleserver
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 )
@@ -22,6 +22,18 @@ func RunCLI(args []string, logger *log.Logger) error {
 	case "help", "-h", "--help":
 		printUsage(os.Stdout)
 		return nil
+	case "init":
+		return cliInit(args[1:], os.Stdout)
+	case "github":
+		if len(args) == 2 && args[1] == "connect" {
+			return cliGitHubConnect(args[2:], os.Stdout)
+		}
+		return errors.New("usage: singleserver github connect")
+	case "cloudflare":
+		if len(args) >= 2 && args[1] == "connect" {
+			return cliCloudflareConnect(args[2:], os.Stdout)
+		}
+		return errors.New("usage: singleserver cloudflare connect")
 	case "list":
 		return cliList(os.Stdout)
 	case "status":
@@ -36,6 +48,20 @@ func RunCLI(args []string, logger *log.Logger) error {
 		return cliDoctor(os.Stdout)
 	case "logs":
 		return cliLogs(args[1:], os.Stdout)
+	case "remove":
+		return cliRemove(args[1:], os.Stdout)
+	case "domains":
+		return cliDomains(args[1:], os.Stdout)
+	case "env":
+		return cliEnv(args[1:], os.Stdout)
+	case "storage":
+		return cliStorage(args[1:], os.Stdout)
+	case "backup":
+		return cliBackup(args[1:], os.Stdout)
+	case "restore":
+		return cliRestore(args[1:], os.Stdout)
+	case "upgrade":
+		return cliUpgrade(os.Stdout)
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}
@@ -45,15 +71,28 @@ func printUsage(w io.Writer) {
 	fmt.Fprint(w, `Single Server
 
 Usage:
+  singleserver init
+  singleserver github connect
+  singleserver cloudflare connect
   singleserver list
   singleserver status
-  singleserver add <github-url> [--host host] [--deploy]
+  singleserver add <github-url> [--no-deploy]
   singleserver deploy <owner/repo> [ref]
   singleserver render-deploy <owner/repo>
   singleserver doctor
-  singleserver logs [app]
+  singleserver logs [app] [--follow] [--runtime]
+  singleserver domains <add|remove|list|verify> ...
+  singleserver env <set|list|unset> ...
+  singleserver storage enable <app> [--mount /storage]
+  singleserver backup <app>
+  singleserver restore <app> <backup-id>
+  singleserver remove <app>
+  singleserver upgrade
 
 Commands:
+  init           Create base server state, connect providers when configured, and print GitHub setup URL.
+  github         Repair or print the GitHub App setup URL.
+  cloudflare     Create or repair the Cloudflare Tunnel and webhook DNS route.
   list           Show configured apps.
   status         Check the local daemon and configured healthchecks.
   add            Add a GitHub repository to apps.yml.
@@ -61,6 +100,13 @@ Commands:
   render-deploy  Print the generated Kamal deploy.yml for a configured app.
   doctor         Check config, GitHub App access, checkouts, deploy logs, and healthchecks.
   logs           Show recent Single Server journal logs, optionally filtered by app.
+  domains        Manage app domains in apps.yml.
+  env            Manage server-side app environment variables.
+  storage        Manage persistent app storage.
+  backup         Back up app storage.
+  restore        Restore app storage from a backup.
+  remove         Remove app config and stop matching containers.
+  upgrade        Re-run the installer and restart Single Server.
 `)
 }
 
@@ -181,6 +227,11 @@ func cliRenderDeploy(args []string, w io.Writer) error {
 	if !ok {
 		return fmt.Errorf("%s is not configured", repo)
 	}
+	keys, err := appSecretKeys(app.Name)
+	if err != nil {
+		return err
+	}
+	app.SecretEnvKeys = keys
 	body, err := GeneratedDeployYAML(*app)
 	if err != nil {
 		return err
@@ -190,19 +241,53 @@ func cliRenderDeploy(args []string, w io.Writer) error {
 }
 
 func cliLogs(args []string, w io.Writer) error {
-	if len(args) > 1 {
-		return errors.New("usage: singleserver logs [app]")
+	fs := flag.NewFlagSet("logs", flag.ContinueOnError)
+	fs.SetOutput(w)
+	follow := fs.Bool("follow", false, "follow logs")
+	runtimeLogs := fs.Bool("runtime", false, "show app container logs")
+	if err := fs.Parse(normalizeFlagArgs(args, noFlagValues)); err != nil {
+		return err
 	}
+	if fs.NArg() > 1 {
+		return errors.New("usage: singleserver logs [app] [--follow] [--runtime]")
+	}
+
 	filter := ""
-	if len(args) == 1 {
-		filter = strings.TrimSpace(args[0])
+	if fs.NArg() == 1 {
+		filter = strings.TrimSpace(fs.Arg(0))
+	}
+	if *runtimeLogs {
+		if filter == "" {
+			return errors.New("usage: singleserver logs <app> --runtime")
+		}
+		app, err := configuredApp(filter)
+		if err != nil {
+			return err
+		}
+		container, err := appContainerName(app.Name)
+		if err != nil {
+			return err
+		}
+		logArgs := []string{"logs", "--tail", "200"}
+		if *follow {
+			logArgs = append(logArgs, "-f")
+		}
+		logArgs = append(logArgs, container)
+		return runCommandToWriter(w, 0, "docker", logArgs...)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "journalctl", "-u", "singleserver.service", "-n", "200", "--no-pager", "-o", "short-iso")
-	out, err := cmd.Output()
+	journalArgs := []string{"-u", "singleserver.service", "-n", "200", "--no-pager", "-o", "short-iso"}
+	if *follow {
+		journalArgs = append(journalArgs, "-f")
+	}
+	if *follow {
+		if filter == "" {
+			return runCommandToWriter(w, 0, "journalctl", journalArgs...)
+		}
+		script := "journalctl -u singleserver.service -n 200 --no-pager -o short-iso -f | grep --line-buffered -F " + shellQuote(filter)
+		return runCommandToWriter(w, 0, "bash", "-lc", script)
+	}
+	out, err := commandOutput(5*time.Second, "journalctl", journalArgs...)
 	if err != nil {
 		return err
 	}

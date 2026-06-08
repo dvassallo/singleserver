@@ -26,7 +26,7 @@ type addOptions struct {
 	healthcheckPath    string
 	appPort            int
 	dryRun             bool
-	deploy             bool
+	noDeploy           bool
 	healthcheckPathSet bool
 	appPortSet         bool
 }
@@ -56,6 +56,7 @@ type addAppEntry struct {
 	healthcheckPath string
 	appPort         int
 	appPortSet      bool
+	storage         *StorageConfig
 }
 
 func cliAdd(args []string, w io.Writer, logger *log.Logger) error {
@@ -136,7 +137,7 @@ func cliAdd(args []string, w io.Writer, logger *log.Logger) error {
 	}
 	fmt.Fprintf(w, "%s\tconfig\tok\tadded to %s\n", app.Name, configPath)
 
-	if opts.deploy {
+	if !opts.noDeploy {
 		fmt.Fprintf(w, "%s\tdeploy\tstart\t%s\n", app.Name, targetBranch)
 		if err := cliDeploy([]string{opts.repo, targetBranch}, logger); err != nil {
 			return err
@@ -159,7 +160,7 @@ func parseAddArgs(args []string, w io.Writer) (addOptions, error) {
 	fs.StringVar(&opts.healthcheck, "healthcheck", "", "external healthcheck URL")
 	fs.StringVar(&opts.healthcheckPath, "healthcheck-path", "", "container healthcheck path for generated Kamal config")
 	fs.BoolVar(&opts.dryRun, "dry-run", false, "validate without writing apps.yml")
-	fs.BoolVar(&opts.deploy, "deploy", false, "deploy immediately after adding")
+	fs.BoolVar(&opts.noDeploy, "no-deploy", false, "configure without deploying immediately")
 
 	appPort := fs.Int("app-port", 0, "container app port for generated Kamal config")
 	if err := fs.Parse(normalizeAddArgs(args)); err != nil {
@@ -176,7 +177,7 @@ func parseAddArgs(args []string, w io.Writer) (addOptions, error) {
 	})
 
 	if fs.NArg() != 1 {
-		return addOptions{}, errors.New("usage: singleserver add <github-url> [--host host] [--deploy]")
+		return addOptions{}, errors.New("usage: singleserver add <github-url> [--no-deploy]")
 	}
 	repo, err := normalizeRepoArg(fs.Arg(0))
 	if err != nil {
@@ -347,6 +348,16 @@ func (e addAppEntry) yamlNode() *yaml.Node {
 	if e.appPortSet {
 		appendScalarPair(node, "app_port", strconv.Itoa(e.appPort))
 	}
+	if e.storage != nil {
+		storageNode := &yaml.Node{Kind: yaml.MappingNode}
+		if e.storage.Path != "" {
+			appendScalarPair(storageNode, "path", e.storage.Path)
+		}
+		if e.storage.Mount != "" {
+			appendScalarPair(storageNode, "mount", e.storage.Mount)
+		}
+		appendNodePair(node, "storage", storageNode)
+	}
 	return node
 }
 
@@ -357,7 +368,8 @@ func (e addAppEntry) isScalar() bool {
 		len(e.hosts) == 0 &&
 		e.healthcheck == "" &&
 		e.healthcheckPath == "" &&
-		!e.appPortSet
+		!e.appPortSet &&
+		e.storage == nil
 }
 
 func findMapValue(node *yaml.Node, key string) *yaml.Node {
@@ -406,25 +418,7 @@ func writeFileAtomic(path string, body []byte) error {
 }
 
 func normalizeAddArgs(args []string) []string {
-	flags := []string{}
-	positionals := []string{}
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if arg == "--" {
-			positionals = append(positionals, args[i+1:]...)
-			break
-		}
-		if strings.HasPrefix(arg, "-") && arg != "-" {
-			flags = append(flags, arg)
-			if addFlagTakesValue(arg) && !strings.Contains(arg, "=") && i+1 < len(args) {
-				i++
-				flags = append(flags, args[i])
-			}
-			continue
-		}
-		positionals = append(positionals, arg)
-	}
-	return append(flags, positionals...)
+	return normalizeFlagArgs(args, addFlagTakesValue)
 }
 
 func addFlagTakesValue(arg string) bool {

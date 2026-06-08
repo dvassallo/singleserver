@@ -89,3 +89,19 @@ func TestNormalizeRejectsURLHosts(t *testing.T) {
 		t.Fatal("expected URL host to be rejected")
 	}
 }
+
+func TestNormalizeStorageDefaults(t *testing.T) {
+	app := AppConfig{
+		Repo:    "dvassallo/fullsend",
+		Storage: &StorageConfig{},
+	}
+	if err := app.Normalize(); err != nil {
+		t.Fatal(err)
+	}
+	if app.Storage.Path != "/srv/storage/fullsend" {
+		t.Fatalf("unexpected storage path: %s", app.Storage.Path)
+	}
+	if app.Storage.Mount != "/storage" {
+		t.Fatalf("unexpected storage mount: %s", app.Storage.Mount)
+	}
+}

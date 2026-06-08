@@ -97,6 +97,11 @@ type DeployTiming struct {
 }
 
 func (m *DeployManager) runKamal(req DeployRequest, token string) (DeployTiming, error) {
+	secretKeys, err := appSecretKeys(req.App.Name)
+	if err != nil {
+		return DeployTiming{}, err
+	}
+	req.App.SecretEnvKeys = secretKeys
 	generatedDeployYAML, err := GeneratedDeployYAML(req.App)
 	if err != nil {
 		return DeployTiming{}, err
@@ -114,6 +119,7 @@ repo_dir="$SINGLESERVER_REPO_DIR"
 repo="$SINGLESERVER_REPO"
 sha="$SINGLESERVER_SHA"
 app_name="$SINGLESERVER_APP_NAME"
+env_file="$SINGLESERVER_ENV_FILE"
 remote_url="https://x-access-token:${SINGLESERVER_GITHUB_TOKEN}@github.com/${repo}.git"
 generated_deploy_file=""
 
@@ -153,6 +159,16 @@ else
 fi
 echo "deploy_config=${deploy_config_source}"
 
+mkdir -p .kamal
+if ! grep -qxF "/.kamal/secrets" .git/info/exclude; then
+  printf '\n/.kamal/secrets\n' >> .git/info/exclude
+fi
+if [ -f "$env_file" ]; then
+  install -m 600 "$env_file" .kamal/secrets
+else
+  rm -f .kamal/secrets
+fi
+
 if docker ps -a --format '{{.Names}}' | grep -Eq "^${app_name}-"; then
   kamal_command=redeploy
 else
@@ -175,6 +191,7 @@ echo "timing command=${kamal_command} config=${deploy_config_source} git_ms=$((g
 		"SINGLESERVER_SHA="+req.SHA,
 		"SINGLESERVER_GITHUB_TOKEN="+token,
 		"SINGLESERVER_GENERATED_DEPLOY_YML="+string(generatedDeployYAML),
+		"SINGLESERVER_ENV_FILE="+appEnvPath(req.App.Name),
 	)
 
 	var combined lockedBuffer

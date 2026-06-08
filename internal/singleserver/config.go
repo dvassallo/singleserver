@@ -20,14 +20,21 @@ type Config struct {
 }
 
 type AppConfig struct {
-	Repo            string   `yaml:"repo"`
-	Name            string   `yaml:"name"`
-	Branch          string   `yaml:"branch"`
-	RepoDir         string   `yaml:"path"`
-	Healthcheck     string   `yaml:"healthcheck"`
-	Hosts           []string `yaml:"hosts"`
-	AppPort         int      `yaml:"app_port"`
-	HealthcheckPath string   `yaml:"healthcheck_path"`
+	Repo            string         `yaml:"repo"`
+	Name            string         `yaml:"name"`
+	Branch          string         `yaml:"branch"`
+	RepoDir         string         `yaml:"path"`
+	Healthcheck     string         `yaml:"healthcheck"`
+	Hosts           []string       `yaml:"hosts"`
+	AppPort         int            `yaml:"app_port"`
+	HealthcheckPath string         `yaml:"healthcheck_path"`
+	Storage         *StorageConfig `yaml:"storage,omitempty"`
+	SecretEnvKeys   []string       `yaml:"-"`
+}
+
+type StorageConfig struct {
+	Path  string `yaml:"path,omitempty"`
+	Mount string `yaml:"mount,omitempty"`
 }
 
 func (a *AppConfig) UnmarshalYAML(value *yaml.Node) error {
@@ -100,6 +107,22 @@ func (a *AppConfig) Normalize() error {
 	}
 	if !strings.HasPrefix(a.HealthcheckPath, "/") {
 		a.HealthcheckPath = "/" + a.HealthcheckPath
+	}
+	if a.Storage != nil {
+		a.Storage.Path = strings.TrimSpace(a.Storage.Path)
+		if a.Storage.Path == "" {
+			a.Storage.Path = "/srv/storage/" + a.Name
+		}
+		if !strings.HasPrefix(a.Storage.Path, "/") {
+			return fmt.Errorf("storage path for %s must be absolute: %q", a.Repo, a.Storage.Path)
+		}
+		a.Storage.Mount = strings.TrimSpace(a.Storage.Mount)
+		if a.Storage.Mount == "" {
+			a.Storage.Mount = "/storage"
+		}
+		if !strings.HasPrefix(a.Storage.Mount, "/") {
+			return fmt.Errorf("storage mount for %s must be absolute: %q", a.Repo, a.Storage.Mount)
+		}
 	}
 	return nil
 }

@@ -14,6 +14,8 @@ type kamalDeployConfig struct {
 	Registry      kamalRegistry          `yaml:"registry"`
 	Builder       kamalBuilder           `yaml:"builder"`
 	Proxy         kamalProxy             `yaml:"proxy"`
+	Env           *kamalEnv              `yaml:"env,omitempty"`
+	Volumes       []string               `yaml:"volumes,omitempty"`
 	DeployTimeout int                    `yaml:"deploy_timeout"`
 	DrainTimeout  int                    `yaml:"drain_timeout"`
 }
@@ -58,6 +60,10 @@ type kamalProxyHealthcheck struct {
 	Path     string `yaml:"path"`
 	Interval int    `yaml:"interval"`
 	Timeout  int    `yaml:"timeout"`
+}
+
+type kamalEnv struct {
+	Secret []string `yaml:"secret,omitempty"`
 }
 
 func GeneratedDeployYAML(app AppConfig) ([]byte, error) {
@@ -105,6 +111,12 @@ func GeneratedDeployYAML(app AppConfig) ([]byte, error) {
 		},
 		DeployTimeout: 10,
 		DrainTimeout:  1,
+	}
+	if len(app.SecretEnvKeys) > 0 {
+		config.Env = &kamalEnv{Secret: app.SecretEnvKeys}
+	}
+	if app.Storage != nil {
+		config.Volumes = []string{app.Storage.Path + ":" + app.Storage.Mount}
 	}
 
 	var buf bytes.Buffer
