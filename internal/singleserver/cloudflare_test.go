@@ -43,3 +43,23 @@ func TestDNSRecordContentMatchesTunnelTarget(t *testing.T) {
 		t.Fatal("did not expect empty content to match")
 	}
 }
+
+func TestConflictingCNAMERecord(t *testing.T) {
+	target := "abc.cfargotunnel.com"
+	if conflict := conflictingCNAMERecord([]cloudflareDNSRecord{
+		{ID: "1", Content: "ABC.cfargotunnel.com."},
+	}, target); conflict != nil {
+		t.Fatalf("did not expect matching target to conflict: %#v", conflict)
+	}
+
+	conflict := conflictingCNAMERecord([]cloudflareDNSRecord{
+		{ID: "1", Content: "old.example.net"},
+		{ID: "2", Content: "abc.cfargotunnel.com"},
+	}, target)
+	if conflict == nil {
+		t.Fatal("expected conflicting CNAME")
+	}
+	if conflict.ID != "1" {
+		t.Fatalf("unexpected conflict: %#v", conflict)
+	}
+}

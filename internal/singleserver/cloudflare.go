@@ -178,6 +178,9 @@ func (c *CloudflareClient) upsertCNAME(zoneID string, hostname string, target st
 	if err != nil {
 		return err
 	}
+	if conflict := conflictingCNAMERecord(records, target); conflict != nil {
+		return fmt.Errorf("Cloudflare DNS %s already points to %s; remove that CNAME before assigning it to Single Server", hostname, conflict.Content)
+	}
 	body := map[string]any{
 		"type":    "CNAME",
 		"name":    hostname,
@@ -211,6 +214,16 @@ func dnsRecordContentMatches(content string, target string) bool {
 	content = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(content)), ".")
 	target = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(target)), ".")
 	return content != "" && content == target
+}
+
+func conflictingCNAMERecord(records []cloudflareDNSRecord, target string) *cloudflareDNSRecord {
+	for i := range records {
+		if dnsRecordContentMatches(records[i].Content, target) {
+			continue
+		}
+		return &records[i]
+	}
+	return nil
 }
 
 func (c *CloudflareClient) dnsRecords(zoneID string, hostname string, recordType string) ([]cloudflareDNSRecord, error) {
