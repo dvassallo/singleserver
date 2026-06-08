@@ -15,7 +15,7 @@ three commands and one GitHub browser approval:
 ```sh
 ssh root@203.0.113.10
 curl -fsSL https://singleserver.com/install.sh | sh
-singleserver init --domain deploy.example.com --email me@example.com
+singleserver init --domain deploy.example.com
 singleserver add me/my-app --host my-app.example.com --deploy
 ```
 
@@ -34,8 +34,8 @@ Kamal config, or per-repo runner setup.
 
 Single Server has four moving parts:
 
-- **Server:** one VPS running Docker, Kamal, cloudflared or direct HTTPS, and the
-  Single Server daemon.
+- **Server:** one VPS running Docker, Kamal, cloudflared, and the Single Server
+  daemon.
 - **GitHub App:** the event source and deploy credential provider. Push webhooks
   trigger deploys; installation tokens fetch code and set commit statuses.
 - **`apps.yml`:** the allowlist. Only repositories in this file can deploy, even
@@ -78,7 +78,7 @@ The installer should:
 - Create a `deploy` user
 - Install Docker
 - Install Kamal
-- Install cloudflared, Caddy, or the selected ingress adapter
+- Install cloudflared
 - Install `/usr/local/bin/singleserver`
 - Install and start `singleserver.service`
 - Create `/etc/singleserver`
@@ -93,31 +93,18 @@ The command should be safe to rerun.
 Ideal command:
 
 ```sh
-singleserver init --domain deploy.example.com --email me@example.com
+singleserver init --domain deploy.example.com
 ```
 
-This should configure the public webhook/control URL and choose an ingress mode.
+This should configure the public webhook/control URL and Cloudflare Tunnel
+ingress. Single Server assumes Cloudflare Tunnel for public traffic and does not
+manage direct public TLS.
 
 Recommended default:
 
 ```sh
-singleserver init \
-  --domain deploy.example.com \
-  --email me@example.com \
-  --ingress cloudflare
+singleserver init --domain deploy.example.com
 ```
-
-Direct-ingress mode should also exist for users who do not use Cloudflare:
-
-```sh
-singleserver init \
-  --domain deploy.example.com \
-  --email me@example.com \
-  --ingress direct
-```
-
-In direct mode, Single Server should bind to the public server through a local
-reverse proxy and manage TLS certificates.
 
 ### 4. Connect GitHub
 
@@ -380,7 +367,7 @@ This is the complete happy path we should optimize for:
 ```sh
 ssh root@203.0.113.10
 curl -fsSL https://singleserver.com/install.sh | sh
-singleserver init --domain deploy.example.com --email me@example.com
+singleserver init --domain deploy.example.com
 singleserver github connect
 singleserver add me/homepage --host example.com --host www.example.com --deploy
 ```
@@ -409,9 +396,9 @@ Status key:
 | `singleserver add` | Partial | Adds apps, validates GitHub access, checks `Dockerfile`, supports hosts and optional deploy. DNS automation is not built. |
 | `singleserver doctor` | Partial | Checks daemon, config, GitHub App access, checkouts, deploy config, last deploy, and healthchecks. Needs disk, Docker, proxy, and DNS checks. |
 | Installer script | Needed | Should install Docker, Kamal, Single Server, systemd service, and base config. |
-| `singleserver init` | Needed | Should configure ingress, public URL, email, and host environment. |
+| `singleserver init` | Needed | Should configure Cloudflare Tunnel ingress, public URL, and host environment. |
 | `singleserver github connect` | Needed | Today the setup page exists; the CLI should wrap the flow. |
-| DNS provider integration | Needed | Cloudflare should be first. Direct DNS instructions should remain possible. |
+| DNS provider integration | Needed | Cloudflare DNS should be first-class because Cloudflare Tunnel is required. |
 | Ingress setup | Needed | Current production uses host-level cloudflared. The installer should make this reproducible. |
 | App domain management | Needed | Add/remove hosts after app creation. |
 | App environment variables | Needed | Central server-side env/secrets management. |
