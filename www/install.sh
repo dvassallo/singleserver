@@ -62,6 +62,8 @@ mkdir -p /srv/repos /srv/storage /srv/backups /etc/singleserver
 if [ ! -d "$repo_dir/.git" ]; then
   rm -rf "$repo_dir"
   git clone "$repo_url" "$repo_dir"
+else
+  git -C "$repo_dir" remote set-url origin "$repo_url"
 fi
 git -C "$repo_dir" fetch origin "$repo_ref"
 git -C "$repo_dir" checkout -q FETCH_HEAD
