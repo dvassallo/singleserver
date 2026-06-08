@@ -25,10 +25,10 @@ func RunCLI(args []string, logger *log.Logger) error {
 	case "init":
 		return cliInit(args[1:], os.Stdout)
 	case "github":
-		if len(args) == 2 && args[1] == "connect" {
+		if len(args) >= 2 && args[1] == "connect" {
 			return cliGitHubConnect(args[2:], os.Stdout)
 		}
-		return errors.New("usage: singleserver github connect")
+		return errors.New("usage: singleserver github connect [--name \"Single Server\"]")
 	case "cloudflare":
 		if len(args) >= 2 && args[1] == "connect" {
 			return cliCloudflareConnect(args[2:], os.Stdout)
@@ -72,7 +72,7 @@ func printUsage(w io.Writer) {
 
 Usage:
   singleserver init
-  singleserver github connect
+  singleserver github connect [--name "Single Server"]
   singleserver cloudflare connect
   singleserver list
   singleserver status

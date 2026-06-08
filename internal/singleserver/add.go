@@ -84,6 +84,9 @@ func cliAdd(args []string, w io.Writer, logger *log.Logger) error {
 	if err != nil {
 		return err
 	}
+	if err := applyDefaultAppDomain(&app, &entry); err != nil {
+		return err
+	}
 	if _, err := GeneratedDeployYAML(app); err != nil {
 		return err
 	}
@@ -136,6 +139,11 @@ func cliAdd(args []string, w io.Writer, logger *log.Logger) error {
 		return err
 	}
 	fmt.Fprintf(w, "%s\tconfig\tok\tadded to %s\n", app.Name, configPath)
+	for _, host := range app.Hosts {
+		if err := syncCloudflareAppDomain(host, true, w); err != nil {
+			return err
+		}
+	}
 
 	if !opts.noDeploy {
 		fmt.Fprintf(w, "%s\tdeploy\tstart\t%s\n", app.Name, targetBranch)
@@ -257,6 +265,26 @@ func (o addOptions) app() (AppConfig, addAppEntry, error) {
 		entry.healthcheckPath = app.HealthcheckPath
 	}
 	return app, entry, nil
+}
+
+func applyDefaultAppDomain(app *AppConfig, entry *addAppEntry) error {
+	if len(app.Hosts) > 0 {
+		return nil
+	}
+	host, ok, err := defaultAppDomain(app.Name)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil
+	}
+	app.Hosts = []string{host}
+	if app.Healthcheck == "" {
+		app.Healthcheck = "https://" + host + app.HealthcheckPath
+	}
+	entry.hosts = app.Hosts
+	entry.healthcheck = app.Healthcheck
+	return nil
 }
 
 func readConfigForAppend(path string) ([]byte, error) {

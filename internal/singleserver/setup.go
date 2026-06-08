@@ -46,7 +46,16 @@ func cliInit(args []string, w io.Writer) error {
 	return cliGitHubConnect(nil, w)
 }
 
-func cliGitHubConnect(_ []string, w io.Writer) error {
+func cliGitHubConnect(args []string, w io.Writer) error {
+	fs := flag.NewFlagSet("github connect", flag.ContinueOnError)
+	fs.SetOutput(w)
+	appName := fs.String("name", "", "GitHub App name")
+	if err := fs.Parse(normalizeFlagArgs(args, githubFlagTakesValue)); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return errors.New("usage: singleserver github connect [--name \"Single Server\"]")
+	}
 	if err := ensureBaseFiles(); err != nil {
 		return err
 	}
@@ -69,6 +78,13 @@ func cliGitHubConnect(_ []string, w io.Writer) error {
 			return err
 		}
 	}
+	if strings.TrimSpace(*appName) != "" {
+		env["SINGLESERVER_GITHUB_APP_NAME"] = strings.TrimSpace(*appName)
+		if err := writeServiceEnv(env); err != nil {
+			return err
+		}
+	}
+	_ = commandRun(10*time.Second, "systemctl", "restart", "singleserver.service")
 	fmt.Fprintf(w, "github\tconnect\t%s/setup/github-app?token=%s\n", publicURL, token)
 	return nil
 }
@@ -160,6 +176,7 @@ func cliCloudflareConnect(args []string, w io.Writer) error {
 	}
 	writeCloudflaredService(state.ConfigFile)
 	_ = commandRun(10*time.Second, "systemctl", "daemon-reload")
+	_ = commandRun(10*time.Second, "systemctl", "restart", "singleserver.service")
 	_ = commandRun(10*time.Second, "systemctl", "enable", "--now", "cloudflared-singleserver.service")
 	fmt.Fprintf(w, "cloudflare\tdns\tok\t%s -> %s.cfargotunnel.com\n", state.HookHost, state.TunnelID)
 	return nil
@@ -308,6 +325,14 @@ func cloudflareFlagTakesValue(arg string) bool {
 		name = before
 	}
 	return name == "zone" || name == "tunnel" || name == "hook-host"
+}
+
+func githubFlagTakesValue(arg string) bool {
+	name := strings.TrimLeft(arg, "-")
+	if before, _, ok := strings.Cut(name, "="); ok {
+		name = before
+	}
+	return name == "name"
 }
 
 func defaultCloudflareZone() string {

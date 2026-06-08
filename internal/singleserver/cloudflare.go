@@ -382,6 +382,17 @@ func writeCloudflaredCredentials(path string, state *CloudflareState) error {
 	return writeFileAtomic(path, append(body, '\n'))
 }
 
+func defaultAppDomain(appName string) (string, bool, error) {
+	state, err := loadCloudflareState()
+	if err != nil {
+		return "", false, err
+	}
+	if state.ZoneName == "" {
+		return "", false, nil
+	}
+	return appName + "." + state.ZoneName, true, nil
+}
+
 func syncCloudflareAppDomain(hostname string, add bool, w io.Writer) error {
 	state, err := loadCloudflareState()
 	if err != nil {

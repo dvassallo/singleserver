@@ -2,6 +2,8 @@ package singleserver
 
 import (
 	"io"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -78,6 +80,36 @@ func TestAddOptionsAppInfersHealthcheckFromFirstHost(t *testing.T) {
 	}
 	if entry.healthcheckPath != "" {
 		t.Fatalf("did not expect healthcheck_path to be written: %s", entry.healthcheckPath)
+	}
+}
+
+func TestApplyDefaultAppDomainUsesCloudflareZone(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("SINGLESERVER_STATE_DIR", dir)
+	if err := os.WriteFile(filepath.Join(dir, "cloudflare.json"), []byte(`{"zone_name":"nobrainer.host"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	opts := addOptions{repo: "dvassallo/fullsend"}
+	app, entry, err := opts.app()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := applyDefaultAppDomain(&app, &entry); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(app.Hosts) != 1 || app.Hosts[0] != "fullsend.nobrainer.host" {
+		t.Fatalf("unexpected hosts: %#v", app.Hosts)
+	}
+	if app.Healthcheck != "https://fullsend.nobrainer.host/up" {
+		t.Fatalf("unexpected healthcheck: %s", app.Healthcheck)
+	}
+	if len(entry.hosts) != 1 || entry.hosts[0] != "fullsend.nobrainer.host" {
+		t.Fatalf("unexpected entry hosts: %#v", entry.hosts)
+	}
+	if entry.healthcheck != "https://fullsend.nobrainer.host/up" {
+		t.Fatalf("unexpected entry healthcheck: %s", entry.healthcheck)
 	}
 }
 

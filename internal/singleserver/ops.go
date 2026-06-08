@@ -202,6 +202,11 @@ func cliRemove(args []string, w io.Writer) error {
 		return err
 	}
 	fmt.Fprintf(w, "%s\tconfig\tok\tremoved from %s\n", app.Name, configPath)
+	for _, host := range app.Hosts {
+		if err := syncCloudflareAppDomain(host, false, w); err != nil {
+			return err
+		}
+	}
 	if err := stopAppContainers(app.Name); err != nil {
 		fmt.Fprintf(w, "%s\tcontainers\tfailed\t%s\n", app.Name, err)
 	} else {

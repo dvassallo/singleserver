@@ -146,8 +146,9 @@ singleserver logs fullsend
 `singleserver add <github-url>` validates GitHub App access, checks the repo's
 default branch and `Dockerfile`, appends the normalized `owner/repo` to
 `/etc/singleserver/apps.yml`, validates the generated Kamal config, deploys the
-current branch tip, and runs `doctor` afterward. Pass `--no-deploy` to configure
-the app and wait for the next push or manual deploy.
+current branch tip, and runs `doctor` afterward. When Cloudflare is connected
+and no host is provided, the default app domain is `<app>.<zone>`. Pass
+`--no-deploy` to configure the app and wait for the next push or manual deploy.
 
 `singleserver deploy <owner/repo> [ref]` runs the same deploy path as a push webhook. If `ref` is omitted, Single Server deploys the configured branch or the repository default branch.
 
