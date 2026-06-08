@@ -547,6 +547,8 @@ func commandRun(timeout time.Duration, name string, args ...string) error {
 	return err
 }
 
+var commandRunFunc = commandRun
+
 func gitRun(repoDir string, args ...string) error {
 	_, err := gitOutput(repoDir, args...)
 	return err

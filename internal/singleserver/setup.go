@@ -41,8 +41,12 @@ func cliInit(args []string, w io.Writer) error {
 		}
 	}
 
-	_ = commandRun(10*time.Second, "systemctl", "daemon-reload")
-	_ = commandRun(10*time.Second, "systemctl", "restart", "singleserver.service")
+	if err := commandRunFunc(10*time.Second, "systemctl", "daemon-reload"); err != nil {
+		return err
+	}
+	if err := commandRunFunc(10*time.Second, "systemctl", "restart", "singleserver.service"); err != nil {
+		return err
+	}
 	if err := cliGitHubConnect(nil, w); err != nil {
 		return err
 	}
@@ -98,7 +102,9 @@ func cliGitHubConnect(args []string, w io.Writer) error {
 			return err
 		}
 	}
-	_ = commandRun(10*time.Second, "systemctl", "restart", "singleserver.service")
+	if err := commandRunFunc(10*time.Second, "systemctl", "restart", "singleserver.service"); err != nil {
+		return err
+	}
 	fmt.Fprintf(w, "github\tconnect\t%s/setup/github-app?token=%s\n", publicURL, token)
 	return nil
 }
@@ -209,10 +215,18 @@ func cliCloudflareConnect(args []string, w io.Writer) error {
 	if err := writeServiceEnv(env); err != nil {
 		return err
 	}
-	writeCloudflaredService(state.ConfigFile)
-	_ = commandRun(10*time.Second, "systemctl", "daemon-reload")
-	_ = commandRun(10*time.Second, "systemctl", "restart", "singleserver.service")
-	_ = commandRun(10*time.Second, "systemctl", "enable", "--now", "cloudflared-singleserver.service")
+	if err := writeCloudflaredService(state.ConfigFile); err != nil {
+		return err
+	}
+	if err := commandRunFunc(10*time.Second, "systemctl", "daemon-reload"); err != nil {
+		return err
+	}
+	if err := commandRunFunc(10*time.Second, "systemctl", "restart", "singleserver.service"); err != nil {
+		return err
+	}
+	if err := commandRunFunc(10*time.Second, "systemctl", "enable", "--now", "cloudflared-singleserver.service"); err != nil {
+		return err
+	}
 	fmt.Fprintf(w, "cloudflare\tdns\tok\t%s -> %s.cfargotunnel.com\n", state.HookHost, state.TunnelID)
 	return nil
 }
@@ -336,7 +350,7 @@ func serviceEnvPath() string {
 	return filepath.Join(envDefault("SINGLESERVER_STATE_DIR", "/etc/singleserver"), "singleserver.env")
 }
 
-func writeCloudflaredService(configFile string) {
+func writeCloudflaredService(configFile string) error {
 	body := fmt.Sprintf(`[Unit]
 Description=Single Server Cloudflare Tunnel
 After=network-online.target
@@ -351,8 +365,10 @@ RestartSec=2
 [Install]
 WantedBy=multi-user.target
 `, configFile)
-	_ = os.MkdirAll("/etc/systemd/system", 0755)
-	_ = os.WriteFile("/etc/systemd/system/cloudflared-singleserver.service", []byte(body), 0644)
+	if err := os.MkdirAll("/etc/systemd/system", 0755); err != nil {
+		return err
+	}
+	return os.WriteFile("/etc/systemd/system/cloudflared-singleserver.service", []byte(body), 0644)
 }
 
 func randomHex(bytesLen int) (string, error) {

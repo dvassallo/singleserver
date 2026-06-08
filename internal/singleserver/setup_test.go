@@ -9,12 +9,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestGitHubConnectStoresCustomAppName(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("SINGLESERVER_STATE_DIR", dir)
 	t.Setenv("SINGLESERVER_CONFIG", filepath.Join(dir, "apps.yml"))
+	stubCommandRun(t)
 
 	var out bytes.Buffer
 	if err := cliGitHubConnect([]string{"--name", "Single Server Test"}, &out); err != nil {
@@ -36,6 +38,7 @@ func TestGitHubConnectStoresPublicAppFlag(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("SINGLESERVER_STATE_DIR", dir)
 	t.Setenv("SINGLESERVER_CONFIG", filepath.Join(dir, "apps.yml"))
+	stubCommandRun(t)
 
 	var out bytes.Buffer
 	if err := cliGitHubConnect([]string{"--public"}, &out); err != nil {
@@ -137,4 +140,13 @@ func setupManifestFromBody(t *testing.T, body string) map[string]any {
 		t.Fatalf("manifest did not decode: %v\n%s", err, decoded)
 	}
 	return manifest
+}
+
+func stubCommandRun(t *testing.T) {
+	t.Helper()
+	original := commandRunFunc
+	t.Cleanup(func() { commandRunFunc = original })
+	commandRunFunc = func(timeout time.Duration, name string, args ...string) error {
+		return nil
+	}
 }

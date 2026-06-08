@@ -499,10 +499,12 @@ func verifyDomains(args []string, w io.Writer) error {
 
 func cliUpgrade(w io.Writer) error {
 	installURL := envDefault("SINGLESERVER_INSTALL_URL", "https://singleserver.com/install.sh")
-	if err := commandRun(10*time.Minute, "bash", "-lc", "curl -fsSL "+shellQuote(installURL)+" | sh"); err != nil {
+	if err := commandRunFunc(10*time.Minute, "bash", "-lc", "curl -fsSL "+shellQuote(installURL)+" | sh"); err != nil {
 		return err
 	}
-	_ = commandRun(15*time.Second, "systemctl", "restart", "singleserver.service")
+	if err := commandRunFunc(15*time.Second, "systemctl", "restart", "singleserver.service"); err != nil {
+		return err
+	}
 	fmt.Fprintln(w, "upgrade\tok\tinstaller completed")
 	return cliDoctor(nil, w)
 }
