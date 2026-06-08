@@ -24,8 +24,11 @@ func TestDomainsAndStorageCommandsUpdateConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	storagePath := filepath.Join(dir, "storage")
-	if err := cliStorage([]string{"enable", "fullsend", "--path", storagePath, "--mount", "/data"}, &out); err != nil {
+	if err := cliStorage([]string{"enable", "fullsend", "--path", storagePath, "--mount", "/data", "--no-deploy"}, &out, logger); err != nil {
 		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "fullsend\tnext\tdeploy with `singleserver deploy dvassallo/fullsend`") {
+		t.Fatalf("expected staged deploy message, got:\n%s", out.String())
 	}
 
 	config, err := LoadConfig(configPath)

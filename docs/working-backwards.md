@@ -347,6 +347,8 @@ singleserver backup my-app
 singleserver restore my-app backup-id --yes
 ```
 
+Enabling storage should update the app config and redeploy the app so the mount
+is live. `--no-deploy` should stage the storage change for a later deploy.
 SQLite apps should have a first-class backup path.
 
 ### Remove An App

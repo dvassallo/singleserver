@@ -710,13 +710,14 @@
                 <div class="command-heading">
                     <span class="command-name">Enable storage</span>
                     <code class="command-usage">singleserver storage enable &lt;app&gt; [options]</code>
-                    <p class="command-description">Creates persistent storage for SQLite databases, uploads, and other app-owned files, then mounts it into the app container.</p>
+                    <p class="command-description">Creates persistent storage for SQLite databases, uploads, and other app-owned files, updates app config, and redeploys the app so Kamal mounts it into the container.</p>
                 </div>
                 <div class="command-details">
                     <p class="option-heading">Options for <code>singleserver storage enable</code></p>
                     <ul class="option-list">
                         <li><code>--mount &lt;path&gt;</code><span>Container mount path. Defaults to <code>/storage</code>.</span></li>
                         <li><code>--path &lt;path&gt;</code><span>Host storage path. Defaults to <code>/srv/storage/&lt;app&gt;</code>.</span></li>
+                        <li><code>--no-deploy</code><span>Stage the storage config without applying it to the running app immediately.</span></li>
                     </ul>
                 </div>
             </div>

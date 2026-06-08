@@ -55,7 +55,7 @@ func RunCLI(args []string, logger *log.Logger) error {
 	case "env":
 		return cliEnv(args[1:], os.Stdout)
 	case "storage":
-		return cliStorage(args[1:], os.Stdout)
+		return cliStorage(args[1:], os.Stdout, logger)
 	case "backup":
 		return cliBackup(args[1:], os.Stdout)
 	case "restore":
@@ -83,7 +83,7 @@ Usage:
   singleserver logs [app] [options]
   singleserver domains <add|remove|list|verify> ...
   singleserver env <set|list|unset> ...
-  singleserver storage enable <app> [--mount /storage] [--path /srv/storage/app]
+  singleserver storage enable <app> [--mount /storage] [--path /srv/storage/app] [--no-deploy]
   singleserver backup <app>
   singleserver restore <app> <backup-id-or-path> --yes [--no-restart]
   singleserver remove <app> [--delete-storage --yes]

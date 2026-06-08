@@ -77,31 +77,32 @@ func cliEnv(args []string, w io.Writer) error {
 	return nil
 }
 
-func cliStorage(args []string, w io.Writer) error {
+func cliStorage(args []string, w io.Writer, logger *log.Logger) error {
 	if len(args) == 0 {
-		return errors.New("usage: singleserver storage enable <app> [--mount /storage] [--path /srv/storage/app]")
+		return errors.New("usage: singleserver storage enable <app> [--mount /storage] [--path /srv/storage/app] [--no-deploy]")
 	}
 	switch args[0] {
 	case "enable":
-		return cliStorageEnable(args[1:], w)
+		return cliStorageEnable(args[1:], w, logger)
 	default:
 		return fmt.Errorf("unknown storage command %q", args[0])
 	}
 }
 
-func cliStorageEnable(args []string, w io.Writer) error {
+func cliStorageEnable(args []string, w io.Writer, logger *log.Logger) error {
 	fs := flag.NewFlagSet("storage enable", flag.ContinueOnError)
 	fs.SetOutput(w)
 	mount := fs.String("mount", "/storage", "container mount path")
 	path := fs.String("path", "", "host storage path")
+	noDeploy := fs.Bool("no-deploy", false, "update config without deploying")
 	if err := fs.Parse(normalizeFlagArgs(args, storageFlagTakesValue)); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: singleserver storage enable <app> [--mount /storage] [--path /srv/storage/app]")
+		return errors.New("usage: singleserver storage enable <app> [--mount /storage] [--path /srv/storage/app] [--no-deploy]")
 	}
 	appName := fs.Arg(0)
-	return updateConfiguredApp(appName, func(app *AppConfig) error {
+	if err := updateConfiguredApp(appName, func(app *AppConfig) error {
 		storage := &StorageConfig{Path: strings.TrimSpace(*path), Mount: strings.TrimSpace(*mount)}
 		app.Storage = storage
 		if err := app.Normalize(); err != nil {
@@ -113,7 +114,22 @@ func cliStorageEnable(args []string, w io.Writer) error {
 		_ = commandRun(3*time.Second, "chown", "-R", "deploy:docker", app.Storage.Path)
 		fmt.Fprintf(w, "%s\tstorage\tok\t%s:%s\n", app.Name, app.Storage.Path, app.Storage.Mount)
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+	app, err := configuredApp(appName)
+	if err != nil {
+		return err
+	}
+	if *noDeploy {
+		fmt.Fprintf(w, "%s\tnext\tdeploy with `singleserver deploy %s`\n", app.Name, app.Repo)
+		return nil
+	}
+	fmt.Fprintf(w, "%s\tdeploy\tstart\tapplying storage change\n", app.Name)
+	if err := cliDeploy([]string{app.Repo}, w, logger); err != nil {
+		return err
+	}
+	return cliDoctor([]string{app.Name}, w)
 }
 
 func cliBackup(args []string, w io.Writer) error {
