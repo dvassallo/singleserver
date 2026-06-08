@@ -86,7 +86,7 @@ Usage:
   singleserver storage enable <app> [--mount /storage] [--path /srv/storage/app] [--no-deploy]
   singleserver backup <app>
   singleserver restore <app> <backup-id-or-path> --yes [--no-restart]
-  singleserver remove <app> [--delete-storage] [--delete-repo] --yes
+  singleserver remove <app> [--delete-storage] [--delete-repo] [--yes]
   singleserver upgrade
 
 Commands:

@@ -104,22 +104,50 @@ func cliStorageEnable(args []string, w io.Writer, logger *log.Logger) error {
 		return errors.New("usage: singleserver storage enable <app> [--mount /storage] [--path /srv/storage/app] [--no-deploy]")
 	}
 	appName := fs.Arg(0)
-	if err := updateConfiguredApp(appName, func(app *AppConfig) error {
-		storage := &StorageConfig{Path: strings.TrimSpace(*path), Mount: strings.TrimSpace(*mount)}
-		app.Storage = storage
-		if err := app.Normalize(); err != nil {
-			return err
-		}
-		if err := os.MkdirAll(app.Storage.Path, 0700); err != nil {
-			return err
-		}
-		_ = commandRun(3*time.Second, "chown", "-R", "deploy:docker", app.Storage.Path)
-		fmt.Fprintf(w, "%s\tstorage\tok\t%s:%s\n", app.Name, app.Storage.Path, app.Storage.Mount)
-		return nil
-	}); err != nil {
+
+	configPath := envDefault("SINGLESERVER_CONFIG", "/etc/singleserver/apps.yml")
+	config, err := LoadConfig(configPath)
+	if err != nil {
 		return err
 	}
-	app, err := configuredApp(appName)
+	appIndex := -1
+	for i := range config.Apps {
+		if appMatches(config.Apps[i], appName) {
+			appIndex = i
+			break
+		}
+	}
+	if appIndex == -1 {
+		return fmt.Errorf("%s is not configured", appName)
+	}
+
+	app := &config.Apps[appIndex]
+	app.Storage = &StorageConfig{Path: strings.TrimSpace(*path), Mount: strings.TrimSpace(*mount)}
+	if err := app.Normalize(); err != nil {
+		return err
+	}
+	storagePath := app.Storage.Path
+	storageMount := app.Storage.Mount
+	createdStorage := false
+	if _, err := os.Stat(storagePath); err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+		createdStorage = true
+	}
+	if err := os.MkdirAll(storagePath, 0700); err != nil {
+		return err
+	}
+	_ = commandRun(3*time.Second, "chown", "-R", "deploy:docker", storagePath)
+	if err := writeConfigFunc(configPath, config); err != nil {
+		if createdStorage {
+			_ = os.Remove(storagePath)
+		}
+		return err
+	}
+	fmt.Fprintf(w, "%s\tstorage\tok\t%s:%s\n", app.Name, storagePath, storageMount)
+
+	app, err = configuredApp(appName)
 	if err != nil {
 		return err
 	}
@@ -193,7 +221,7 @@ func cliRemove(args []string, w io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: singleserver remove <app> [--delete-storage] [--delete-repo] --yes")
+		return errors.New("usage: singleserver remove <app> [--delete-storage] [--delete-repo] [--yes]")
 	}
 	if (*deleteStorage || *deleteRepo) && !*yes {
 		return errors.New("remove deletes app files; rerun with --yes to confirm")
@@ -508,7 +536,7 @@ func updateConfiguredApp(appName string, mutate func(app *AppConfig) error) erro
 		if err := config.Apps[i].Normalize(); err != nil {
 			return err
 		}
-		return writeConfig(configPath, config)
+		return writeConfigFunc(configPath, config)
 	}
 	return fmt.Errorf("%s is not configured", appName)
 }

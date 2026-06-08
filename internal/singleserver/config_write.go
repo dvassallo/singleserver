@@ -19,6 +19,8 @@ func loadConfigAllowMissing(path string) (*Config, error) {
 	return config, nil
 }
 
+var writeConfigFunc = writeConfig
+
 func writeConfig(path string, config *Config) error {
 	if err := config.Normalize(); err != nil {
 		return err
