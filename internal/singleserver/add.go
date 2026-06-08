@@ -31,6 +31,8 @@ type addOptions struct {
 	appPortSet         bool
 }
 
+const addUsage = "usage: singleserver add <github-url> [options]"
+
 type repeatedStrings []string
 
 func (s *repeatedStrings) String() string {
@@ -197,7 +199,7 @@ func parseAddArgs(args []string, w io.Writer) (addOptions, error) {
 	})
 
 	if fs.NArg() != 1 {
-		return addOptions{}, errors.New("usage: singleserver add <github-url> [--no-deploy]")
+		return addOptions{}, errors.New(addUsage)
 	}
 	repo, err := normalizeRepoArg(fs.Arg(0))
 	if err != nil {

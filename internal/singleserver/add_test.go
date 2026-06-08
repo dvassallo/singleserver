@@ -35,6 +35,16 @@ func TestParseAddArgsAllowsFlagsAfterRepo(t *testing.T) {
 	}
 }
 
+func TestParseAddArgsUsageMentionsOptions(t *testing.T) {
+	_, err := parseAddArgs(nil, io.Discard)
+	if err == nil {
+		t.Fatal("expected usage error")
+	}
+	if err.Error() != addUsage {
+		t.Fatalf("unexpected usage: %v", err)
+	}
+}
+
 func TestParseAddArgsAcceptsGitHubURL(t *testing.T) {
 	tests := []struct {
 		arg  string
