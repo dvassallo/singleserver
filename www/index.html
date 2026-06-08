@@ -353,7 +353,7 @@
 
     <section>
         <h2><a href="#flow">What happens next</a></h2>
-        <p>GitHub is the trigger. Your server is the deploy system. Single Server fetches the pushed commit, checks it against the apps you added, builds locally, and lets Kamal swap containers after the healthcheck passes.</p>
+        <p>GitHub is the trigger. Your server fetches the pushed commit, builds it locally, and lets Kamal move traffic only after the new container passes its healthcheck.</p>
 
         <div class="flow-box" id="flow">
             <div class="flow-row">
@@ -362,19 +362,14 @@
                 <span class="result">GitHub sends one signed webhook</span>
             </div>
             <div class="flow-row">
-                <span class="pill">allow</span>
-                <span class="connector">&rarr;</span>
-                <span class="result">Only apps added on the server can deploy</span>
-            </div>
-            <div class="flow-row">
                 <span class="pill">build</span>
                 <span class="connector">&rarr;</span>
-                <span class="result">The server builds the image from that commit</span>
+                <span class="result">Your server builds the image from that commit</span>
             </div>
             <div class="flow-row">
                 <span class="pill">live</span>
                 <span class="connector">&rarr;</span>
-                <span class="result">Kamal swaps the container and posts commit status</span>
+                <span class="result">Kamal healthchecks the new container, swaps traffic, and reports status to GitHub</span>
             </div>
         </div>
     </section>
