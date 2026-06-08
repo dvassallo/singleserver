@@ -176,6 +176,15 @@ func (c *Config) AppByRepo(repo string) (*AppConfig, bool) {
 	return nil, false
 }
 
+func (c *Config) AppByName(name string) (*AppConfig, bool) {
+	for i := range c.Apps {
+		if strings.EqualFold(c.Apps[i].Name, name) {
+			return &c.Apps[i], true
+		}
+	}
+	return nil, false
+}
+
 func (c *Config) AppForPush(payload *PushPayload) (*AppConfig, string, string) {
 	if payload == nil || payload.Repository.FullName == "" {
 		return nil, "", "missing repository"

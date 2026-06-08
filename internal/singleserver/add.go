@@ -87,6 +87,9 @@ func cliAdd(args []string, w io.Writer, logger *log.Logger) error {
 	if err := applyDefaultAppDomain(&app, &entry); err != nil {
 		return err
 	}
+	if existing, exists := config.AppByName(app.Name); exists {
+		return fmt.Errorf("app name %s is already used by %s; rerun with --name <unique-name>", app.Name, existing.Repo)
+	}
 	if _, err := GeneratedDeployYAML(app); err != nil {
 		return err
 	}
