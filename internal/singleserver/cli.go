@@ -77,8 +77,8 @@ Usage:
   singleserver list
   singleserver status
   singleserver add <github-url> [options]
-  singleserver deploy <owner/repo> [ref]
-  singleserver render-deploy <owner/repo>
+  singleserver deploy <owner/repo|app> [ref]
+  singleserver render-deploy <owner/repo|app>
   singleserver doctor [app]
   singleserver logs [app] [options]
   singleserver domains <add|remove|list|verify> ...
@@ -215,22 +215,22 @@ func appRuntimeStatus(app AppConfig, containers map[string]string, err error) st
 
 func cliDeploy(args []string, w io.Writer, logger *log.Logger) error {
 	if len(args) < 1 || len(args) > 2 {
-		return errors.New("usage: singleserver deploy <owner/repo> [ref]")
+		return errors.New("usage: singleserver deploy <owner/repo|app> [ref]")
 	}
-	repo := strings.TrimSpace(args[0])
+	target := strings.TrimSpace(args[0])
+	if target == "" {
+		return errors.New("usage: singleserver deploy <owner/repo|app> [ref]")
+	}
 	ref := ""
 	if len(args) == 2 {
 		ref = strings.TrimSpace(args[1])
 	}
 
-	config, err := LoadConfig(envDefault("SINGLESERVER_CONFIG", "/etc/singleserver/apps.yml"))
+	app, err := configuredApp(target)
 	if err != nil {
 		return err
 	}
-	app, ok := config.AppByRepo(repo)
-	if !ok {
-		return fmt.Errorf("%s is not configured", repo)
-	}
+	repo := app.Repo
 
 	github := NewGitHubClient(envDefault("SINGLESERVER_STATE_DIR", "/etc/singleserver"))
 	installationID, err := github.RepositoryInstallationID(repo)
@@ -295,17 +295,15 @@ func appLiveURL(app AppConfig) string {
 
 func cliRenderDeploy(args []string, w io.Writer) error {
 	if len(args) != 1 {
-		return errors.New("usage: singleserver render-deploy <owner/repo>")
+		return errors.New("usage: singleserver render-deploy <owner/repo|app>")
 	}
-	repo := strings.TrimSpace(args[0])
-
-	config, err := LoadConfig(envDefault("SINGLESERVER_CONFIG", "/etc/singleserver/apps.yml"))
+	target := strings.TrimSpace(args[0])
+	if target == "" {
+		return errors.New("usage: singleserver render-deploy <owner/repo|app>")
+	}
+	app, err := configuredApp(target)
 	if err != nil {
 		return err
-	}
-	app, ok := config.AppByRepo(repo)
-	if !ok {
-		return fmt.Errorf("%s is not configured", repo)
 	}
 	renderApp, err := appWithServerSecrets(*app)
 	if err != nil {

@@ -114,6 +114,26 @@ func TestAppByNameIsCaseInsensitive(t *testing.T) {
 	}
 }
 
+func TestAppByNameOrRepoMatchesEitherIdentifier(t *testing.T) {
+	config := &Config{Apps: []AppConfig{{Repo: "dvassallo/fullsend", Name: "fullsend"}}}
+
+	byName, ok := config.AppByNameOrRepo("FULLSEND")
+	if !ok {
+		t.Fatal("expected app by name")
+	}
+	if byName.Repo != "dvassallo/fullsend" {
+		t.Fatalf("unexpected app by name: %s", byName.Repo)
+	}
+
+	byRepo, ok := config.AppByNameOrRepo("DVASSALLO/FULLSEND")
+	if !ok {
+		t.Fatal("expected app by repo")
+	}
+	if byRepo.Name != "fullsend" {
+		t.Fatalf("unexpected app by repo: %s", byRepo.Name)
+	}
+}
+
 func TestLoadConfigRejectsDuplicateAppNames(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "apps.yml")

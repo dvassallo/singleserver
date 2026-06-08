@@ -563,10 +563,8 @@ func configuredApp(appName string) (*AppConfig, error) {
 	if err != nil {
 		return nil, err
 	}
-	for i := range config.Apps {
-		if appMatches(config.Apps[i], appName) {
-			return &config.Apps[i], nil
-		}
+	if app, ok := config.AppByNameOrRepo(appName); ok {
+		return app, nil
 	}
 	return nil, fmt.Errorf("%s is not configured", appName)
 }

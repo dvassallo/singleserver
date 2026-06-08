@@ -629,13 +629,13 @@
             <div class="command-entry">
                 <div class="command-heading">
                     <span class="command-name">Deploy manually</span>
-                    <code class="command-usage">singleserver deploy &lt;owner/repo&gt; [ref]</code>
+                    <code class="command-usage">singleserver deploy &lt;owner/repo|app&gt; [ref]</code>
                     <p class="command-description">Deploys a configured app immediately. If <code>ref</code> is omitted, it deploys the configured branch or the repository default branch. Manual deploys use the same checkout, build, rollout, healthcheck, and GitHub status path as push-triggered deploys.</p>
                 </div>
                 <div class="command-details">
                     <p class="option-heading">Arguments for <code>singleserver deploy</code></p>
                     <ul class="option-list">
-                        <li><code>&lt;owner/repo&gt;</code><span>Configured repository or app name to deploy.</span></li>
+                        <li><code>&lt;owner/repo|app&gt;</code><span>Configured repository or app name to deploy.</span></li>
                         <li><code>[ref]</code><span>Optional branch, tag, or commit SHA. If omitted, Single Server uses the app's configured production branch.</span></li>
                     </ul>
                 </div>
@@ -685,7 +685,7 @@
             <div class="command-entry">
                 <div class="command-heading">
                     <span class="command-name">Inspect deploy config</span>
-                    <code class="command-usage">singleserver render-deploy &lt;owner/repo&gt;</code>
+                    <code class="command-usage">singleserver render-deploy &lt;owner/repo|app&gt;</code>
                     <p class="command-description">Prints the generated Kamal <code>deploy.yml</code> for a configured app. Use this when you want to see exactly what conventions produced before a deploy.</p>
                 </div>
             </div>

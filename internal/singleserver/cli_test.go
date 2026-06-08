@@ -115,7 +115,7 @@ func TestRenderDeployIncludesServerSideEnvSecrets(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := cliRenderDeploy([]string{"dvassallo/fullsend"}, &out); err != nil {
+	if err := cliRenderDeploy([]string{"fullsend"}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "secret:\n    - DATABASE_URL") {
