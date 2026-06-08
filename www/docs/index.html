@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Single Server Docs</title>
+    <meta name="description" content="Single Server command reference, app contract, configuration guide, and product roadmap.">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #FF3366;
+            --secondary: #00CCFF;
+            --tertiary: #FFCC00;
+            --highlight: #f0f0f0;
+            --ink: #000;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Space Grotesk', system-ui, sans-serif;
+            line-height: 1.5;
+            padding: 40px 20px;
+            color: var(--ink);
+            background: #fff;
+        }
+
+        main {
+            max-width: 980px;
+            margin: 0 auto;
+            border: 4px solid var(--ink);
+            box-shadow: 12px 12px 0 var(--ink);
+            padding: 40px;
+            background: #fff;
+            position: relative;
+        }
+
+        .top-links {
+            display: flex;
+            justify-content: flex-end;
+            gap: 16px;
+            margin-bottom: 24px;
+            font-weight: 700;
+        }
+
+        .top-links a,
+        footer a {
+            color: var(--ink);
+            text-decoration: none;
+            border-bottom: 3px solid var(--primary);
+        }
+
+        .top-links a:hover,
+        footer a:hover {
+            border-color: var(--secondary);
+        }
+
+        h1 {
+            font-size: 4rem;
+            line-height: 0.9;
+            margin-bottom: 20px;
+            font-weight: 700;
+            letter-spacing: 0;
+            text-transform: lowercase;
+        }
+
+        .tagline {
+            font-size: 1.35rem;
+            font-weight: 700;
+            background: var(--tertiary);
+            display: inline-block;
+            padding: 5px 10px;
+            transform: rotate(-1deg);
+            border: 2px solid var(--ink);
+            box-shadow: 4px 4px 0 var(--ink);
+        }
+
+        .lede {
+            font-size: 1.2rem;
+            line-height: 1.6;
+            margin-top: 28px;
+            max-width: 760px;
+        }
+
+        section { margin-top: 46px; }
+
+        h2 {
+            font-size: 1.8rem;
+            margin-bottom: 18px;
+            display: inline-block;
+            line-height: 1.2;
+        }
+
+        h2 a,
+        h3 a {
+            color: inherit;
+            text-decoration: none;
+            border-bottom: 4px solid var(--primary);
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        h2 a::after,
+        h3 a::after {
+            content: "\2192";
+            font-size: 0.8em;
+            color: #999;
+        }
+
+        h2 a:hover,
+        h3 a:hover { border-color: var(--secondary); }
+
+        h3 {
+            font-size: 1.25rem;
+            margin: 30px 0 12px;
+        }
+
+        p {
+            font-size: 1.05rem;
+            line-height: 1.6;
+            color: #222;
+            margin-bottom: 14px;
+        }
+
+        ul {
+            margin: 0 0 18px 22px;
+            color: #222;
+        }
+
+        li { margin-bottom: 8px; }
+
+        code,
+        pre {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        }
+
+        code {
+            background: var(--highlight);
+            padding: 1px 5px;
+        }
+
+        .toc {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            margin-top: 22px;
+        }
+
+        .toc a {
+            border: 2px solid var(--ink);
+            box-shadow: 5px 5px 0 var(--highlight);
+            color: var(--ink);
+            font-weight: 700;
+            padding: 12px;
+            text-decoration: none;
+        }
+
+        .toc a:hover {
+            background: var(--tertiary);
+        }
+
+        .notice {
+            background: var(--highlight);
+            border: 2px solid var(--ink);
+            box-shadow: 8px 8px 0 rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-top: 22px;
+        }
+
+        .notice p:last-child { margin-bottom: 0; }
+
+        .status-grid,
+        .command-grid {
+            display: grid;
+            gap: 16px;
+            margin-top: 18px;
+        }
+
+        .status-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .command-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .tile,
+        .command {
+            border: 2px solid var(--ink);
+            padding: 18px;
+            background: #fff;
+            box-shadow: 6px 6px 0 var(--highlight);
+        }
+
+        .tile strong,
+        .command strong {
+            display: block;
+            font-size: 1.08rem;
+            margin-bottom: 7px;
+        }
+
+        .command .signature {
+            display: block;
+            margin: 10px 0;
+            padding: 10px;
+            overflow-x: auto;
+            white-space: nowrap;
+            color: #fff;
+            background: var(--ink);
+        }
+
+        .badge {
+            display: inline-block;
+            font-size: 0.78rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            border: 2px solid var(--ink);
+            padding: 2px 7px;
+            margin-bottom: 10px;
+            background: #fff;
+        }
+
+        .built { background: var(--secondary); }
+        .partial { background: var(--tertiary); }
+        .planned { background: var(--primary); color: #fff; }
+
+        .code-wrapper {
+            position: relative;
+            margin: 14px 0 20px;
+        }
+
+        .code-block {
+            display: block;
+            background: var(--ink);
+            color: #fff;
+            padding: 16px 48px 16px 18px;
+            font-size: 0.98rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            white-space: pre;
+        }
+
+        .copy-btn {
+            position: absolute;
+            top: 12px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            color: #fff;
+            cursor: pointer;
+            opacity: 0;
+            transition: all 0.2s;
+            padding: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .code-wrapper:hover .copy-btn { opacity: 1; }
+        .copy-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: #fff;
+        }
+        .copy-btn svg { width: 16px; height: 16px; display: block; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 16px 0 24px;
+            font-size: 0.98rem;
+        }
+
+        th,
+        td {
+            border: 2px solid var(--ink);
+            padding: 10px;
+            vertical-align: top;
+            text-align: left;
+        }
+
+        th {
+            background: var(--highlight);
+            font-weight: 700;
+        }
+
+        td code,
+        th code {
+            white-space: nowrap;
+        }
+
+        .flow-box {
+            background: var(--highlight);
+            padding: 24px;
+            border: 2px solid var(--ink);
+            margin-top: 15px;
+            box-shadow: 8px 8px 0 rgba(0,0,0,0.1);
+        }
+
+        .flow-row {
+            display: grid;
+            grid-template-columns: 160px 42px 1fr;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .flow-row:last-child { margin-bottom: 0; }
+
+        .pill {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-weight: 700;
+            background: #fff;
+            padding: 6px 10px;
+            border: 2px solid var(--ink);
+            text-align: center;
+            min-height: 36px;
+        }
+
+        .connector {
+            color: var(--primary);
+            font-weight: 900;
+            font-size: 1.2rem;
+            text-align: center;
+        }
+
+        .result {
+            font-weight: 700;
+        }
+
+        footer {
+            margin-top: 80px;
+            font-size: 0.9rem;
+            color: #666;
+            text-align: center;
+            border-top: 2px solid #eee;
+            padding-top: 30px;
+        }
+
+        @media (max-width: 760px) {
+            body { padding: 24px 14px; }
+            main { padding: 20px; box-shadow: 8px 8px 0 var(--ink); }
+            h1 { font-size: 3rem; }
+            .tagline { font-size: 1.08rem; }
+            .toc,
+            .status-grid,
+            .command-grid {
+                grid-template-columns: 1fr;
+            }
+            .flow-box { padding: 20px; }
+            .flow-row {
+                grid-template-columns: 1fr;
+                gap: 8px;
+            }
+            .connector {
+                transform: rotate(90deg);
+                height: 22px;
+            }
+            .code-block { font-size: 0.9rem; }
+            table {
+                display: block;
+                overflow-x: auto;
+                white-space: nowrap;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<main>
+    <nav class="top-links" aria-label="Docs navigation">
+        <a href="/">Home</a>
+        <a href="https://github.com/dvassallo/singleserver">GitHub</a>
+    </nav>
+
+    <header>
+        <h1>docs</h1>
+        <div class="tagline">The Single Server command contract.</div>
+        <p class="lede">Single Server itself is a small Go binary: no Node runtime, no database, and no per-repo runner. It uses Docker, Kamal, and Cloudflare Tunnel on your Linux server to deploy your apps.</p>
+        <div class="notice">
+            <p>These docs are written as the product contract. Commands marked <strong>Built</strong> work in the current codebase. <strong>Partial</strong> commands exist but do not yet match the ideal UX. <strong>Planned</strong> commands describe what still needs to be built.</p>
+        </div>
+    </header>
+
+    <nav class="toc" aria-label="Table of contents">
+        <a href="#quickstart">Quickstart</a>
+        <a href="#concepts">Concepts</a>
+        <a href="#commands">Commands</a>
+        <a href="#config">Configuration</a>
+        <a href="#contract">App Contract</a>
+        <a href="#deploys">Deploys</a>
+        <a href="#files">Files</a>
+        <a href="#roadmap">Roadmap</a>
+    </nav>
+
+    <section id="quickstart">
+        <h2><a href="#quickstart">Quickstart</a></h2>
+        <p>Start with any Linux server from Hetzner, DigitalOcean, AWS, Azure, or another provider. Run every command over SSH on that server.</p>
+        <div class="code-wrapper">
+            <pre class="code-block">ssh root@203.0.113.10
+curl -fsSL https://singleserver.com/install.sh | sh
+singleserver init
+singleserver add https://github.com/you/my-app
+singleserver status</pre>
+            <button class="copy-btn" aria-label="Copy to clipboard">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+            </button>
+        </div>
+        <p>After that, pushing to the configured branch should deploy automatically.</p>
+    </section>
+
+    <section id="concepts">
+        <h2><a href="#concepts">Concepts</a></h2>
+        <div class="status-grid">
+            <div class="tile">
+                <strong>Your server</strong>
+                <p>The control plane. Single Server, Docker, Kamal, cloudflared, checkouts, config, secrets, and deploy logs live here.</p>
+            </div>
+            <div class="tile">
+                <strong>GitHub App</strong>
+                <p>The event source and deploy credential provider. Push events wake your server; installation tokens fetch code and set commit status.</p>
+            </div>
+            <div class="tile">
+                <strong><code>apps.yml</code></strong>
+                <p>The allowlist. Only repositories in this file can deploy, even if the GitHub App is installed more broadly.</p>
+            </div>
+            <div class="tile">
+                <strong>App containers</strong>
+                <p>Each project runs in its own Docker container. Kamal builds, starts, healthchecks, and swaps traffic.</p>
+            </div>
+            <div class="tile">
+                <strong>Cloudflare Tunnel</strong>
+                <p>The expected public ingress path. App domains route through Cloudflare to your server without direct TLS management on the host.</p>
+            </div>
+            <div class="tile">
+                <strong>Central secrets</strong>
+                <p>Deploy secrets belong on the server, not in every GitHub repo. Repos should only need app code and a Dockerfile.</p>
+            </div>
+        </div>
+    </section>
+
+    <section id="commands">
+        <h2><a href="#commands">Commands</a></h2>
+
+        <h3><a href="#setup-commands">Setup</a></h3>
+        <div class="command-grid" id="setup-commands">
+            <div class="command">
+                <span class="badge planned">Planned</span>
+                <strong>Install</strong>
+                <code class="signature">curl -fsSL https://singleserver.com/install.sh | sh</code>
+                <p>Installs Docker, Kamal, cloudflared, the <code>singleserver</code> CLI, the <code>singleserver.service</code> daemon, and base config files. It should be safe to rerun.</p>
+            </div>
+            <div class="command">
+                <span class="badge planned">Planned</span>
+                <strong><code>singleserver init</code></strong>
+                <code class="signature">singleserver init</code>
+                <p>Initializes your server. It should connect Cloudflare Tunnel and GitHub, create required secrets under <code>/etc/singleserver</code>, start the daemon, and finish with <code>singleserver doctor</code>.</p>
+            </div>
+            <div class="command">
+                <span class="badge planned">Planned</span>
+                <strong><code>singleserver github connect</code></strong>
+                <code class="signature">singleserver github connect</code>
+                <p>Repair command for GitHub App setup. It should open or print a GitHub URL, request contents read and commit statuses write, and keep <code>apps.yml</code> as the deployment allowlist.</p>
+            </div>
+            <div class="command">
+                <span class="badge planned">Planned</span>
+                <strong><code>singleserver cloudflare connect</code></strong>
+                <code class="signature">singleserver cloudflare connect</code>
+                <p>Repair command for Cloudflare. It should create or reuse a tunnel, save credentials, and prepare DNS/routing for app domains.</p>
+            </div>
+        </div>
+
+        <h3><a href="#app-commands">Apps</a></h3>
+        <div class="command-grid" id="app-commands">
+            <div class="command">
+                <span class="badge partial">Partial</span>
+                <strong><code>singleserver add</code></strong>
+                <code class="signature">singleserver add &lt;github-url&gt; [options]</code>
+                <p>Adds a GitHub repository, verifies access, checks for a Dockerfile, writes <code>apps.yml</code>, validates the generated Kamal config, and should deploy the current branch tip by default.</p>
+            </div>
+            <div class="command">
+                <span class="badge built">Built</span>
+                <strong><code>singleserver deploy</code></strong>
+                <code class="signature">singleserver deploy &lt;owner/repo&gt; [ref]</code>
+                <p>Deploys a configured app immediately. If <code>ref</code> is omitted, it deploys the configured branch or the repository default branch.</p>
+            </div>
+            <div class="command">
+                <span class="badge built">Built</span>
+                <strong><code>singleserver list</code></strong>
+                <code class="signature">singleserver list</code>
+                <p>Prints configured apps, their repository, branch, and healthcheck URL.</p>
+            </div>
+            <div class="command">
+                <span class="badge partial">Partial</span>
+                <strong><code>singleserver status</code></strong>
+                <code class="signature">singleserver status</code>
+                <p>Checks the local daemon and configured app healthchecks. Target behavior should summarize deploy status, domains, and runtime health.</p>
+            </div>
+            <div class="command">
+                <span class="badge partial">Partial</span>
+                <strong><code>singleserver doctor</code></strong>
+                <code class="signature">singleserver doctor</code>
+                <p>Runs deeper checks. Today it checks daemon health, config validity, GitHub App access, generated deploy config, checkout state, recent deploy outcome, and healthchecks.</p>
+            </div>
+            <div class="command">
+                <span class="badge built">Built</span>
+                <strong><code>singleserver logs</code></strong>
+                <code class="signature">singleserver logs [app]</code>
+                <p>Shows recent <code>singleserver.service</code> journal logs, optionally filtered by app name. Target flags include <code>--follow</code> and <code>--runtime</code>.</p>
+            </div>
+            <div class="command">
+                <span class="badge built">Built</span>
+                <strong><code>singleserver render-deploy</code></strong>
+                <code class="signature">singleserver render-deploy &lt;owner/repo&gt;</code>
+                <p>Prints the generated Kamal <code>deploy.yml</code> for a configured app. Useful for debugging conventions.</p>
+            </div>
+            <div class="command">
+                <span class="badge planned">Planned</span>
+                <strong><code>singleserver remove</code></strong>
+                <code class="signature">singleserver remove &lt;app&gt;</code>
+                <p>Removes an app from config, stops containers, removes routing, and asks before deleting persistent storage.</p>
+            </div>
+        </div>
+
+        <h3><a href="#add-options">Add Options</a></h3>
+        <table id="add-options">
+            <thead>
+                <tr>
+                    <th>Option</th>
+                    <th>Status</th>
+                    <th>What it does</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>&lt;github-url&gt;</code></td>
+                    <td>Built</td>
+                    <td>Accepts a URL like <code>https://github.com/owner/repo</code> and normalizes it to <code>owner/repo</code> in config.</td>
+                </tr>
+                <tr>
+                    <td><code>--branch &lt;name&gt;</code></td>
+                    <td>Built</td>
+                    <td>Deploys only this branch. Defaults to the repository default branch.</td>
+                </tr>
+                <tr>
+                    <td><code>--app-port &lt;port&gt;</code></td>
+                    <td>Built</td>
+                    <td>Container port used by the generated Kamal proxy. Defaults to <code>80</code>.</td>
+                </tr>
+                <tr>
+                    <td><code>--healthcheck-path &lt;path&gt;</code></td>
+                    <td>Built</td>
+                    <td>Path Kamal uses for container healthchecks. Defaults to <code>/up</code>.</td>
+                </tr>
+                <tr>
+                    <td><code>--healthcheck &lt;url&gt;</code></td>
+                    <td>Built</td>
+                    <td>External URL Single Server checks after deploys and in <code>status</code>/<code>doctor</code>.</td>
+                </tr>
+                <tr>
+                    <td><code>--name &lt;app&gt;</code></td>
+                    <td>Built</td>
+                    <td>Overrides the app name. Defaults to the repository name lowercased.</td>
+                </tr>
+                <tr>
+                    <td><code>--host &lt;domain&gt;</code></td>
+                    <td>Built, advanced</td>
+                    <td>Current explicit host override for generated Kamal proxy config. Can be repeated. Target UX should prefer <code>domains add</code> or domain inference.</td>
+                </tr>
+                <tr>
+                    <td><code>--path &lt;dir&gt;</code></td>
+                    <td>Built, advanced</td>
+                    <td>Overrides the checkout path. Defaults to <code>/srv/repos/&lt;app&gt;</code>.</td>
+                </tr>
+                <tr>
+                    <td><code>--deploy</code></td>
+                    <td>Built, temporary</td>
+                    <td>Current implementation deploys immediately only when this flag is passed.</td>
+                </tr>
+                <tr>
+                    <td><code>--no-deploy</code></td>
+                    <td>Planned</td>
+                    <td>Target escape hatch once <code>add</code> deploys by default.</td>
+                </tr>
+                <tr>
+                    <td><code>--dry-run</code></td>
+                    <td>Built</td>
+                    <td>Validates without writing <code>apps.yml</code>.</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3><a href="#management-commands">Management</a></h3>
+        <div class="command-grid" id="management-commands">
+            <div class="command">
+                <span class="badge planned">Planned</span>
+                <strong><code>singleserver domains</code></strong>
+                <code class="signature">singleserver domains add &lt;app&gt; &lt;domain&gt;</code>
+                <p>Adds, removes, and lists app domains. Should update central config, Cloudflare DNS, and tunnel routing.</p>
+            </div>
+            <div class="command">
+                <span class="badge planned">Planned</span>
+                <strong><code>singleserver env</code></strong>
+                <code class="signature">singleserver env set &lt;app&gt; KEY=value</code>
+                <p>Manages app environment variables and secrets on the server.</p>
+            </div>
+            <div class="command">
+                <span class="badge planned">Planned</span>
+                <strong><code>singleserver storage</code></strong>
+                <code class="signature">singleserver storage enable &lt;app&gt; --mount /storage</code>
+                <p>Enables persistent storage for SQLite databases, uploads, and other app-owned files.</p>
+            </div>
+            <div class="command">
+                <span class="badge planned">Planned</span>
+                <strong><code>singleserver backup</code></strong>
+                <code class="signature">singleserver backup &lt;app&gt;</code>
+                <p>Creates an app backup. SQLite apps should have a first-class, low-drama backup path.</p>
+            </div>
+            <div class="command">
+                <span class="badge planned">Planned</span>
+                <strong><code>singleserver restore</code></strong>
+                <code class="signature">singleserver restore &lt;app&gt; &lt;backup-id&gt;</code>
+                <p>Restores an app backup after confirmation.</p>
+            </div>
+            <div class="command">
+                <span class="badge planned">Planned</span>
+                <strong><code>singleserver upgrade</code></strong>
+                <code class="signature">singleserver upgrade</code>
+                <p>Downloads the latest release, restarts the service, and runs <code>singleserver doctor</code>.</p>
+            </div>
+        </div>
+    </section>
+
+    <section id="config">
+        <h2><a href="#config">Configuration</a></h2>
+        <p>The main config file is <code>/etc/singleserver/apps.yml</code>. The shortest app entry is just a repository name.</p>
+        <div class="code-wrapper">
+            <pre class="code-block">apps:
+  - dvassallo/sillyface-games
+  - dvassallo/fullsend</pre>
+            <button class="copy-btn" aria-label="Copy to clipboard">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+            </button>
+        </div>
+        <p>Use an object only when an app needs overrides.</p>
+        <div class="code-wrapper">
+            <pre class="code-block">apps:
+  - repo: smallbets/userbase-homepage
+    branch: master
+    hosts:
+      - userbase.com
+      - www.userbase.com
+    app_port: 80
+    healthcheck_path: /up
+    healthcheck: https://userbase.com/up</pre>
+            <button class="copy-btn" aria-label="Copy to clipboard">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2zm0 16H8V7h11v14z"/></svg>
+            </button>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Field</th>
+                    <th>Default</th>
+                    <th>Meaning</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>repo</code></td>
+                    <td>required</td>
+                    <td>GitHub repository as <code>owner/repo</code>.</td>
+                </tr>
+                <tr>
+                    <td><code>name</code></td>
+                    <td>repository name</td>
+                    <td>Lowercase app name used for checkout, service, image, and logs.</td>
+                </tr>
+                <tr>
+                    <td><code>branch</code></td>
+                    <td>repo default branch</td>
+                    <td>Only pushes to this branch deploy.</td>
+                </tr>
+                <tr>
+                    <td><code>path</code></td>
+                    <td><code>/srv/repos/&lt;app&gt;</code></td>
+                    <td>Checkout directory on the server.</td>
+                </tr>
+                <tr>
+                    <td><code>hosts</code></td>
+                    <td>empty</td>
+                    <td>Public hostnames for generated Kamal proxy config.</td>
+                </tr>
+                <tr>
+                    <td><code>app_port</code></td>
+                    <td><code>80</code></td>
+                    <td>Port your container listens on.</td>
+                </tr>
+                <tr>
+                    <td><code>healthcheck_path</code></td>
+                    <td><code>/up</code></td>
+                    <td>Container healthcheck path used by generated Kamal config.</td>
+                </tr>
+                <tr>
+                    <td><code>healthcheck</code></td>
+                    <td>empty</td>
+                    <td>External healthcheck URL used by Single Server after deploys and in status checks.</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3><a href="#server-environment">Server Environment</a></h3>
+        <table id="server-environment">
+            <thead>
+                <tr>
+                    <th>Variable</th>
+                    <th>Default</th>
+                    <th>Purpose</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>SINGLESERVER_CONFIG</code></td>
+                    <td><code>/etc/singleserver/apps.yml</code></td>
+                    <td>Main app config path.</td>
+                </tr>
+                <tr>
+                    <td><code>SINGLESERVER_STATE_DIR</code></td>
+                    <td><code>/etc/singleserver</code></td>
+                    <td>Directory for GitHub App credentials and Single Server state.</td>
+                </tr>
+                <tr>
+                    <td><code>SINGLESERVER_PORT</code></td>
+                    <td><code>8787</code></td>
+                    <td>Local daemon port. The daemon listens on <code>127.0.0.1</code>.</td>
+                </tr>
+                <tr>
+                    <td><code>SINGLESERVER_PUBLIC_URL</code></td>
+                    <td>init-managed</td>
+                    <td>Public webhook/setup URL. The target UX should hide this behind <code>singleserver init</code>.</td>
+                </tr>
+                <tr>
+                    <td><code>SINGLESERVER_SETUP_TOKEN</code></td>
+                    <td>init-managed</td>
+                    <td>One-time setup token for provider connection pages.</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3><a href="#kamal-defaults">Generated Kamal Defaults</a></h3>
+        <table id="kamal-defaults">
+            <thead>
+                <tr>
+                    <th>Setting</th>
+                    <th>Default</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>service and image</td>
+                    <td>app name</td>
+                </tr>
+                <tr>
+                    <td>server host</td>
+                    <td><code>127.0.0.1</code></td>
+                </tr>
+                <tr>
+                    <td>ssh user and key</td>
+                    <td><code>deploy</code>, <code>~/.ssh/id_ed25519</code></td>
+                </tr>
+                <tr>
+                    <td>registry</td>
+                    <td><code>127.0.0.1:5555</code></td>
+                </tr>
+                <tr>
+                    <td>builder</td>
+                    <td>local amd64 Docker builder</td>
+                </tr>
+                <tr>
+                    <td>proxy</td>
+                    <td><code>ssl: false</code>, forwarded headers on, app port <code>80</code></td>
+                </tr>
+                <tr>
+                    <td>healthcheck</td>
+                    <td><code>/up</code>, interval <code>1</code>, timeout <code>1</code></td>
+                </tr>
+                <tr>
+                    <td>timeouts</td>
+                    <td>deploy <code>10s</code>, drain <code>1s</code></td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section id="contract">
+        <h2><a href="#contract">App Contract</a></h2>
+        <p>Your apps need a Dockerfile, one web port, and a health endpoint. They do not need GitHub Actions workflows, deploy keys, repo-level deploy secrets, repo-level webhooks, or a Kamal config.</p>
+        <div class="flow-box">
+            <div class="flow-row">
+                <span class="pill">Dockerfile</span>
+                <span class="connector">&rarr;</span>
+                <span class="result">Your repo defines how it builds</span>
+            </div>
+            <div class="flow-row">
+                <span class="pill">port 80</span>
+                <span class="connector">&rarr;</span>
+                <span class="result">Default app port, override with <code>--app-port</code></span>
+            </div>
+            <div class="flow-row">
+                <span class="pill">/up</span>
+                <span class="connector">&rarr;</span>
+                <span class="result">Default healthcheck path, override with <code>--healthcheck-path</code></span>
+            </div>
+        </div>
+
+        <h3 id="dockerfile-examples"><a href="#dockerfile-examples">Dockerfile Examples</a></h3>
+        <p>Static site:</p>
+        <div class="code-wrapper">
+            <pre class="code-block">FROM nginx:alpine
+COPY dist /usr/share/nginx/html</pre>
+            <button class="copy-btn" aria-label="Copy to clipboard">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+            </button>
+        </div>
+        <p>Node or Bun app:</p>
+        <div class="code-wrapper">
+            <pre class="code-block">FROM oven/bun:1
+WORKDIR /app
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
+COPY . .
+ENV PORT=3000
+EXPOSE 3000
+CMD ["bun", "start"]</pre>
+            <button class="copy-btn" aria-label="Copy to clipboard">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+            </button>
+        </div>
+        <div class="code-wrapper">
+            <pre class="code-block">singleserver add https://github.com/you/my-node-app --app-port 3000</pre>
+            <button class="copy-btn" aria-label="Copy to clipboard">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+            </button>
+        </div>
+    </section>
+
+    <section id="deploys">
+        <h2><a href="#deploys">Deploys</a></h2>
+        <p>Whenever you push to GitHub, your server fetches the commit, builds it locally, and uses Kamal to roll it out with zero downtime.</p>
+        <div class="flow-box">
+            <div class="flow-row">
+                <span class="pill">git push</span>
+                <span class="connector">&rarr;</span>
+                <span class="result">GitHub sends a webhook to your server</span>
+            </div>
+            <div class="flow-row">
+                <span class="pill">allowlist</span>
+                <span class="connector">&rarr;</span>
+                <span class="result"><code>apps.yml</code> decides whether this repo can deploy</span>
+            </div>
+            <div class="flow-row">
+                <span class="pill">checkout</span>
+                <span class="connector">&rarr;</span>
+                <span class="result">Your server fetches the exact pushed SHA</span>
+            </div>
+            <div class="flow-row">
+                <span class="pill">build</span>
+                <span class="connector">&rarr;</span>
+                <span class="result">Kamal builds locally with generated or repo-provided deploy config</span>
+            </div>
+            <div class="flow-row">
+                <span class="pill">live</span>
+                <span class="connector">&rarr;</span>
+                <span class="result">Kamal rolls it out and Single Server checks health</span>
+            </div>
+            <div class="flow-row">
+                <span class="pill">status</span>
+                <span class="connector">&rarr;</span>
+                <span class="result">GitHub gets pending, success, or failure commit status</span>
+            </div>
+        </div>
+    </section>
+
+    <section id="files">
+        <h2><a href="#files">Files On Your Server</a></h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Path</th>
+                    <th>Purpose</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>/etc/singleserver/apps.yml</code></td>
+                    <td>App allowlist and config.</td>
+                </tr>
+                <tr>
+                    <td><code>/etc/singleserver/singleserver.env</code></td>
+                    <td>Daemon environment.</td>
+                </tr>
+                <tr>
+                    <td><code>/etc/singleserver/github-app.json</code></td>
+                    <td>GitHub App metadata.</td>
+                </tr>
+                <tr>
+                    <td><code>/etc/singleserver/github-app.private-key.pem</code></td>
+                    <td>GitHub App private key.</td>
+                </tr>
+                <tr>
+                    <td><code>/srv/repos/&lt;app&gt;</code></td>
+                    <td>Git checkout for each app.</td>
+                </tr>
+                <tr>
+                    <td><code>/srv/storage/&lt;app&gt;</code></td>
+                    <td>Planned persistent storage for app data.</td>
+                </tr>
+                <tr>
+                    <td><code>journalctl -u singleserver.service</code></td>
+                    <td>Daemon and deploy logs.</td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section id="roadmap">
+        <h2><a href="#roadmap">Roadmap Status</a></h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Experience</th>
+                    <th>Status</th>
+                    <th>Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Central <code>apps.yml</code> allowlist</td>
+                    <td>Built</td>
+                    <td>Pushes for unlisted repos are ignored.</td>
+                </tr>
+                <tr>
+                    <td>GitHub App push deploys</td>
+                    <td>Built</td>
+                    <td>Webhooks and installation tokens drive deploys.</td>
+                </tr>
+                <tr>
+                    <td>Generated Kamal config</td>
+                    <td>Built</td>
+                    <td>Repos do not need <code>config/deploy.yml</code> unless they want custom behavior.</td>
+                </tr>
+                <tr>
+                    <td><code>singleserver add</code></td>
+                    <td>Partial</td>
+                    <td>Current command supports URL input, validation, hosts, dry run, and optional deploy. Target is deploy-by-default plus domain inference.</td>
+                </tr>
+                <tr>
+                    <td><code>singleserver doctor</code></td>
+                    <td>Partial</td>
+                    <td>Needs broader disk, Docker, proxy, DNS, and runtime checks.</td>
+                </tr>
+                <tr>
+                    <td>Installer and <code>init</code></td>
+                    <td>Planned</td>
+                    <td>Should make a blank server ready in one guided flow.</td>
+                </tr>
+                <tr>
+                    <td>Cloudflare DNS and tunnel management</td>
+                    <td>Planned</td>
+                    <td>Cloudflare Tunnel is the assumed ingress path.</td>
+                </tr>
+                <tr>
+                    <td>Domains, env, storage, backups, removal, upgrade</td>
+                    <td>Planned</td>
+                    <td>These should become first-class server-side commands.</td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <footer>
+        <p>MIT License - <a href="/">Home</a> - <a href="https://github.com/dvassallo/singleserver">GitHub</a></p>
+    </footer>
+</main>
+
+<script>
+    document.querySelectorAll('.copy-btn').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+            const codeBlock = btn.previousElementSibling;
+            const text = codeBlock.innerText.trim();
+            const originalIcon = btn.innerHTML;
+
+            try {
+                await navigator.clipboard.writeText(text);
+                btn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor" style="color: #00ff88;"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>';
+                setTimeout(() => {
+                    btn.innerHTML = originalIcon;
+                }, 1600);
+            } catch (err) {
+                console.error('Failed to copy:', err);
+            }
+        });
+    });
+</script>
+
+</body>
+</html>
