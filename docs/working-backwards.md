@@ -347,10 +347,12 @@ SQLite apps should have a first-class backup path.
 
 ```sh
 singleserver remove my-app
+singleserver remove my-app --delete-storage --yes
 ```
 
 This should stop the container, remove proxy routes, optionally remove DNS, and
-remove the app from `apps.yml`. It should ask before deleting persistent storage.
+remove the app from `apps.yml`. Persistent storage should be kept by default and
+deleted only with explicit confirmation.
 
 ### Upgrade Single Server
 

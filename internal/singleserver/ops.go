@@ -169,11 +169,15 @@ func cliRemove(args []string, w io.Writer) error {
 	fs := flag.NewFlagSet("remove", flag.ContinueOnError)
 	fs.SetOutput(w)
 	deleteStorage := fs.Bool("delete-storage", false, "delete persistent storage")
+	yes := fs.Bool("yes", false, "confirm persistent storage deletion")
 	if err := fs.Parse(normalizeFlagArgs(args, noFlagValues)); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: singleserver remove <app> [--delete-storage]")
+		return errors.New("usage: singleserver remove <app> [--delete-storage --yes]")
+	}
+	if *deleteStorage && !*yes {
+		return errors.New("remove --delete-storage deletes app storage; rerun with --delete-storage --yes to confirm")
 	}
 	appName := fs.Arg(0)
 	configPath := envDefault("SINGLESERVER_CONFIG", "/etc/singleserver/apps.yml")

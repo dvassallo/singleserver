@@ -658,12 +658,12 @@
                 <div class="command-heading">
                     <span class="command-name">Remove an app</span>
                     <code class="command-usage">singleserver remove &lt;app&gt; [options]</code>
-                    <p class="command-description">Removes an app from config, stops containers, removes routes, optionally removes DNS records, and asks before deleting persistent storage.</p>
+                    <p class="command-description">Removes an app from config, stops containers, removes routes, and removes matching DNS records. Persistent storage is kept by default and deleted only with explicit confirmation.</p>
                 </div>
                 <div class="command-details">
                     <p class="option-heading">Options for <code>singleserver remove</code></p>
                     <ul class="option-list">
-                        <li><code>--delete-storage</code><span>Delete the app's persistent storage directory after removing config and stopping containers.</span></li>
+                        <li><code>--delete-storage --yes</code><span>Delete the app's persistent storage directory after removing config and stopping containers.</span></li>
                     </ul>
                 </div>
             </div>

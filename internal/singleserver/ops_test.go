@@ -181,3 +181,75 @@ func TestRestoreRequiresConfirmation(t *testing.T) {
 		t.Fatalf("expected --yes confirmation error, got %v", err)
 	}
 }
+
+func TestRemoveDeleteStorageRequiresConfirmation(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "apps.yml")
+	storagePath := filepath.Join(dir, "storage")
+	t.Setenv("SINGLESERVER_CONFIG", configPath)
+	t.Setenv("SINGLESERVER_STATE_DIR", dir)
+	if err := os.MkdirAll(storagePath, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, []byte(`apps:
+  - repo: dvassallo/fullsend
+    storage:
+      path: `+storagePath+`
+      mount: /storage
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	err := cliRemove([]string{"fullsend", "--delete-storage"}, &out)
+	if err == nil || !strings.Contains(err.Error(), "--yes") {
+		t.Fatalf("expected --yes confirmation error, got %v", err)
+	}
+	if _, err := os.Stat(storagePath); err != nil {
+		t.Fatalf("expected storage kept: %v", err)
+	}
+	config, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(config.Apps) != 1 {
+		t.Fatalf("expected app config kept, got %#v", config.Apps)
+	}
+}
+
+func TestRemoveDeleteStorageWithConfirmation(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "apps.yml")
+	storagePath := filepath.Join(dir, "storage")
+	t.Setenv("SINGLESERVER_CONFIG", configPath)
+	t.Setenv("SINGLESERVER_STATE_DIR", dir)
+	if err := os.MkdirAll(storagePath, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(storagePath, "data.txt"), []byte("old"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, []byte(`apps:
+  - repo: dvassallo/fullsend
+    storage:
+      path: `+storagePath+`
+      mount: /storage
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := cliRemove([]string{"fullsend", "--delete-storage", "--yes"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(storagePath); !os.IsNotExist(err) {
+		t.Fatalf("expected storage deleted, stat err=%v", err)
+	}
+	config, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(config.Apps) != 0 {
+		t.Fatalf("expected app config removed, got %#v", config.Apps)
+	}
+}
