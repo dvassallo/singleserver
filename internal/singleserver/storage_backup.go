@@ -24,7 +24,7 @@ func backupRoot() string {
 
 func resolveBackupPath(appName string, value string) string {
 	value = strings.TrimSpace(value)
-	if strings.Contains(value, "/") {
+	if strings.Contains(value, "/") || strings.HasSuffix(value, ".tar.gz") {
 		return value
 	}
 	return filepath.Join(backupRoot(), appName, value+".tar.gz")

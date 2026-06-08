@@ -40,3 +40,18 @@ func TestNextBackupPathAvoidsExistingTimestamp(t *testing.T) {
 		t.Fatalf("got %s, want %s", path, want)
 	}
 }
+
+func TestResolveBackupPathAcceptsIDOrPath(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("SINGLESERVER_BACKUP_DIR", dir)
+
+	if got := resolveBackupPath("fullsend", "20260608T203000Z"); got != filepath.Join(dir, "fullsend", "20260608T203000Z.tar.gz") {
+		t.Fatalf("unexpected backup id path: %s", got)
+	}
+	if got := resolveBackupPath("fullsend", "backup.tar.gz"); got != "backup.tar.gz" {
+		t.Fatalf("expected explicit archive path, got %s", got)
+	}
+	if got := resolveBackupPath("fullsend", "./backup.tar.gz"); got != "./backup.tar.gz" {
+		t.Fatalf("expected relative archive path, got %s", got)
+	}
+}
