@@ -90,6 +90,7 @@ func cliDoctor(args []string, w io.Writer) error {
 }
 
 func doctorDocker(w io.Writer) bool {
+	failed := false
 	version, err := commandOutputFunc(5*time.Second, "docker", "info", "--format", "{{.ServerVersion}}")
 	if err != nil {
 		fmt.Fprintf(w, "docker\tfailed\t%s\n", err)
@@ -100,7 +101,14 @@ func doctorDocker(w io.Writer) bool {
 		return false
 	}
 	fmt.Fprintf(w, "docker\tok\tserver=%s\n", version)
-	return true
+	buildxVersion, err := commandOutputFunc(5*time.Second, "docker", "buildx", "version")
+	if err != nil {
+		fmt.Fprintf(w, "docker\tbuildx\tfailed\tinstall docker-buildx\n")
+		failed = true
+	} else {
+		fmt.Fprintf(w, "docker\tbuildx\tok\t%s\n", compactWhitespace(buildxVersion))
+	}
+	return !failed
 }
 
 func doctorDeployInfrastructure(w io.Writer) bool {

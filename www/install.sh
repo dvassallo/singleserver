@@ -11,7 +11,7 @@ binary_base_url="${SINGLESERVER_BINARY_BASE_URL:-https://singleserver.com/bin}"
 export DEBIAN_FRONTEND=noninteractive
 
 apt-get update
-apt-get install -y ca-certificates curl git ruby-full docker.io openssh-server sqlite3
+apt-get install -y ca-certificates curl git ruby-full docker.io docker-buildx openssh-server sqlite3
 
 if ! command -v kamal >/dev/null 2>&1; then
   gem install kamal --no-document

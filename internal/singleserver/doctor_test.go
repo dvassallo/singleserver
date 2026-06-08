@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestDoctorAppsReturnsAllWhenNoFilter(t *testing.T) {
@@ -110,6 +111,66 @@ func TestDoctorGitHubSetupOK(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "github\tsetup\tok\tapp_id=123\tslug=single-server-test") {
 		t.Fatalf("expected ok setup output, got %q", out.String())
+	}
+}
+
+func TestDoctorDockerChecksBuildx(t *testing.T) {
+	original := commandOutputFunc
+	t.Cleanup(func() { commandOutputFunc = original })
+	commandOutputFunc = func(timeout time.Duration, name string, args ...string) (string, error) {
+		if name != "docker" {
+			t.Fatalf("unexpected command: %s", name)
+		}
+		joined := strings.Join(args, " ")
+		switch joined {
+		case "info --format {{.ServerVersion}}":
+			return "29.1.3", nil
+		case "ps --format {{.Names}}":
+			return "", nil
+		case "buildx version":
+			return "github.com/docker/buildx 0.30.1", nil
+		default:
+			t.Fatalf("unexpected docker args: %s", joined)
+		}
+		return "", nil
+	}
+
+	var out bytes.Buffer
+	if !doctorDocker(&out) {
+		t.Fatalf("expected Docker doctor to pass, got:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "docker\tbuildx\tok\tgithub.com/docker/buildx 0.30.1") {
+		t.Fatalf("expected buildx ok output, got:\n%s", out.String())
+	}
+}
+
+func TestDoctorDockerFailsWithoutBuildx(t *testing.T) {
+	original := commandOutputFunc
+	t.Cleanup(func() { commandOutputFunc = original })
+	commandOutputFunc = func(timeout time.Duration, name string, args ...string) (string, error) {
+		if name != "docker" {
+			t.Fatalf("unexpected command: %s", name)
+		}
+		joined := strings.Join(args, " ")
+		switch joined {
+		case "info --format {{.ServerVersion}}":
+			return "29.1.3", nil
+		case "ps --format {{.Names}}":
+			return "", nil
+		case "buildx version":
+			return "", fmt.Errorf("unknown command: docker buildx")
+		default:
+			t.Fatalf("unexpected docker args: %s", joined)
+		}
+		return "", nil
+	}
+
+	var out bytes.Buffer
+	if doctorDocker(&out) {
+		t.Fatalf("expected Docker doctor to fail without buildx, got:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "docker\tbuildx\tfailed\tinstall docker-buildx") {
+		t.Fatalf("expected buildx failed output, got:\n%s", out.String())
 	}
 }
 
