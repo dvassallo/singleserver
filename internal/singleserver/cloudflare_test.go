@@ -31,3 +31,15 @@ func TestWriteCloudflaredCredentialsWritesFile(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestDNSRecordContentMatchesTunnelTarget(t *testing.T) {
+	if !dnsRecordContentMatches("ABC.cfargotunnel.com.", "abc.cfargotunnel.com") {
+		t.Fatal("expected case-insensitive trailing-dot match")
+	}
+	if dnsRecordContentMatches("other.cfargotunnel.com", "abc.cfargotunnel.com") {
+		t.Fatal("did not expect different tunnel target to match")
+	}
+	if dnsRecordContentMatches("", "abc.cfargotunnel.com") {
+		t.Fatal("did not expect empty content to match")
+	}
+}

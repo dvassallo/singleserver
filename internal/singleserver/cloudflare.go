@@ -191,17 +191,26 @@ func (c *CloudflareClient) upsertCNAME(zoneID string, hostname string, target st
 	return c.request("PUT", "/zones/"+zoneID+"/dns_records/"+records[0].ID, body, nil)
 }
 
-func (c *CloudflareClient) deleteDNSRecord(zoneID string, hostname string, recordType string) error {
-	records, err := c.dnsRecords(zoneID, hostname, recordType)
+func (c *CloudflareClient) deleteCNAMEToTarget(zoneID string, hostname string, target string) error {
+	records, err := c.dnsRecords(zoneID, hostname, "CNAME")
 	if err != nil {
 		return err
 	}
 	for _, record := range records {
+		if !dnsRecordContentMatches(record.Content, target) {
+			continue
+		}
 		if err := c.request("DELETE", "/zones/"+zoneID+"/dns_records/"+record.ID, nil, nil); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func dnsRecordContentMatches(content string, target string) bool {
+	content = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(content)), ".")
+	target = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(target)), ".")
+	return content != "" && content == target
 }
 
 func (c *CloudflareClient) dnsRecords(zoneID string, hostname string, recordType string) ([]cloudflareDNSRecord, error) {
@@ -392,7 +401,7 @@ func pruneStaleCloudflareRoutes(client *CloudflareClient, state *CloudflareState
 	routes := cloudflaredRoutes(cloudflaredConfig)
 	for _, host := range staleCloudflaredHosts(routes, expected) {
 		if state.ZoneID != "" && client != nil {
-			if err := client.deleteDNSRecord(state.ZoneID, host, "CNAME"); err != nil {
+			if err := client.deleteCNAMEToTarget(state.ZoneID, host, state.TunnelID+".cfargotunnel.com"); err != nil {
 				return err
 			}
 		}
@@ -467,7 +476,7 @@ func syncCloudflareAppDomain(hostname string, add bool, w io.Writer) error {
 		}
 		fmt.Fprintf(w, "cloudflare\tdomain\tok\t%s -> %s.cfargotunnel.com\n", hostname, state.TunnelID)
 	} else {
-		if err := client.deleteDNSRecord(state.ZoneID, hostname, "CNAME"); err != nil {
+		if err := client.deleteCNAMEToTarget(state.ZoneID, hostname, state.TunnelID+".cfargotunnel.com"); err != nil {
 			return err
 		}
 		if err := removeCloudflaredRoute(state.ConfigFile, hostname); err != nil {
