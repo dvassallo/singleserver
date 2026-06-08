@@ -244,6 +244,88 @@ func TestDomainsVerifyChecksTunnelRoute(t *testing.T) {
 	}
 }
 
+func TestDomainsVerifyChecksCloudflareDNSRecord(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "apps.yml")
+	tunnelConfigPath := filepath.Join(dir, "cloudflared.yml")
+	t.Setenv("SINGLESERVER_CONFIG", configPath)
+	t.Setenv("SINGLESERVER_STATE_DIR", dir)
+	if err := os.WriteFile(configPath, []byte(`apps:
+  - repo: dvassallo/fullsend
+    hosts:
+      - localhost
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "cloudflare.json"), []byte(`{"api_token":"token","zone_id":"zone","tunnel_id":"tunnel","config_file":"`+tunnelConfigPath+`"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(tunnelConfigPath, []byte(`ingress:
+  - hostname: localhost
+    service: http://127.0.0.1:80
+  - service: http_status:404
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	originalVerify := verifyCloudflareDNSRecordFunc
+	t.Cleanup(func() { verifyCloudflareDNSRecordFunc = originalVerify })
+	verifyCloudflareDNSRecordFunc = func(host string, state *CloudflareState, client *CloudflareClient) (string, error) {
+		if host != "localhost" {
+			t.Fatalf("unexpected host: %s", host)
+		}
+		return state.TunnelID + ".cfargotunnel.com", nil
+	}
+
+	var out bytes.Buffer
+	if err := cliDomains([]string{"verify", "fullsend"}, &out, log.New(io.Discard, "", 0)); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "fullsend\tcloudflare_dns\tok\tlocalhost -> tunnel.cfargotunnel.com") {
+		t.Fatalf("expected Cloudflare DNS ok output, got:\n%s", out.String())
+	}
+}
+
+func TestDomainsVerifyFailsWhenCloudflareDNSRecordDoesNotMatch(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "apps.yml")
+	tunnelConfigPath := filepath.Join(dir, "cloudflared.yml")
+	t.Setenv("SINGLESERVER_CONFIG", configPath)
+	t.Setenv("SINGLESERVER_STATE_DIR", dir)
+	if err := os.WriteFile(configPath, []byte(`apps:
+  - repo: dvassallo/fullsend
+    hosts:
+      - localhost
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "cloudflare.json"), []byte(`{"api_token":"token","zone_id":"zone","tunnel_id":"tunnel","config_file":"`+tunnelConfigPath+`"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(tunnelConfigPath, []byte(`ingress:
+  - hostname: localhost
+    service: http://127.0.0.1:80
+  - service: http_status:404
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	originalVerify := verifyCloudflareDNSRecordFunc
+	t.Cleanup(func() { verifyCloudflareDNSRecordFunc = originalVerify })
+	verifyCloudflareDNSRecordFunc = func(host string, state *CloudflareState, client *CloudflareClient) (string, error) {
+		return state.TunnelID + ".cfargotunnel.com", errors.New("missing CNAME")
+	}
+
+	var out bytes.Buffer
+	err := cliDomains([]string{"verify", "fullsend"}, &out, log.New(io.Discard, "", 0))
+	if err == nil {
+		t.Fatal("expected Cloudflare DNS verification error")
+	}
+	if !strings.Contains(out.String(), "fullsend\tcloudflare_dns\tfailed\tlocalhost\tmissing CNAME") {
+		t.Fatalf("expected Cloudflare DNS failed output, got:\n%s", out.String())
+	}
+}
+
 func TestDomainsVerifyFailsWhenTunnelRouteMissing(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "apps.yml")

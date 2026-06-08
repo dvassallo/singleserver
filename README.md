@@ -190,6 +190,8 @@ for a configured app. It does not inspect or modify the app repository.
 <domain>` update `apps.yml`, Cloudflare DNS, Cloudflare Tunnel routing, and then
 deploy the app so Kamal picks up the changed proxy hosts. Pass `--no-deploy` to
 stage the domain change without applying it to the running app immediately.
+`singleserver domains verify [app]` checks resolver DNS, Cloudflare CNAME targets
+when credentials are available, and Cloudflare Tunnel routes.
 
 `singleserver env set <app> KEY=value` and `singleserver env unset <app> KEY`
 update server-side app secrets. Env changes are injected by Kamal on the next

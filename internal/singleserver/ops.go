@@ -453,6 +453,7 @@ func verifyDomains(args []string, w io.Writer) error {
 		return err
 	}
 	routes := map[string]string{}
+	var cloudflareClient *CloudflareClient
 	failed := false
 	if state.TunnelID == "" {
 		if appsHaveHosts(apps) {
@@ -471,6 +472,17 @@ func verifyDomains(args []string, w io.Writer) error {
 			routes = cloudflaredRoutes(cloudflaredConfig)
 		}
 	}
+	if state.ZoneID != "" && state.TunnelID != "" {
+		if token := cloudflareTokenFromEnvOrState(state); token != "" {
+			client, err := newCloudflareClient(token)
+			if err != nil {
+				fmt.Fprintf(w, "cloudflare\tdns_api\tfailed\t%s\n", err)
+				failed = true
+			} else {
+				cloudflareClient = client
+			}
+		}
+	}
 
 	for _, app := range apps {
 		for _, host := range app.Hosts {
@@ -479,6 +491,15 @@ func verifyDomains(args []string, w io.Writer) error {
 				failed = true
 			} else {
 				fmt.Fprintf(w, "%s\tdns\tok\t%s\n", app.Name, host)
+			}
+			if cloudflareClient != nil {
+				target, err := verifyCloudflareDNSRecordFunc(host, state, cloudflareClient)
+				if err != nil {
+					fmt.Fprintf(w, "%s\tcloudflare_dns\tfailed\t%s\t%s\n", app.Name, host, err)
+					failed = true
+				} else {
+					fmt.Fprintf(w, "%s\tcloudflare_dns\tok\t%s -> %s\n", app.Name, host, target)
+				}
 			}
 			if state.TunnelID == "" || state.ConfigFile == "" {
 				continue
@@ -495,6 +516,29 @@ func verifyDomains(args []string, w io.Writer) error {
 		return errors.New("domain verification failed")
 	}
 	return nil
+}
+
+var verifyCloudflareDNSRecordFunc = verifyCloudflareDNSRecord
+
+func verifyCloudflareDNSRecord(host string, state *CloudflareState, client *CloudflareClient) (string, error) {
+	target := state.TunnelID + ".cfargotunnel.com"
+	records, err := client.dnsRecords(state.ZoneID, host, "CNAME")
+	if err != nil {
+		return target, err
+	}
+	for _, record := range records {
+		if dnsRecordContentMatches(record.Content, target) {
+			return target, nil
+		}
+	}
+	if len(records) == 0 {
+		return target, fmt.Errorf("missing CNAME to %s", target)
+	}
+	contents := make([]string, 0, len(records))
+	for _, record := range records {
+		contents = append(contents, record.Content)
+	}
+	return target, fmt.Errorf("CNAME points to %s, expected %s", strings.Join(contents, ","), target)
 }
 
 func cliUpgrade(w io.Writer) error {
