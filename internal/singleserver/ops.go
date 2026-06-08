@@ -138,7 +138,12 @@ func cliStorageEnable(args []string, w io.Writer, logger *log.Logger) error {
 	if err := os.MkdirAll(storagePath, 0700); err != nil {
 		return err
 	}
-	_ = commandRun(3*time.Second, "chown", "-R", "deploy:docker", storagePath)
+	if err := chownStorage(storagePath); err != nil {
+		if createdStorage {
+			_ = os.Remove(storagePath)
+		}
+		return err
+	}
 	if err := writeConfigFunc(configPath, config); err != nil {
 		if createdStorage {
 			_ = os.Remove(storagePath)
@@ -599,6 +604,13 @@ func requireStorage(app *AppConfig) (*StorageConfig, error) {
 		return nil, err
 	}
 	return app.Storage, nil
+}
+
+func chownStorage(storagePath string) error {
+	if err := commandRunFunc(3*time.Second, "chown", "-R", "deploy:docker", storagePath); err != nil {
+		return fmt.Errorf("chown %s to deploy:docker: %w", storagePath, err)
+	}
+	return nil
 }
 
 var stopAppContainersFunc = stopAppContainers

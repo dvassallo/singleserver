@@ -261,6 +261,9 @@ func restoreStorageBackup(appName string, storagePath string, backupPath string,
 	if err := extractTarGz(backupPath, restoreDir); err != nil {
 		return err
 	}
+	if err := chownStorage(restoreDir); err != nil {
+		return err
+	}
 
 	stopped := []string{}
 	if !noRestart {
@@ -292,7 +295,6 @@ func restoreStorageBackup(appName string, storagePath string, backupPath string,
 		return err
 	}
 	restoreDirMoved = true
-	_ = commandRun(3*time.Second, "chown", "-R", "deploy:docker", storagePath)
 
 	fmt.Fprintf(w, "%s\trestore\tok\t%s\n", appName, backupPath)
 	if previousPath != "" {

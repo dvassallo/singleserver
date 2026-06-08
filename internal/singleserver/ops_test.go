@@ -9,12 +9,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestDomainsAndStorageCommandsUpdateConfig(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "apps.yml")
 	t.Setenv("SINGLESERVER_CONFIG", configPath)
+	stubCommandRun(t)
 	if err := os.WriteFile(configPath, []byte("apps:\n  - dvassallo/fullsend\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -48,11 +50,54 @@ func TestDomainsAndStorageCommandsUpdateConfig(t *testing.T) {
 	}
 }
 
+func TestStorageEnableFailsBeforeConfigWriteWhenOwnershipFixFails(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "apps.yml")
+	storagePath := filepath.Join(dir, "storage")
+	t.Setenv("SINGLESERVER_CONFIG", configPath)
+	if err := os.WriteFile(configPath, []byte("apps:\n  - dvassallo/fullsend\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	originalRun := commandRunFunc
+	t.Cleanup(func() { commandRunFunc = originalRun })
+	commandRunFunc = func(timeout time.Duration, name string, args ...string) error {
+		return errors.New("chown failed")
+	}
+	originalWriteConfig := writeConfigFunc
+	t.Cleanup(func() { writeConfigFunc = originalWriteConfig })
+	writeConfigCalled := false
+	writeConfigFunc = func(path string, config *Config) error {
+		writeConfigCalled = true
+		return originalWriteConfig(path, config)
+	}
+
+	var out bytes.Buffer
+	logger := log.New(io.Discard, "", 0)
+	err := cliStorage([]string{"enable", "fullsend", "--path", storagePath, "--no-deploy"}, &out, logger)
+	if err == nil {
+		t.Fatal("expected chown error")
+	}
+	if !strings.Contains(err.Error(), "chown "+storagePath+" to deploy:docker") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if writeConfigCalled {
+		t.Fatal("did not expect config write after chown failure")
+	}
+	if strings.Contains(out.String(), "storage\tok") {
+		t.Fatalf("unexpected success output: %s", out.String())
+	}
+	if _, err := os.Stat(storagePath); !os.IsNotExist(err) {
+		t.Fatalf("expected newly-created storage directory to be removed, stat err=%v", err)
+	}
+}
+
 func TestStorageEnableReportsSuccessOnlyAfterConfigWrite(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "apps.yml")
 	storagePath := filepath.Join(dir, "storage")
 	t.Setenv("SINGLESERVER_CONFIG", configPath)
+	stubCommandRun(t)
 	if err := os.WriteFile(configPath, []byte("apps:\n  - dvassallo/fullsend\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -390,6 +435,7 @@ func TestBackupAndRestoreStorageReplacesDirectory(t *testing.T) {
 	backupRoot := filepath.Join(dir, "backups")
 	t.Setenv("SINGLESERVER_CONFIG", configPath)
 	t.Setenv("SINGLESERVER_BACKUP_DIR", backupRoot)
+	stubCommandRun(t)
 	if err := os.MkdirAll(filepath.Join(storagePath, "nested"), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -441,6 +487,66 @@ func TestBackupAndRestoreStorageReplacesDirectory(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(storagePath, "nested", "keep.txt")); err != nil {
 		t.Fatalf("expected nested file restored: %v", err)
+	}
+}
+
+func TestRestoreFailsBeforeReplacingStorageWhenOwnershipFixFails(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "apps.yml")
+	storagePath := filepath.Join(dir, "storage")
+	backupRoot := filepath.Join(dir, "backups")
+	t.Setenv("SINGLESERVER_CONFIG", configPath)
+	t.Setenv("SINGLESERVER_BACKUP_DIR", backupRoot)
+	if err := os.MkdirAll(storagePath, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(storagePath, "data.txt"), []byte("backup"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, []byte(`apps:
+  - repo: dvassallo/fullsend
+    storage:
+      path: `+storagePath+`
+      mount: /storage
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := cliBackup([]string{"fullsend"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	fields := strings.Fields(out.String())
+	if len(fields) < 4 {
+		t.Fatalf("unexpected backup output: %q", out.String())
+	}
+	backupPath := fields[3]
+	if err := os.WriteFile(filepath.Join(storagePath, "data.txt"), []byte("current"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	originalRun := commandRunFunc
+	t.Cleanup(func() { commandRunFunc = originalRun })
+	commandRunFunc = func(timeout time.Duration, name string, args ...string) error {
+		return errors.New("chown failed")
+	}
+	out.Reset()
+	err := cliRestore([]string{"fullsend", backupPath, "--yes", "--no-restart"}, &out)
+	if err == nil {
+		t.Fatal("expected chown error")
+	}
+	if !strings.Contains(err.Error(), "chown ") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(storagePath, "data.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != "current" {
+		t.Fatalf("expected current storage to remain untouched, got %q", string(body))
+	}
+	if strings.Contains(out.String(), "restore\tok") {
+		t.Fatalf("unexpected restore success output: %s", out.String())
 	}
 }
 
