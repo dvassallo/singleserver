@@ -171,7 +171,8 @@ This should:
 - Detect the default branch
 - Check that the repo contains a `Dockerfile`
 - Add the app to `/etc/singleserver/apps.yml`
-- Ask for or infer the app domain, such as `my-app.example.com`
+- Ask for or infer the app domain, such as `my-app.example.com`. The inferred
+  domain should use a DNS-safe label derived from the app name.
 - Configure Cloudflare DNS and tunnel routing for `my-app.example.com`
 - Render and validate the generated Kamal config
 - Deploy the current branch tip

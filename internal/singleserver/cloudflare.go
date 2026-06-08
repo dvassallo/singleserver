@@ -461,7 +461,35 @@ func defaultAppDomain(appName string) (string, bool, error) {
 	if state.ZoneName == "" || state.ZoneID == "" || state.TunnelID == "" || state.ConfigFile == "" {
 		return "", false, nil
 	}
-	return appName + "." + state.ZoneName, true, nil
+	label := dnsLabelFromAppName(appName)
+	if label == "" {
+		return "", false, fmt.Errorf("could not infer DNS label from app name %q", appName)
+	}
+	return label + "." + state.ZoneName, true, nil
+}
+
+func dnsLabelFromAppName(appName string) string {
+	appName = strings.ToLower(strings.TrimSpace(appName))
+	var builder strings.Builder
+	lastHyphen := false
+	for _, r := range appName {
+		valid := (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
+		if valid {
+			builder.WriteRune(r)
+			lastHyphen = false
+			continue
+		}
+		if builder.Len() == 0 || lastHyphen {
+			continue
+		}
+		builder.WriteByte('-')
+		lastHyphen = true
+	}
+	label := strings.Trim(builder.String(), "-")
+	if len(label) > 63 {
+		label = strings.TrimRight(label[:63], "-")
+	}
+	return label
 }
 
 var syncCloudflareAppDomainFunc = syncCloudflareAppDomain

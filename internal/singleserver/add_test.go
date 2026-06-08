@@ -114,6 +114,32 @@ func TestApplyDefaultAppDomainUsesCloudflareZone(t *testing.T) {
 	}
 }
 
+func TestApplyDefaultAppDomainUsesDNSSafeLabel(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("SINGLESERVER_STATE_DIR", dir)
+	if err := os.WriteFile(filepath.Join(dir, "cloudflare.json"), []byte(`{"zone_name":"nobrainer.host","zone_id":"zone","tunnel_id":"tunnel","config_file":"/etc/cloudflared/singleserver.yml"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	opts := addOptions{repo: "dvassallo/singleserver.com"}
+	app, entry, err := opts.app()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if app.Name != "singleserver.com" {
+		t.Fatalf("unexpected app name: %s", app.Name)
+	}
+	if err := applyDefaultAppDomain(&app, &entry); err != nil {
+		t.Fatal(err)
+	}
+	if len(app.Hosts) != 1 || app.Hosts[0] != "singleserver-com.nobrainer.host" {
+		t.Fatalf("unexpected hosts: %#v", app.Hosts)
+	}
+	if app.Healthcheck != "https://singleserver-com.nobrainer.host/up" {
+		t.Fatalf("unexpected healthcheck: %s", app.Healthcheck)
+	}
+}
+
 func TestAppendAppToConfigYAML(t *testing.T) {
 	body := []byte(`apps:
   - dvassallo/fullsend
