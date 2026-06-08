@@ -13,12 +13,12 @@ there, and run every `singleserver` command from that one machine.
 ## The Ideal Outcome
 
 A user should be able to provision a new server and deploy their first app with
-three commands and one GitHub browser approval:
+one SSH session and one guided init:
 
 ```sh
 ssh root@203.0.113.10
 curl -fsSL https://singleserver.com/install.sh | sh
-singleserver init --domain example.com
+singleserver init
 singleserver add me/my-app --deploy
 ```
 
@@ -35,18 +35,20 @@ Kamal config, or per-repo runner setup.
 
 ## Concepts
 
-Single Server has four moving parts:
+Single Server has five moving parts:
 
 - **Server:** one VPS running Docker, Kamal, cloudflared, and the Single Server
   daemon. This is where every `singleserver` command runs.
-- **GitHub App:** the event source and deploy credential provider. Push webhooks
-  trigger deploys; installation tokens fetch code and set commit statuses.
+- **GitHub App:** the event source and deploy credential provider, connected by
+  `singleserver init`. Push webhooks trigger deploys; installation tokens fetch
+  code and set commit statuses.
 - **`apps.yml`:** the allowlist. Only repositories in this file can deploy, even
   if the GitHub App is installed broadly.
 - **App containers:** every project runs in its own Docker container behind the
   host proxy.
-- **Cloudflare zone:** the domain configured during `init`. By default,
-  `me/my-app` becomes `my-app.example.com`; `--host` is only for custom names.
+- **App domains:** domains belong to apps, not to the host. The server is
+  managed over SSH; Cloudflare zones and routes are selected when apps or
+  app domains are added.
 
 Single Server should feel like a tiny PaaS you own, not like a pile of bespoke
 shell scripts.
@@ -98,29 +100,35 @@ The command should be safe to rerun.
 Ideal command:
 
 ```sh
-singleserver init --domain example.com
+singleserver init
 ```
 
-This should configure the public webhook/control URL, default app domain, and
-Cloudflare Tunnel ingress. Single Server assumes Cloudflare Tunnel for public
-traffic and does not manage direct public TLS.
+This should configure the host environment, Cloudflare Tunnel, and GitHub App
+connection. Single Server assumes Cloudflare Tunnel for public traffic and does
+not manage direct public TLS.
 
-Recommended default:
+The host itself should not need a user-facing domain. If the implementation
+needs a stable webhook or control URL, `init` should create or hide that detail.
+App domains should be selected or inferred when apps are added.
+
+`init` should end by running:
 
 ```sh
-singleserver init --domain example.com
+singleserver doctor
 ```
 
-### 4. Connect GitHub
+### 4. Repair Provider Connections
 
-Ideal command:
+Provider repair commands should exist, but they should not be part of the normal
+first-run path:
 
 ```sh
 singleserver github connect
+singleserver cloudflare connect
 ```
 
-This should open or print a GitHub URL that creates or installs the Single Server
-GitHub App with the minimum permissions:
+`singleserver github connect` should open or print a GitHub URL that creates or
+installs the Single Server GitHub App with the minimum permissions:
 
 - Contents: read
 - Commit statuses: write
@@ -134,12 +142,6 @@ After the browser approval, the CLI should write:
 ```text
 /etc/singleserver/github-app.json
 /etc/singleserver/github-app.private-key.pem
-```
-
-Then it should run:
-
-```sh
-singleserver doctor
 ```
 
 All follow-up commands continue to run on the server over SSH.
@@ -160,7 +162,7 @@ This should:
 - Detect the default branch
 - Check that the repo contains a `Dockerfile`
 - Add the app to `/etc/singleserver/apps.yml`
-- Infer the default public host `my-app.example.com`
+- Ask for or infer the app domain, such as `my-app.example.com`
 - Configure Cloudflare DNS and tunnel routing for `my-app.example.com`
 - Render and validate the generated Kamal config
 - Deploy the current branch tip
@@ -194,15 +196,23 @@ This should configure the app but wait for the next push or manual deploy.
 
 ```sh
 singleserver add me/my-app \
-  --host app.example.com \
   --branch production \
   --app-port 3000 \
   --healthcheck-path /health \
-  --healthcheck https://app.example.com/health \
+  --healthcheck https://my-app.example.com/health \
   --deploy
 ```
 
 Most apps should not need overrides.
+
+### Add A Custom Domain
+
+```sh
+singleserver domains add my-app app.example.com
+```
+
+Custom, apex, `www`, and legacy migration domains should use domain-management
+commands instead of changing the basic `add` shape.
 
 ## App Contract
 
@@ -376,8 +386,7 @@ This is the complete happy path we should optimize for:
 ```sh
 ssh root@203.0.113.10
 curl -fsSL https://singleserver.com/install.sh | sh
-singleserver init --domain example.com
-singleserver github connect
+singleserver init
 singleserver add me/homepage --deploy
 ```
 
@@ -405,8 +414,8 @@ Status key:
 | `singleserver add` | Partial | Adds apps, validates GitHub access, checks `Dockerfile`, supports explicit hosts and optional deploy. Default host inference and DNS automation are not built. |
 | `singleserver doctor` | Partial | Checks daemon, config, GitHub App access, checkouts, deploy config, last deploy, and healthchecks. Needs disk, Docker, proxy, and DNS checks. |
 | Installer script | Needed | Should install Docker, Kamal, Single Server, systemd service, and base config. |
-| `singleserver init` | Needed | Should configure Cloudflare Tunnel ingress, public URL, and host environment. |
-| `singleserver github connect` | Needed | Today the setup page exists; the CLI should wrap the flow. |
+| `singleserver init` | Needed | Should configure host environment, Cloudflare Tunnel, and GitHub App connection. No user-facing host domain required. |
+| `singleserver github connect` | Needed | Repair command. Today the setup page exists; normal `init` should wrap the flow. |
 | DNS provider integration | Needed | Cloudflare DNS should be first-class because Cloudflare Tunnel is required. |
 | Ingress setup | Needed | Current production uses host-level cloudflared. The installer should make this reproducible. |
 | App domain management | Needed | Add/remove hosts after app creation. |

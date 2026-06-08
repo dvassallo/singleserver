@@ -290,12 +290,12 @@
     <header>
         <h1>single server</h1>
         <div class="tagline">Git push to production in &lt;5 seconds.</div>
-        <p class="lede">The easiest way to run multiple apps on a single server. SSH in, install once, connect GitHub, add apps, and manage everything from the host.</p>
+        <p class="lede">The easiest way to run multiple apps on a single server. SSH in, install once, run init, add apps, and manage everything from the host.</p>
     </header>
 
     <section>
         <h2><a href="#commands">Use it</a></h2>
-        <p>Every command runs on your server. After setup, every push to an added app goes straight to production.</p>
+        <p>Every command runs on your server. Init connects Cloudflare and GitHub. Domains belong to apps, not the host.</p>
 
         <div class="commands-list" id="commands">
             <div class="command-item">
@@ -319,19 +319,9 @@
             </div>
 
             <div class="command-item">
-                <p class="step-desc">Prepare the server.</p>
+                <p class="step-desc">Initialize providers.</p>
                 <div class="code-wrapper">
-                    <code class="code-block">singleserver <span class="keyword">init</span> <span class="flag">--domain</span> example.com</code>
-                    <button class="copy-btn" aria-label="Copy to clipboard">
-                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
-                    </button>
-                </div>
-            </div>
-
-            <div class="command-item">
-                <p class="step-desc">Connect GitHub once.</p>
-                <div class="code-wrapper">
-                    <code class="code-block">singleserver <span class="keyword">github connect</span></code>
+                    <code class="code-block">singleserver <span class="keyword">init</span></code>
                     <button class="copy-btn" aria-label="Copy to clipboard">
                         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
                     </button>
@@ -362,7 +352,7 @@
 
     <section>
         <h2><a href="#flow">What happens next</a></h2>
-        <p>GitHub is the trigger. Your server is the deploy system. Single Server fetches the pushed commit, checks it against your allowlist, builds locally, and lets Kamal swap containers after the healthcheck passes.</p>
+        <p>GitHub is the trigger. Your server is the deploy system. Single Server fetches the pushed commit, checks it against the apps you added, builds locally, and lets Kamal swap containers after the healthcheck passes.</p>
 
         <div class="flow-box" id="flow">
             <div class="flow-row">
@@ -373,7 +363,7 @@
             <div class="flow-row">
                 <span class="pill">allow</span>
                 <span class="connector">-&gt;</span>
-                <span class="result">Only repos in your central config can deploy</span>
+                <span class="result">Only apps added on the server can deploy</span>
             </div>
             <div class="flow-row">
                 <span class="pill">build</span>
@@ -396,8 +386,8 @@
                 <p>No Actions queue, no per-repo runner hop. Build on the server, swap containers, healthcheck, and set commit status.</p>
             </div>
             <div class="feature">
-                <strong>One central allowlist</strong>
-                <p><code>apps.yml</code> decides what can deploy. Install the GitHub App broadly without making every repo deployable.</p>
+                <strong>App domains</strong>
+                <p>The server is managed over SSH. Domains are inferred or added when you add apps.</p>
             </div>
             <div class="feature">
                 <strong>No repo runners</strong>

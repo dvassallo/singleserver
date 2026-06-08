@@ -145,9 +145,9 @@ singleserver logs fullsend
 `singleserver add <owner/repo>` validates GitHub App access, checks the repo's
 default branch and `Dockerfile`, appends the app to `/etc/singleserver/apps.yml`,
 and validates the generated Kamal config. Pass `--deploy` to immediately deploy
-the current branch tip and run `doctor` afterward. The intended `init --domain`
-flow will infer a default public host from the repo name; until then, pass
-`--host` for public routes.
+the current branch tip and run `doctor` afterward. The intended product flow is
+`singleserver init` followed by `singleserver add owner/repo --deploy`; today the
+CLI still accepts explicit `--host` values for public routes.
 
 `singleserver deploy <owner/repo> [ref]` runs the same deploy path as a push webhook. If `ref` is omitted, Single Server deploys the configured branch or the repository default branch.
 
@@ -158,7 +158,7 @@ for a configured app. It does not inspect or modify the app repository.
 
 1. Install the Single Server GitHub App on the repository owner, if it is not already installed.
 2. Make sure the repository contains a `Dockerfile`.
-3. Add it from the server:
+3. Add it from the server. Current implementation:
 
 ```sh
 singleserver add owner/repo --host example.com --host www.example.com --deploy
