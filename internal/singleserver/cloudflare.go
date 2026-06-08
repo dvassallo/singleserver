@@ -417,6 +417,9 @@ func urlQueryEscape(value string) string {
 }
 
 func writeCloudflaredCredentials(path string, state *CloudflareState) error {
+	if state == nil || state.AccountID == "" || state.TunnelID == "" || state.TunnelSecret == "" {
+		return errors.New("cloudflared credentials require account id, tunnel id, and tunnel secret")
+	}
 	body, err := json.MarshalIndent(map[string]string{
 		"AccountTag":   state.AccountID,
 		"TunnelSecret": state.TunnelSecret,

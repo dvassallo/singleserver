@@ -152,18 +152,33 @@ func cliCloudflareConnect(args []string, w io.Writer) error {
 	}
 
 	if state.TunnelID == "" {
-		if state.TunnelSecret == "" {
-			state.TunnelSecret, err = randomTunnelSecret()
-			if err != nil {
-				return err
-			}
-		}
-		tunnel, err := client.createTunnel(state.AccountID, state.TunnelName, state.TunnelSecret)
+		tunnel, err := client.findTunnel(state.AccountID, state.TunnelName)
 		if err != nil {
 			return err
 		}
-		state.TunnelID = tunnel.ID
-		fmt.Fprintf(w, "cloudflare\ttunnel\tok\t%s\n", state.TunnelID)
+		if tunnel != nil {
+			state.TunnelID = tunnel.ID
+			if state.TunnelSecret == "" {
+				state.TunnelSecret = tunnel.Secret
+			}
+			if state.TunnelSecret == "" {
+				return fmt.Errorf("Cloudflare tunnel %s already exists but its tunnel secret is unavailable; rerun with --tunnel <new-name> or copy the original /etc/singleserver/cloudflare.json", state.TunnelName)
+			}
+			fmt.Fprintf(w, "cloudflare\ttunnel\tok\t%s\treused %s\n", state.TunnelID, state.TunnelName)
+		} else {
+			if state.TunnelSecret == "" {
+				state.TunnelSecret, err = randomTunnelSecret()
+				if err != nil {
+					return err
+				}
+			}
+			tunnel, err := client.createTunnel(state.AccountID, state.TunnelName, state.TunnelSecret)
+			if err != nil {
+				return err
+			}
+			state.TunnelID = tunnel.ID
+			fmt.Fprintf(w, "cloudflare\ttunnel\tok\t%s\tcreated %s\n", state.TunnelID, state.TunnelName)
+		}
 	} else {
 		fmt.Fprintf(w, "cloudflare\ttunnel\tok\t%s\n", state.TunnelID)
 	}
