@@ -173,6 +173,102 @@ func TestStaleCloudflaredHosts(t *testing.T) {
 	}
 }
 
+func TestDoctorCloudflareChecksCNAMERecords(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "cloudflared.yml")
+	credentialsPath := filepath.Join(dir, "cloudflared.json")
+	t.Setenv("SINGLESERVER_STATE_DIR", dir)
+	if err := os.WriteFile(filepath.Join(dir, "cloudflare.json"), []byte(`{
+  "api_token": "token",
+  "zone_id": "zone",
+  "tunnel_id": "tunnel",
+  "hook_host": "hooks.example.com",
+  "credentials_file": "`+credentialsPath+`",
+  "config_file": "`+configPath+`"
+}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(credentialsPath, []byte(`{}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, []byte(`ingress:
+  - hostname: hooks.example.com
+    service: http://127.0.0.1:8787
+  - hostname: app.example.com
+    service: http://127.0.0.1:80
+  - service: http_status:404
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	stubCommandRun(t)
+	originalVerify := verifyCloudflareDNSRecordFunc
+	t.Cleanup(func() { verifyCloudflareDNSRecordFunc = originalVerify })
+	verifyCloudflareDNSRecordFunc = func(host string, state *CloudflareState, client *CloudflareClient) (string, error) {
+		return state.TunnelID + ".cfargotunnel.com", nil
+	}
+
+	var out bytes.Buffer
+	ok := doctorCloudflare(&out, []AppConfig{{Repo: "owner/app", Name: "app", Hosts: []string{"app.example.com"}}}, []AppConfig{{Repo: "owner/app", Name: "app", Hosts: []string{"app.example.com"}}})
+
+	if !ok {
+		t.Fatalf("expected Cloudflare doctor to pass, got:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "cloudflare\thook_cloudflare_dns\tok\thooks.example.com -> tunnel.cfargotunnel.com") {
+		t.Fatalf("expected hook Cloudflare DNS ok output, got:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "app\tcloudflare_dns\tok\tapp.example.com -> tunnel.cfargotunnel.com") {
+		t.Fatalf("expected app Cloudflare DNS ok output, got:\n%s", out.String())
+	}
+}
+
+func TestDoctorCloudflareFailsOnMismatchedCNAMERecord(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "cloudflared.yml")
+	credentialsPath := filepath.Join(dir, "cloudflared.json")
+	t.Setenv("SINGLESERVER_STATE_DIR", dir)
+	if err := os.WriteFile(filepath.Join(dir, "cloudflare.json"), []byte(`{
+  "api_token": "token",
+  "zone_id": "zone",
+  "tunnel_id": "tunnel",
+  "hook_host": "hooks.example.com",
+  "credentials_file": "`+credentialsPath+`",
+  "config_file": "`+configPath+`"
+}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(credentialsPath, []byte(`{}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, []byte(`ingress:
+  - hostname: hooks.example.com
+    service: http://127.0.0.1:8787
+  - hostname: app.example.com
+    service: http://127.0.0.1:80
+  - service: http_status:404
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	stubCommandRun(t)
+	originalVerify := verifyCloudflareDNSRecordFunc
+	t.Cleanup(func() { verifyCloudflareDNSRecordFunc = originalVerify })
+	verifyCloudflareDNSRecordFunc = func(host string, state *CloudflareState, client *CloudflareClient) (string, error) {
+		if host == "app.example.com" {
+			return state.TunnelID + ".cfargotunnel.com", fmt.Errorf("CNAME points to old.example.net")
+		}
+		return state.TunnelID + ".cfargotunnel.com", nil
+	}
+
+	var out bytes.Buffer
+	ok := doctorCloudflare(&out, []AppConfig{{Repo: "owner/app", Name: "app", Hosts: []string{"app.example.com"}}}, []AppConfig{{Repo: "owner/app", Name: "app", Hosts: []string{"app.example.com"}}})
+
+	if ok {
+		t.Fatalf("expected Cloudflare doctor to fail, got:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "app\tcloudflare_dns\tfailed\tapp.example.com\tCNAME points to old.example.net") {
+		t.Fatalf("expected app Cloudflare DNS failed output, got:\n%s", out.String())
+	}
+}
+
 func TestFormatBytesGB(t *testing.T) {
 	if got := formatBytesGB(1536 * 1024 * 1024); got != "1.5GB" {
 		t.Fatalf("unexpected formatted size: %s", got)

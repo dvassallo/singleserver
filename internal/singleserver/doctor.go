@@ -209,7 +209,7 @@ func doctorCloudflare(w io.Writer, allApps []AppConfig, selectedApps []AppConfig
 		fmt.Fprintf(w, "cloudflare\t%s\tok\t%s\n", label, path)
 	}
 
-	if err := commandRun(5*time.Second, "systemctl", "is-active", "--quiet", "cloudflared-singleserver.service"); err != nil {
+	if err := commandRunFunc(5*time.Second, "systemctl", "is-active", "--quiet", "cloudflared-singleserver.service"); err != nil {
 		fmt.Fprintf(w, "cloudflare\tservice\tfailed\t%s\n", err)
 		failed = true
 	} else {
@@ -228,8 +228,16 @@ func doctorCloudflare(w io.Writer, allApps []AppConfig, selectedApps []AppConfig
 		}
 	}
 
+	cloudflareClient, cloudflareClientOK := doctorCloudflareClient(w, state)
+	if !cloudflareClientOK {
+		failed = true
+	}
+
 	if state.HookHost != "" {
 		if !doctorHostResolves(w, "cloudflare", "hook_dns", state.HookHost) {
+			failed = true
+		}
+		if cloudflareClient != nil && !doctorCloudflareDNSRecord(w, "cloudflare", "hook_cloudflare_dns", state.HookHost, state, cloudflareClient) {
 			failed = true
 		}
 		if service := routes[strings.ToLower(state.HookHost)]; service == "" {
@@ -251,6 +259,9 @@ func doctorCloudflare(w io.Writer, allApps []AppConfig, selectedApps []AppConfig
 			if !doctorHostResolves(w, app.Name, "dns", host) {
 				failed = true
 			}
+			if cloudflareClient != nil && !doctorCloudflareDNSRecord(w, app.Name, "cloudflare_dns", host, state, cloudflareClient) {
+				failed = true
+			}
 			if service := routes[strings.ToLower(host)]; service == "" {
 				fmt.Fprintf(w, "%s\ttunnel_route\tfailed\t%s missing from %s\n", app.Name, host, state.ConfigFile)
 				failed = true
@@ -261,6 +272,32 @@ func doctorCloudflare(w io.Writer, allApps []AppConfig, selectedApps []AppConfig
 	}
 
 	return !failed
+}
+
+func doctorCloudflareClient(w io.Writer, state *CloudflareState) (*CloudflareClient, bool) {
+	if state.ZoneID == "" || state.TunnelID == "" {
+		return nil, true
+	}
+	token := cloudflareTokenFromEnvOrState(state)
+	if token == "" {
+		return nil, true
+	}
+	client, err := newCloudflareClient(token)
+	if err != nil {
+		fmt.Fprintf(w, "cloudflare\tdns_api\tfailed\t%s\n", err)
+		return nil, false
+	}
+	return client, true
+}
+
+func doctorCloudflareDNSRecord(w io.Writer, scope string, check string, host string, state *CloudflareState, client *CloudflareClient) bool {
+	target, err := verifyCloudflareDNSRecordFunc(host, state, client)
+	if err != nil {
+		fmt.Fprintf(w, "%s\t%s\tfailed\t%s\t%s\n", scope, check, host, err)
+		return false
+	}
+	fmt.Fprintf(w, "%s\t%s\tok\t%s -> %s\n", scope, check, host, target)
+	return true
 }
 
 func doctorGitHubSetup(w io.Writer, github *GitHubClient, appCount int) bool {
@@ -446,7 +483,7 @@ func hasWord(value string, word string) bool {
 }
 
 func doctorHostResolves(w io.Writer, scope string, check string, host string) bool {
-	if err := commandRun(5*time.Second, "getent", "hosts", host); err != nil {
+	if err := commandRunFunc(5*time.Second, "getent", "hosts", host); err != nil {
 		fmt.Fprintf(w, "%s\t%s\tfailed\t%s\t%s\n", scope, check, host, err)
 		return false
 	}

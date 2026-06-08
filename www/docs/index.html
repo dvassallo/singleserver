@@ -206,21 +206,11 @@
             padding: 16px 0;
         }
 
-        .concept-list strong {
-            display: inline-block;
-            min-width: 150px;
-            color: var(--ink);
-        }
-
-        .settings-list li {
-            display: grid;
-            grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
-            gap: 18px;
-        }
-
+        .concept-list strong,
         .settings-list strong {
-            align-self: start;
+            display: block;
             color: var(--ink);
+            margin-bottom: 4px;
         }
 
         .setting-default {
@@ -280,6 +270,7 @@
             color: var(--ink);
             font-weight: 700;
             margin-bottom: 0;
+            font-size: 0.98rem;
         }
 
         .option-list {
@@ -289,16 +280,14 @@
         }
 
         .option-list li {
-            display: grid;
-            grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
-            gap: 14px;
             margin: 0;
-            padding: 10px 0;
+            padding: 12px 0;
             border-bottom: 1px solid var(--highlight);
         }
 
         .option-list code {
-            align-self: start;
+            display: inline-block;
+            margin-bottom: 5px;
         }
 
         .code-wrapper {
@@ -397,19 +386,6 @@
             .toc {
                 grid-template-columns: 1fr;
             }
-            .concept-list strong {
-                display: block;
-                min-width: 0;
-                margin-bottom: 4px;
-            }
-            .option-list li {
-                grid-template-columns: 1fr;
-                gap: 4px;
-            }
-            .settings-list li {
-                grid-template-columns: 1fr;
-                gap: 4px;
-            }
             .flow-box { padding: 20px; }
             .flow-row {
                 grid-template-columns: 1fr;
@@ -434,7 +410,7 @@
     <header>
         <h1>docs</h1>
         <div class="tagline">The Single Server command contract.</div>
-        <p class="lede">Single Server itself is a small Go binary: no Node runtime, no database, and no per-repo runner. It runs as a systemd service on your Linux server, receives GitHub webhooks through Cloudflare Tunnel, checks each push against <code>/etc/singleserver/apps.yml</code>, fetches the exact commit with a GitHub App installation token, and hands the rollout to Kamal.</p>
+        <p class="lede">Single Server itself is a small Go binary. It runs as a systemd service on your Linux server, keeps the app registry in <code>/etc/singleserver/apps.yml</code>, verifies GitHub webhooks, fetches pushed commits with GitHub App installation tokens, updates Cloudflare Tunnel routing, generates Kamal deploy config, and lets Kamal perform the container rollout.</p>
     </header>
 
     <nav class="toc" aria-label="Table of contents">
@@ -504,13 +480,13 @@
     <section id="concepts">
         <h2><a href="#concepts">Concepts</a></h2>
         <ul class="concept-list">
-            <li><strong>Your server</strong> The server is the deploy control plane and the runtime host. The Single Server daemon, Docker, Kamal, cloudflared, Git checkouts, app config, deploy credentials, persistent storage, and logs all live on this one machine.</li>
-            <li><strong>The daemon</strong> The daemon listens on localhost and is exposed to GitHub through Cloudflare Tunnel. It receives webhook requests, verifies signatures, loads the app allowlist, and starts deploys for matching pushes.</li>
-            <li><strong>GitHub App</strong> GitHub is the event source, not the build runner. The GitHub App sends push webhooks to your server, gives Single Server short-lived installation tokens to fetch repositories, and lets the daemon write pending, success, and failure commit statuses.</li>
-            <li><strong><code>apps.yml</code></strong> This file is the deployment allowlist and central app registry. Even if the GitHub App is installed on many repositories, Single Server only deploys repositories listed in this file.</li>
-            <li><strong>App containers</strong> Every app runs in its own Docker container. Single Server prepares the checkout and generated deploy config; Kamal builds the image, starts the new container, healthchecks it, and swaps traffic without taking the old container down first.</li>
-            <li><strong>Cloudflare Tunnel</strong> Public HTTP traffic enters through Cloudflare Tunnel. The tunnel routes GitHub webhooks to the daemon and routes app domains to the right app containers, so the server does not need to manage public TLS certificates directly.</li>
-            <li><strong>Central state</strong> Deploy credentials, app secrets, app domains, storage mounts, backups, and operational logs are server-side concerns. App repositories should only contain application code and the Dockerfile needed to build it.</li>
+            <li><strong>Your server</strong> The server is both the deploy control plane and the runtime host. The Single Server daemon, Docker, Kamal, cloudflared, Git checkouts, app config, deploy credentials, persistent storage, backups, and logs all live on this one machine, so day-to-day operations happen over SSH in one place.</li>
+            <li><strong>The daemon</strong> The daemon listens on <code>127.0.0.1</code> and Cloudflare Tunnel exposes only the setup and webhook endpoints that need to be public. For each webhook, it verifies the GitHub signature, checks the pushed repository and branch against the app registry, fetches the exact commit, runs the deploy, and records the result.</li>
+            <li><strong>GitHub App</strong> GitHub is the event source and code access layer. The GitHub App sends push webhooks to your server, gives Single Server short-lived installation tokens to fetch repositories, and lets the daemon write pending, success, and failure commit statuses back to the pushed commit.</li>
+            <li><strong><code>apps.yml</code></strong> This file is the deployment allowlist and central app registry. Installing the GitHub App on a repository only gives Single Server permission to see it; the repository still will not deploy unless it is listed in <code>/etc/singleserver/apps.yml</code>.</li>
+            <li><strong>App containers</strong> Every app runs in its own Docker container. Single Server prepares the checkout and generated deploy config, then Kamal builds the image, starts the replacement container, runs the healthcheck, and moves traffic only after the new container is ready.</li>
+            <li><strong>Cloudflare Tunnel</strong> Public HTTP traffic enters through Cloudflare Tunnel. Cloudflare DNS points app hostnames at the tunnel, and the tunnel config maps each hostname either to the Single Server daemon for webhooks/setup or to the app container port managed by Kamal.</li>
+            <li><strong>Central state</strong> App domains, server-side environment files, storage mounts, backups, deploy logs, and provider credentials are server concerns. App repositories stay focused on application code and the Dockerfile needed to build the container.</li>
         </ul>
     </section>
 
@@ -531,7 +507,7 @@
                 <div class="command-heading">
                     <span class="command-name">Initialize your server</span>
                     <code class="command-usage">singleserver init [options]</code>
-                    <p class="command-description">Runs first-time setup for the server. It creates the base directories and config files, connects Cloudflare Tunnel when a Cloudflare token is available, restarts the daemon, prints the GitHub App setup URL, and runs diagnostics. GitHub setup is reported as pending until the browser approval is completed.</p>
+                    <p class="command-description">Runs first-time setup for the server. It creates the base directories and config files, connects or repairs Cloudflare Tunnel when a Cloudflare token is available, restarts the daemon, prints the GitHub App setup URL, and runs diagnostics. GitHub setup is reported as pending until the browser approval is completed.</p>
                 </div>
                 <div class="command-details">
                     <p class="option-heading">Options for <code>singleserver init</code></p>
@@ -583,9 +559,14 @@
                     <p class="command-description">Adds a GitHub repository, verifies app access, checks for a Dockerfile, writes <code>apps.yml</code>, validates the generated Kamal config, configures app routing, deploys the current branch tip, runs the healthcheck, and prints the live URL.</p>
                 </div>
                 <div class="command-details">
-                    <p class="option-heading">Arguments and options for <code>singleserver add</code></p>
+                    <p class="option-heading">Arguments for <code>singleserver add</code></p>
                     <ul class="option-list">
                         <li><code>&lt;github-url&gt;</code><span>Required. A URL like <code>https://github.com/owner/repo</code>. Single Server stores it as <code>owner/repo</code>.</span></li>
+                    </ul>
+                </div>
+                <div class="command-details">
+                    <p class="option-heading">Options for <code>singleserver add</code></p>
+                    <ul class="option-list">
                         <li><code>--branch &lt;name&gt;</code><span>Deploy only this branch. Defaults to the repository default branch.</span></li>
                         <li><code>--app-port &lt;port&gt;</code><span>Container port used by the generated Kamal proxy. Defaults to <code>80</code>.</span></li>
                         <li><code>--healthcheck-path &lt;path&gt;</code><span>Path Kamal uses for container healthchecks. Defaults to <code>/up</code>.</span></li>
@@ -604,6 +585,13 @@
                     <span class="command-name">Deploy manually</span>
                     <code class="command-usage">singleserver deploy &lt;owner/repo&gt; [ref]</code>
                     <p class="command-description">Deploys a configured app immediately. If <code>ref</code> is omitted, it deploys the configured branch or the repository default branch. Manual deploys use the same checkout, build, rollout, healthcheck, and GitHub status path as push-triggered deploys.</p>
+                </div>
+                <div class="command-details">
+                    <p class="option-heading">Arguments for <code>singleserver deploy</code></p>
+                    <ul class="option-list">
+                        <li><code>&lt;owner/repo&gt;</code><span>Configured repository or app name to deploy.</span></li>
+                        <li><code>[ref]</code><span>Optional branch, tag, or commit SHA. If omitted, Single Server uses the app's configured production branch.</span></li>
+                    </ul>
                 </div>
             </div>
 
@@ -627,7 +615,7 @@
                 <div class="command-heading">
                     <span class="command-name">Run diagnostics</span>
                     <code class="command-usage">singleserver doctor [app]</code>
-                    <p class="command-description">Runs deeper checks for daemon health, config validity, deploy user SSH, local registry, GitHub App access, generated deploy config, checkout state, recent deploy outcome, disk, Docker, proxy, DNS, and healthchecks.</p>
+                    <p class="command-description">Runs deeper checks for daemon health, config validity, deploy user SSH, local registry, GitHub App access, generated deploy config, checkout state, recent deploy outcome, disk, Docker, Cloudflare Tunnel routes, Cloudflare DNS targets, resolver DNS, and healthchecks.</p>
                 </div>
             </div>
 
@@ -687,6 +675,11 @@
                         <li><code>remove &lt;app&gt; &lt;domain&gt;</code><span>Remove the hostname from the app, remove the matching Cloudflare DNS/tunnel route, clear a matching default healthcheck, and redeploy the app.</span></li>
                         <li><code>list [app]</code><span>Print all configured domains, optionally scoped to one app.</span></li>
                         <li><code>verify [app]</code><span>Check resolver DNS, Cloudflare CNAME targets when available, and Cloudflare Tunnel routes, optionally scoped to one app.</span></li>
+                    </ul>
+                </div>
+                <div class="command-details">
+                    <p class="option-heading">Options for <code>singleserver domains add</code> and <code>singleserver domains remove</code></p>
+                    <ul class="option-list">
                         <li><code>--no-deploy</code><span>Use with <code>add</code> or <code>remove</code> to update config and Cloudflare routing without redeploying immediately.</span></li>
                     </ul>
                 </div>
@@ -759,19 +752,19 @@
 
     <section id="config">
         <h2><a href="#config">Configuration</a></h2>
-        <p>Single Server is convention over configuration. The normal path is to add an app with only its GitHub URL; Single Server infers the app name, checkout path, deploy branch, app domain, healthcheck path, and generated Kamal config. <code>/etc/singleserver/apps.yml</code> exists as the central override file when an app needs to differ from those defaults.</p>
+        <p>Single Server is convention over configuration. The normal path is to add an app with only its GitHub URL; Single Server infers the app name, checkout path, deploy branch, app domain, healthcheck path, storage location, and generated Kamal config. <code>/etc/singleserver/apps.yml</code> exists as the central override file when an app needs to differ from those defaults.</p>
 
         <h3 id="conventions"><a href="#conventions">Conventions</a></h3>
         <ul class="concept-list">
             <li><strong>Repository</strong> A GitHub URL like <code>https://github.com/owner/repo</code> is normalized to <code>owner/repo</code> in <code>apps.yml</code>. The URL form is the user-facing command shape; the compact form is the stored config shape.</li>
             <li><strong>App name</strong> The app name defaults to the repository name, lowercased. It must be unique on the server because it becomes the stable identifier used for the checkout path, generated Kamal service name, image name, container names, logs, storage paths, and inferred domains.</li>
             <li><strong>Branch</strong> Deploys default to the repository default branch. Set <code>branch</code> only when production deploys should follow a different branch, such as <code>main</code>, <code>master</code>, or <code>production</code>.</li>
-            <li><strong>Domain</strong> If Cloudflare is connected, the default app domain is inferred from the app name and connected zone, such as <code>my-app.example.com</code>. Characters that are awkward in hostnames, such as dots or underscores, are replaced with hyphens for the inferred domain. Extra domains are added with <code>singleserver domains add</code>. A hostname can belong to only one app at a time.</li>
+            <li><strong>Domain</strong> If Cloudflare is connected, the default app domain is inferred from the app name and connected zone, such as <code>my-app.example.com</code>. Characters that are awkward in hostnames, such as dots or underscores, are replaced with hyphens for the inferred domain. Extra domains are added with <code>singleserver domains add</code>. Single Server writes the Cloudflare CNAME, updates the tunnel route, and rejects hostnames already assigned to another app.</li>
             <li><strong>Checkout</strong> Repositories are checked out under <code>/srv/repos/&lt;app&gt;</code>. Before each deploy, Single Server fetches the exact pushed SHA so production matches the GitHub event that triggered it.</li>
             <li><strong>Build</strong> The app repository owns its <code>Dockerfile</code>. Single Server verifies the Dockerfile exists and uses it, but it does not generate application build instructions.</li>
             <li><strong>Kamal config</strong> Single Server generates Kamal config from conventions and overrides. A repo-level <code>config/deploy.yml</code> should only be needed for unusual apps that opt out of the generated config path.</li>
             <li><strong>Port</strong> Apps listen on port <code>80</code> by default. Use <code>--app-port</code> or <code>app_port</code> when the container listens somewhere else, such as a Node or Bun app on <code>3000</code>.</li>
-            <li><strong>Healthcheck</strong> The default container healthcheck path is <code>/up</code>. Single Server also uses the public app domain plus that path as the external healthcheck unless an app sets a different healthcheck URL.</li>
+            <li><strong>Healthcheck</strong> The default container healthcheck path is <code>/up</code>. Kamal uses that path to decide when the replacement container is ready, and Single Server uses the public app domain plus that path as the external healthcheck unless an app sets a different healthcheck URL.</li>
             <li><strong>Secrets</strong> Secrets live on the server in app env files. They are injected into generated Kamal config without requiring GitHub repository secrets, deploy keys, or GitHub Actions workflows.</li>
             <li><strong>Storage</strong> Persistent app data defaults to <code>/srv/storage/&lt;app&gt;</code> and mounts into the container at <code>/storage</code>. This is the expected place for SQLite databases, uploads, and other app-owned data.</li>
         </ul>
@@ -806,7 +799,7 @@
             <li><strong><code>name</code></strong><span><span class="setting-default">Default: repository name.</span> Lowercase app identifier used for checkout, service, image, container names, logs, storage, and inferred domains. App names must be unique; set this when two repositories share the same repo name.</span></li>
             <li><strong><code>branch</code></strong><span><span class="setting-default">Default: repository default branch.</span> Only pushes to this branch deploy automatically. Manual deploys can still name a specific ref.</span></li>
             <li><strong><code>path</code></strong><span><span class="setting-default">Default: <code>/srv/repos/&lt;app&gt;</code>.</span> Checkout directory on the server.</span></li>
-            <li><strong><code>hosts</code></strong><span><span class="setting-default">Default: DNS-safe app label plus the connected Cloudflare zone.</span> Public hostnames for generated Kamal proxy config and Cloudflare Tunnel routing. Hosts must be unique across apps.</span></li>
+            <li><strong><code>hosts</code></strong><span><span class="setting-default">Default: DNS-safe app label plus the connected Cloudflare zone.</span> Public hostnames for generated Kamal proxy config, Cloudflare DNS, and Cloudflare Tunnel routing. Hosts must be unique across apps.</span></li>
             <li><strong><code>app_port</code></strong><span><span class="setting-default">Default: <code>80</code>.</span> Container port that receives web traffic from Kamal.</span></li>
             <li><strong><code>healthcheck_path</code></strong><span><span class="setting-default">Default: <code>/up</code>.</span> Container healthcheck path used by generated Kamal config.</span></li>
             <li><strong><code>healthcheck</code></strong><span><span class="setting-default">Default: app domain plus healthcheck path.</span> External healthcheck URL used by Single Server after deploys and in status checks.</span></li>
