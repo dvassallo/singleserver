@@ -375,6 +375,51 @@ func TestRemoveKeepsConfigWhenCloudflareFails(t *testing.T) {
 	}
 }
 
+func TestRemoveKeepsFilesWhenContainerStopFails(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "apps.yml")
+	storagePath := filepath.Join(dir, "storage")
+	repoPath := filepath.Join(dir, "repos", "fullsend")
+	t.Setenv("SINGLESERVER_CONFIG", configPath)
+	t.Setenv("SINGLESERVER_STATE_DIR", dir)
+	if err := os.MkdirAll(storagePath, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(repoPath, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, []byte(`apps:
+  - repo: dvassallo/fullsend
+    path: `+repoPath+`
+    storage:
+      path: `+storagePath+`
+      mount: /storage
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	originalStop := stopAppContainersFunc
+	t.Cleanup(func() { stopAppContainersFunc = originalStop })
+	stopAppContainersFunc = func(appName string) error {
+		return errors.New("docker unavailable")
+	}
+
+	var out bytes.Buffer
+	err := cliRemove([]string{"fullsend", "--delete-storage", "--delete-repo", "--yes"}, &out)
+	if err == nil {
+		t.Fatal("expected container stop error")
+	}
+	if !strings.Contains(err.Error(), "docker unavailable") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := os.Stat(storagePath); err != nil {
+		t.Fatalf("expected storage kept: %v", err)
+	}
+	if _, err := os.Stat(repoPath); err != nil {
+		t.Fatalf("expected repo checkout kept: %v", err)
+	}
+}
+
 func TestRemoveDeleteStorageWithConfirmation(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "apps.yml")

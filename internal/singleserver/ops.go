@@ -236,8 +236,9 @@ func cliRemove(args []string, w io.Writer) error {
 		return err
 	}
 	fmt.Fprintf(w, "%s\tconfig\tok\tremoved from %s\n", app.Name, configPath)
-	if err := stopAppContainers(app.Name); err != nil {
+	if err := stopAppContainersFunc(app.Name); err != nil {
 		fmt.Fprintf(w, "%s\tcontainers\tfailed\t%s\n", app.Name, err)
+		return err
 	} else {
 		fmt.Fprintf(w, "%s\tcontainers\tok\tstopped matching containers\n", app.Name)
 	}
@@ -482,6 +483,8 @@ func requireStorage(app *AppConfig) (*StorageConfig, error) {
 	}
 	return app.Storage, nil
 }
+
+var stopAppContainersFunc = stopAppContainers
 
 func stopAppContainers(appName string) error {
 	out, err := commandOutput(5*time.Second, "docker", "ps", "-a", "--format", "{{.Names}}")
