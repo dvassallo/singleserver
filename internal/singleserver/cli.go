@@ -9,8 +9,15 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"runtime/debug"
 	"strings"
 	"time"
+)
+
+var (
+	Version   = "dev"
+	Commit    = ""
+	BuildDate = ""
 )
 
 func RunCLI(args []string, logger *log.Logger) error {
@@ -21,6 +28,9 @@ func RunCLI(args []string, logger *log.Logger) error {
 	switch args[0] {
 	case "help", "-h", "--help":
 		printUsage(os.Stdout)
+		return nil
+	case "version", "--version":
+		printVersion(os.Stdout)
 		return nil
 	case "init":
 		return cliInit(args[1:], os.Stdout)
@@ -71,6 +81,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprint(w, `Single Server
 
 Usage:
+  singleserver version
   singleserver init [--zone example.com] [--skip-cloudflare]
   singleserver github connect [--name "Single Server"] [--public]
   singleserver cloudflare connect [--zone example.com] [--tunnel singleserver] [--hook-host hooks.example.com]
@@ -90,6 +101,7 @@ Usage:
   singleserver upgrade
 
 Commands:
+  version        Print the installed Single Server version.
   init           Create base server state, connect providers when configured, and print GitHub setup URL.
   github         Repair or print the GitHub App setup URL.
   cloudflare     Create or repair the Cloudflare Tunnel and webhook DNS route.
@@ -108,6 +120,45 @@ Commands:
   remove         Remove app config and stop matching containers.
   upgrade        Re-run the installer and restart Single Server.
 `)
+}
+
+func printVersion(w io.Writer) {
+	version := Version
+	commit := Commit
+	buildDate := BuildDate
+
+	if info, ok := debug.ReadBuildInfo(); ok {
+		if version == "" || version == "dev" {
+			if info.Main.Version != "" && info.Main.Version != "(devel)" {
+				version = info.Main.Version
+			}
+		}
+		for _, setting := range info.Settings {
+			switch setting.Key {
+			case "vcs.revision":
+				if commit == "" {
+					commit = setting.Value
+				}
+			case "vcs.time":
+				if buildDate == "" {
+					buildDate = setting.Value
+				}
+			}
+		}
+	}
+
+	if strings.TrimSpace(version) == "" {
+		version = "dev"
+	}
+	if strings.TrimSpace(commit) == "" {
+		commit = "unknown"
+	} else {
+		commit = shortSHA(commit)
+	}
+	if strings.TrimSpace(buildDate) == "" {
+		buildDate = "unknown"
+	}
+	fmt.Fprintf(w, "singleserver\tversion\t%s\tcommit=%s\tbuilt=%s\n", version, commit, buildDate)
 }
 
 func cliList(w io.Writer) error {

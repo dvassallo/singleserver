@@ -22,6 +22,45 @@ func TestDisplayAppDefaults(t *testing.T) {
 	}
 }
 
+func TestPrintVersionUsesStampedBuildValues(t *testing.T) {
+	originalVersion, originalCommit, originalBuildDate := Version, Commit, BuildDate
+	t.Cleanup(func() {
+		Version = originalVersion
+		Commit = originalCommit
+		BuildDate = originalBuildDate
+	})
+	Version = "1.2.3"
+	Commit = "1234567890abcdef"
+	BuildDate = "2026-06-08T21:00:00Z"
+
+	var out bytes.Buffer
+	printVersion(&out)
+
+	got := out.String()
+	if !strings.Contains(got, "singleserver\tversion\t1.2.3") {
+		t.Fatalf("expected stamped version, got:\n%s", got)
+	}
+	if !strings.Contains(got, "commit=1234567890ab") {
+		t.Fatalf("expected short commit, got:\n%s", got)
+	}
+	if !strings.Contains(got, "built=2026-06-08T21:00:00Z") {
+		t.Fatalf("expected build date, got:\n%s", got)
+	}
+}
+
+func TestUsageMentionsVersionCommand(t *testing.T) {
+	var out bytes.Buffer
+	printUsage(&out)
+
+	got := out.String()
+	if !strings.Contains(got, "singleserver version") {
+		t.Fatalf("expected version usage, got:\n%s", got)
+	}
+	if !strings.Contains(got, "version        Print the installed Single Server version.") {
+		t.Fatalf("expected version command description, got:\n%s", got)
+	}
+}
+
 func TestListShowsFirstAppHintWhenEmpty(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "apps.yml")
