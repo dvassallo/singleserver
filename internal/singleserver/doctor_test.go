@@ -6,6 +6,9 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -205,5 +208,33 @@ func TestCompactWhitespace(t *testing.T) {
 	got := compactWhitespace(" M file\n?? other\n")
 	if got != "M file ?? other" {
 		t.Fatalf("unexpected value: %q", got)
+	}
+}
+
+func TestHasWord(t *testing.T) {
+	if !hasWord("deploy docker sudo", "docker") {
+		t.Fatal("expected docker group to be found")
+	}
+	if hasWord("deploy dockerish sudo", "docker") {
+		t.Fatal("expected partial group name not to match")
+	}
+}
+
+func TestRegistryHealthStatus(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		fmt.Fprintln(w, "{}")
+	}))
+	defer server.Close()
+	t.Setenv("SINGLESERVER_REGISTRY_HEALTH_URL", server.URL+"/v2/")
+
+	status, err := registryHealthStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status != "200 OK" {
+		t.Fatalf("unexpected status: %s", status)
 	}
 }

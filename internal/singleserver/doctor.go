@@ -48,6 +48,9 @@ func cliDoctor(args []string, w io.Writer) error {
 	if !doctorDocker(w) {
 		failed = true
 	}
+	if !doctorDeployInfrastructure(w) {
+		failed = true
+	}
 	if !doctorDisk(w) {
 		failed = true
 	}
@@ -98,6 +101,54 @@ func doctorDocker(w io.Writer) bool {
 	}
 	fmt.Fprintf(w, "docker\tok\tserver=%s\n", version)
 	return true
+}
+
+func doctorDeployInfrastructure(w io.Writer) bool {
+	failed := false
+	if err := commandRun(3*time.Second, "id", "deploy"); err != nil {
+		fmt.Fprintf(w, "deploy\tuser\tfailed\t%s\n", err)
+		failed = true
+	} else {
+		fmt.Fprintln(w, "deploy\tuser\tok\tdeploy")
+	}
+
+	groups, err := commandOutput(3*time.Second, "id", "-nG", "deploy")
+	if err != nil {
+		fmt.Fprintf(w, "deploy\tdocker_group\tfailed\t%s\n", err)
+		failed = true
+	} else if !hasWord(groups, "docker") {
+		fmt.Fprintf(w, "deploy\tdocker_group\tfailed\tdeploy groups=%s\n", compactWhitespace(groups))
+		failed = true
+	} else {
+		fmt.Fprintf(w, "deploy\tdocker_group\tok\tgroups=%s\n", compactWhitespace(groups))
+	}
+
+	keyPath := "/root/.ssh/id_ed25519"
+	if stat, err := os.Stat(keyPath); err != nil {
+		fmt.Fprintf(w, "deploy\tssh_key\tfailed\t%s\n", err)
+		failed = true
+	} else if stat.IsDir() {
+		fmt.Fprintf(w, "deploy\tssh_key\tfailed\t%s is a directory\n", keyPath)
+		failed = true
+	} else {
+		fmt.Fprintf(w, "deploy\tssh_key\tok\t%s\n", keyPath)
+	}
+
+	if err := commandRun(5*time.Second, "ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "ConnectTimeout=3", "deploy@127.0.0.1", "true"); err != nil {
+		fmt.Fprintf(w, "deploy\tssh\tfailed\t%s\n", err)
+		failed = true
+	} else {
+		fmt.Fprintln(w, "deploy\tssh\tok\tdeploy@127.0.0.1")
+	}
+
+	status, err := registryHealthStatus()
+	if err != nil {
+		fmt.Fprintf(w, "registry\tfailed\t%s\n", err)
+		failed = true
+	} else {
+		fmt.Fprintf(w, "registry\tok\t%s\n", status)
+	}
+	return !failed
 }
 
 func doctorDisk(w io.Writer) bool {
@@ -364,6 +415,34 @@ func doctorHealthcheck(w io.Writer, app AppConfig) bool {
 	}
 	fmt.Fprintf(w, "%s\thealthcheck\tok\t%s\n", app.Name, app.Healthcheck)
 	return true
+}
+
+func registryHealthStatus() (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, envDefault("SINGLESERVER_REGISTRY_HEALTH_URL", "http://127.0.0.1:5555/v2/"), nil)
+	if err != nil {
+		return "", err
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer res.Body.Close()
+	if res.StatusCode < 200 || res.StatusCode >= 400 {
+		return res.Status, errors.New(res.Status)
+	}
+	return res.Status, nil
+}
+
+func hasWord(value string, word string) bool {
+	for _, field := range strings.Fields(value) {
+		if field == word {
+			return true
+		}
+	}
+	return false
 }
 
 func doctorHostResolves(w io.Writer, scope string, check string, host string) bool {

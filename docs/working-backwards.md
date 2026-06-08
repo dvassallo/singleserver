@@ -286,6 +286,8 @@ This should verify:
 
 - Daemon health
 - Config validity
+- Local deploy user and SSH path
+- Local image registry
 - GitHub App installation access
 - App checkouts
 - Deploy config source
@@ -424,7 +426,7 @@ Status key:
 | GitHub App push deploys | Built | The GitHub App provides webhooks and installation tokens. |
 | Generated Kamal config | Built | Repos do not need `config/deploy.yml` unless they want custom behavior. |
 | `singleserver add` | Built | Adds apps, validates GitHub access, checks `Dockerfile`, deploys by default, supports `--no-deploy`, infers default domains from Cloudflare, and configures DNS/tunnel routing. |
-| `singleserver doctor` | Built | Checks daemon, config, Docker, disk, Cloudflare Tunnel, DNS, stale routes, GitHub App access, checkouts, deploy config, last deploy, and healthchecks. |
+| `singleserver doctor` | Built | Checks daemon, config, Docker, local deploy user/SSH, local registry, disk, Cloudflare Tunnel, DNS, stale routes, GitHub App access, checkouts, deploy config, last deploy, and healthchecks. |
 | Installer script | Built | `https://singleserver.com/install.sh` installs Docker, Kamal, cloudflared, the hosted Single Server binary, the systemd service, local registry, base config, and runs `init`. Source builds remain available as an explicit fallback. |
 | `singleserver init` | Built | Creates base host state, connects Cloudflare when a token is present, restarts the daemon, prints the GitHub App setup URL, runs `doctor`, and reports GitHub setup as pending until browser approval is completed. |
 | `singleserver github connect` | Built | Repair command that prints the GitHub App setup URL, can set a custom GitHub App display name, and can create a public/installable app for multi-owner repo setups. |

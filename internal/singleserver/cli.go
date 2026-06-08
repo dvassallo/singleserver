@@ -98,7 +98,7 @@ Commands:
   add            Add a GitHub repository to apps.yml.
   deploy         Deploy a configured app immediately.
   render-deploy  Print the generated Kamal deploy.yml for a configured app.
-  doctor         Check config, GitHub App access, checkouts, deploy logs, and healthchecks.
+  doctor         Check config, deploy plumbing, GitHub App access, checkouts, deploy logs, and healthchecks.
   logs           Show recent Single Server journal logs, optionally filtered by app.
   domains        Manage app domains in apps.yml.
   env            Manage server-side app environment variables.
