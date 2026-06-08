@@ -317,7 +317,6 @@ func updateDomain(appName string, host string, add bool, w io.Writer) (*AppConfi
 			if app.Healthcheck == "" {
 				app.Healthcheck = "https://" + host + app.HealthcheckPath
 			}
-			fmt.Fprintf(w, "%s\tdomain\tok\tadded %s\n", app.Name, host)
 		} else {
 			removedHealthcheck := "https://" + host + app.HealthcheckPath
 			app.Hosts = removeFold(app.Hosts, host)
@@ -328,7 +327,6 @@ func updateDomain(appName string, host string, add bool, w io.Writer) (*AppConfi
 					app.Healthcheck = ""
 				}
 			}
-			fmt.Fprintf(w, "%s\tdomain\tok\tremoved %s\n", app.Name, host)
 		}
 		return nil
 	}); err != nil {
@@ -337,6 +335,11 @@ func updateDomain(appName string, host string, add bool, w io.Writer) (*AppConfi
 	app, err := configuredApp(appName)
 	if err != nil {
 		return nil, err
+	}
+	if add {
+		fmt.Fprintf(w, "%s\tdomain\tok\tadded %s\n", app.Name, host)
+	} else {
+		fmt.Fprintf(w, "%s\tdomain\tok\tremoved %s\n", app.Name, host)
 	}
 	if err := syncCloudflareAppDomain(host, add, w); err != nil {
 		return nil, err

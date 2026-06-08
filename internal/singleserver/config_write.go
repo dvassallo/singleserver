@@ -20,6 +20,10 @@ func loadConfigAllowMissing(path string) (*Config, error) {
 }
 
 func writeConfig(path string, config *Config) error {
+	if err := config.Normalize(); err != nil {
+		return err
+	}
+
 	var doc yaml.Node
 	doc.Kind = yaml.DocumentNode
 	root := &yaml.Node{Kind: yaml.MappingNode}

@@ -78,6 +78,33 @@ func TestDomainsRemoveSupportsNoDeployFlagAfterDomain(t *testing.T) {
 	}
 }
 
+func TestDomainsAddRejectsHostUsedByAnotherApp(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "apps.yml")
+	t.Setenv("SINGLESERVER_CONFIG", configPath)
+	if err := os.WriteFile(configPath, []byte(`apps:
+  - repo: dvassallo/fullsend
+    hosts:
+      - play.nobrainer.host
+  - repo: dvassallo/sillyface-games
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	logger := log.New(io.Discard, "", 0)
+	err := cliDomains([]string{"add", "sillyface-games", "play.nobrainer.host", "--no-deploy"}, &out, logger)
+	if err == nil {
+		t.Fatal("expected duplicate host error")
+	}
+	if !strings.Contains(err.Error(), "duplicate host in config") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(out.String(), "domain\tok") {
+		t.Fatalf("unexpected success output: %s", out.String())
+	}
+}
+
 func TestEnvCommandWritesServerSideEnv(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "apps.yml")

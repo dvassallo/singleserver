@@ -148,6 +148,7 @@ func LoadConfig(path string) (*Config, error) {
 func (c *Config) Normalize() error {
 	seenRepos := map[string]bool{}
 	seenNames := map[string]string{}
+	seenHosts := map[string]string{}
 	for i := range c.Apps {
 		if err := c.Apps[i].Normalize(); err != nil {
 			return err
@@ -163,6 +164,14 @@ func (c *Config) Normalize() error {
 			return fmt.Errorf("duplicate app name in config: %s is used by %s and %s", c.Apps[i].Name, existingRepo, c.Apps[i].Repo)
 		}
 		seenNames[nameKey] = c.Apps[i].Repo
+
+		for _, host := range c.Apps[i].Hosts {
+			hostKey := strings.ToLower(host)
+			if existingRepo := seenHosts[hostKey]; existingRepo != "" {
+				return fmt.Errorf("duplicate host in config: %s is used by %s and %s", host, existingRepo, c.Apps[i].Repo)
+			}
+			seenHosts[hostKey] = c.Apps[i].Repo
+		}
 	}
 	return nil
 }

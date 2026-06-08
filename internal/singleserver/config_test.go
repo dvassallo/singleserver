@@ -112,6 +112,30 @@ func TestLoadConfigRejectsDuplicateAppNames(t *testing.T) {
 	}
 }
 
+func TestLoadConfigRejectsDuplicateHostsAcrossApps(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "apps.yml")
+	body := []byte(`apps:
+  - repo: alice/homepage
+    hosts:
+      - play.example.com
+  - repo: bob/game
+    hosts:
+      - PLAY.example.com
+`)
+	if err := os.WriteFile(path, body, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadConfig(path)
+	if err == nil {
+		t.Fatal("expected duplicate host error")
+	}
+	if !strings.Contains(err.Error(), "duplicate host in config") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestNormalizeRejectsURLHosts(t *testing.T) {
 	app := AppConfig{
 		Repo:  "dvassallo/fullsend",

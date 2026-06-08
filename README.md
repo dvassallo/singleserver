@@ -55,6 +55,9 @@ service names, containers, storage paths, and inferred domains. If two GitHub
 owners have a repo with the same name, add one of them with `--name` or set a
 different `name` in `apps.yml`.
 
+Hostnames must also be unique across apps. A domain can route to one app at a
+time; use `singleserver domains remove` before assigning it somewhere else.
+
 Use an object only when an app needs overrides:
 
 ```yaml

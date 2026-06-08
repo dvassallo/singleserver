@@ -48,7 +48,7 @@ Single Server has five moving parts:
   host proxy.
 - **App domains:** domains belong to apps, not to the host. The server is
   managed over SSH; Cloudflare zones and routes are selected when apps or
-  app domains are added.
+  app domains are added. A hostname can belong to only one app at a time.
 - **App names:** the repo name is the default app name, but app names must be
   unique on a server because they drive generated service names, containers,
   storage paths, and inferred domains.
