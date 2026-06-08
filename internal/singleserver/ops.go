@@ -491,7 +491,7 @@ func verifyDomains(args []string, w io.Writer) error {
 
 	for _, app := range apps {
 		for _, host := range app.Hosts {
-			if err := commandRun(5*time.Second, "getent", "hosts", host); err != nil {
+			if err := commandRunFunc(5*time.Second, "getent", "hosts", host); err != nil {
 				fmt.Fprintf(w, "%s\tdns\tfailed\t%s\t%s\n", app.Name, host, err)
 				failed = true
 			} else {
@@ -616,7 +616,7 @@ func chownStorage(storagePath string) error {
 var stopAppContainersFunc = stopAppContainers
 
 func stopAppContainers(appName string) error {
-	out, err := commandOutput(5*time.Second, "docker", "ps", "-a", "--format", "{{.Names}}")
+	out, err := commandOutputFunc(5*time.Second, "docker", "ps", "-a", "--format", "{{.Names}}")
 	if err != nil {
 		return err
 	}
@@ -634,11 +634,11 @@ func stopAppContainers(appName string) error {
 		return nil
 	}
 	args := append([]string{"rm", "-f"}, names...)
-	return commandRun(30*time.Second, "docker", args...)
+	return commandRunFunc(30*time.Second, "docker", args...)
 }
 
 func stopRunningAppContainers(appName string) ([]string, error) {
-	out, err := commandOutput(5*time.Second, "docker", "ps", "--format", "{{.Names}}")
+	out, err := commandOutputFunc(5*time.Second, "docker", "ps", "--format", "{{.Names}}")
 	if err != nil {
 		return nil, err
 	}
@@ -647,7 +647,7 @@ func stopRunningAppContainers(appName string) ([]string, error) {
 		return nil, nil
 	}
 	args := append([]string{"stop"}, names...)
-	if err := commandRun(30*time.Second, "docker", args...); err != nil {
+	if err := commandRunFunc(30*time.Second, "docker", args...); err != nil {
 		return nil, err
 	}
 	return names, nil
@@ -658,11 +658,11 @@ func startContainers(names []string) error {
 		return nil
 	}
 	args := append([]string{"start"}, names...)
-	return commandRun(30*time.Second, "docker", args...)
+	return commandRunFunc(30*time.Second, "docker", args...)
 }
 
 func appContainerName(appName string) (string, error) {
-	out, err := commandOutput(5*time.Second, "docker", "ps", "--format", "{{.Names}}")
+	out, err := commandOutputFunc(5*time.Second, "docker", "ps", "--format", "{{.Names}}")
 	if err != nil {
 		return "", err
 	}
@@ -695,7 +695,7 @@ func matchingAppContainerNames(appName string, output string) []string {
 }
 
 func runningAppContainers() (map[string]string, error) {
-	out, err := commandOutput(5*time.Second, "docker", "ps", "--format", "{{.Names}}")
+	out, err := commandOutputFunc(5*time.Second, "docker", "ps", "--format", "{{.Names}}")
 	if err != nil {
 		return nil, err
 	}

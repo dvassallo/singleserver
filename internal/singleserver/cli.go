@@ -381,7 +381,7 @@ func cliLogs(args []string, w io.Writer) error {
 		script := "journalctl -u singleserver.service -n 200 --no-pager -o short-iso -f | grep --line-buffered -F " + shellQuote(grep)
 		return runCommandToWriter(w, 0, "bash", "-lc", script)
 	}
-	out, err := commandOutput(5*time.Second, "journalctl", journalArgs...)
+	out, err := commandOutputFunc(5*time.Second, "journalctl", journalArgs...)
 	if err != nil {
 		return err
 	}

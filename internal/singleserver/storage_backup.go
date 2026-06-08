@@ -140,10 +140,10 @@ func isSQLiteDatabase(path string) bool {
 }
 
 func backupSQLiteDatabase(source string, dest string) error {
-	if _, err := commandOutput(time.Second, "sqlite3", "-version"); err != nil {
+	if _, err := commandOutputFunc(time.Second, "sqlite3", "-version"); err != nil {
 		return fmt.Errorf("sqlite3 is required to back up SQLite database %s: %w", source, err)
 	}
-	if _, err := commandOutput(30*time.Second, "sqlite3", source, ".backup "+sqliteString(dest)); err != nil {
+	if _, err := commandOutputFunc(30*time.Second, "sqlite3", source, ".backup "+sqliteString(dest)); err != nil {
 		return err
 	}
 	return nil

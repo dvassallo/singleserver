@@ -403,6 +403,49 @@ func TestDomainsVerifyFailsWhenTunnelRouteMissing(t *testing.T) {
 	}
 }
 
+func TestDomainsVerifyUsesCommandRunFuncForResolverDNS(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "apps.yml")
+	tunnelConfigPath := filepath.Join(dir, "cloudflared.yml")
+	t.Setenv("SINGLESERVER_CONFIG", configPath)
+	t.Setenv("SINGLESERVER_STATE_DIR", dir)
+	if err := os.WriteFile(configPath, []byte(`apps:
+  - repo: dvassallo/fullsend
+    hosts:
+      - app.nobrainer.host
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "cloudflare.json"), []byte(`{"tunnel_id":"tunnel","config_file":"`+tunnelConfigPath+`"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(tunnelConfigPath, []byte(`ingress:
+  - hostname: app.nobrainer.host
+    service: http://127.0.0.1:80
+  - service: http_status:404
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	originalRun := commandRunFunc
+	t.Cleanup(func() { commandRunFunc = originalRun })
+	commandRunFunc = func(timeout time.Duration, name string, args ...string) error {
+		if name == "getent" {
+			return errors.New("resolver unavailable")
+		}
+		return originalRun(timeout, name, args...)
+	}
+
+	var out bytes.Buffer
+	err := cliDomains([]string{"verify", "fullsend"}, &out, log.New(io.Discard, "", 0))
+	if err == nil {
+		t.Fatal("expected resolver DNS error")
+	}
+	if !strings.Contains(out.String(), "fullsend\tdns\tfailed\tapp.nobrainer.host\tresolver unavailable") {
+		t.Fatalf("expected resolver DNS failure output, got:\n%s", out.String())
+	}
+}
+
 func TestEnvCommandWritesServerSideEnv(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "apps.yml")

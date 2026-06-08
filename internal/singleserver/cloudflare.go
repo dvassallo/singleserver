@@ -530,7 +530,7 @@ func syncCloudflareAppDomain(hostname string, add bool, w io.Writer) error {
 			return removeCloudflaredRoute(state.ConfigFile, hostname)
 		},
 		restart: func() error {
-			return commandRun(10*time.Second, "systemctl", "restart", "cloudflared-singleserver.service")
+			return commandRunFunc(10*time.Second, "systemctl", "restart", "cloudflared-singleserver.service")
 		},
 	}
 	return syncCloudflareAppDomainWithOps(hostname, add, w, state, ops)

@@ -90,12 +90,12 @@ func cliDoctor(args []string, w io.Writer) error {
 }
 
 func doctorDocker(w io.Writer) bool {
-	version, err := commandOutput(5*time.Second, "docker", "info", "--format", "{{.ServerVersion}}")
+	version, err := commandOutputFunc(5*time.Second, "docker", "info", "--format", "{{.ServerVersion}}")
 	if err != nil {
 		fmt.Fprintf(w, "docker\tfailed\t%s\n", err)
 		return false
 	}
-	if _, err := commandOutput(5*time.Second, "docker", "ps", "--format", "{{.Names}}"); err != nil {
+	if _, err := commandOutputFunc(5*time.Second, "docker", "ps", "--format", "{{.Names}}"); err != nil {
 		fmt.Fprintf(w, "docker\tfailed\t%s\n", err)
 		return false
 	}
@@ -105,14 +105,14 @@ func doctorDocker(w io.Writer) bool {
 
 func doctorDeployInfrastructure(w io.Writer) bool {
 	failed := false
-	if err := commandRun(3*time.Second, "id", "deploy"); err != nil {
+	if err := commandRunFunc(3*time.Second, "id", "deploy"); err != nil {
 		fmt.Fprintf(w, "deploy\tuser\tfailed\t%s\n", err)
 		failed = true
 	} else {
 		fmt.Fprintln(w, "deploy\tuser\tok\tdeploy")
 	}
 
-	groups, err := commandOutput(3*time.Second, "id", "-nG", "deploy")
+	groups, err := commandOutputFunc(3*time.Second, "id", "-nG", "deploy")
 	if err != nil {
 		fmt.Fprintf(w, "deploy\tdocker_group\tfailed\t%s\n", err)
 		failed = true
@@ -134,7 +134,7 @@ func doctorDeployInfrastructure(w io.Writer) bool {
 		fmt.Fprintf(w, "deploy\tssh_key\tok\t%s\n", keyPath)
 	}
 
-	if err := commandRun(5*time.Second, "ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "ConnectTimeout=3", "deploy@127.0.0.1", "true"); err != nil {
+	if err := commandRunFunc(5*time.Second, "ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "ConnectTimeout=3", "deploy@127.0.0.1", "true"); err != nil {
 		fmt.Fprintf(w, "deploy\tssh\tfailed\t%s\n", err)
 		failed = true
 	} else {
@@ -555,7 +555,7 @@ func formatBytesGB(value uint64) string {
 }
 
 func recentSingleServerJournal() (string, error) {
-	out, err := commandOutput(5*time.Second, "journalctl", "-u", "singleserver.service", "-n", "1000", "--no-pager", "-o", "cat")
+	out, err := commandOutputFunc(5*time.Second, "journalctl", "-u", "singleserver.service", "-n", "1000", "--no-pager", "-o", "cat")
 	if err != nil {
 		return "", err
 	}
@@ -580,7 +580,7 @@ func lastDeployStatusFromJournal(appName string, journal string) (string, string
 }
 
 func commandRun(timeout time.Duration, name string, args ...string) error {
-	_, err := commandOutput(timeout, name, args...)
+	_, err := commandOutputFunc(timeout, name, args...)
 	return err
 }
 
@@ -593,8 +593,10 @@ func gitRun(repoDir string, args ...string) error {
 
 func gitOutput(repoDir string, args ...string) (string, error) {
 	gitArgs := append([]string{"-c", "safe.directory=" + repoDir, "-C", repoDir}, args...)
-	return commandOutput(3*time.Second, "git", gitArgs...)
+	return commandOutputFunc(3*time.Second, "git", gitArgs...)
 }
+
+var commandOutputFunc = commandOutput
 
 func commandOutput(timeout time.Duration, name string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
