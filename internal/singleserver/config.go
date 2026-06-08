@@ -207,11 +207,14 @@ func (c *Config) AppForPush(payload *PushPayload) (*AppConfig, string, string) {
 		if !strings.EqualFold(app.Repo, payload.Repository.FullName) {
 			continue
 		}
-		targetBranch := app.Branch
+		targetBranch := strings.TrimSpace(app.Branch)
 		if targetBranch == "" {
-			targetBranch = payload.Repository.DefaultBranch
+			targetBranch = strings.TrimSpace(payload.Repository.DefaultBranch)
 		}
-		if targetBranch != "" && branch != targetBranch {
+		if targetBranch == "" {
+			return nil, branch, app.Repo + " default branch is missing"
+		}
+		if branch != targetBranch {
 			return nil, branch, fmt.Sprintf("%s:%s does not match %s", app.Repo, branch, targetBranch)
 		}
 		return app, branch, ""

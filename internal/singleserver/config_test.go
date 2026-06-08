@@ -70,6 +70,28 @@ func TestAppForPushUsesDefaultBranch(t *testing.T) {
 	}
 }
 
+func TestAppForPushRequiresDefaultBranchWhenAppBranchUnset(t *testing.T) {
+	config := &Config{Apps: []AppConfig{{Repo: "dvassallo/sillyface-games", Name: "sillyface-games"}}}
+	payload := &PushPayload{
+		Ref:   "refs/heads/feature",
+		After: "abc123",
+		Repository: Repo{
+			FullName: "dvassallo/sillyface-games",
+		},
+	}
+
+	app, branch, reason := config.AppForPush(payload)
+	if app != nil {
+		t.Fatalf("did not expect app for branch %s", branch)
+	}
+	if branch != "feature" {
+		t.Fatalf("unexpected branch: %s", branch)
+	}
+	if !strings.Contains(reason, "default branch is missing") {
+		t.Fatalf("unexpected reason: %s", reason)
+	}
+}
+
 func TestAppByRepoIsCaseInsensitive(t *testing.T) {
 	config := &Config{Apps: []AppConfig{{Repo: "dvassallo/fullsend", Name: "fullsend"}}}
 	app, ok := config.AppByRepo("DVASSALLO/FULLSEND")
