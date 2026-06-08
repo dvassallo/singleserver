@@ -3,15 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Single Server - Deploy many apps to one VPS</title>
-    <meta name="description" content="Single Server is a tiny deploy control plane for running many GitHub apps on one server.">
+    <title>Single Server - Git push to production in under 5 seconds</title>
+    <meta name="description" content="Single Server deploys many small GitHub apps to one VPS with fast container swaps, central config, and no per-repo runners.">
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
     <style>
         :root {
             --primary: #FF3366;
             --secondary: #00CCFF;
             --tertiary: #FFCC00;
-            --green: #00D084;
             --highlight: #f0f0f0;
         }
 
@@ -71,6 +70,33 @@
             line-height: 1.6;
             margin-top: 28px;
             max-width: 710px;
+        }
+
+        .hero-metrics {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        .metric {
+            border: 2px solid #000;
+            padding: 14px;
+            background: #fff;
+            box-shadow: 5px 5px 0 var(--highlight);
+        }
+
+        .metric strong {
+            display: block;
+            font-size: 1.8rem;
+            line-height: 1;
+        }
+
+        .metric span {
+            display: block;
+            margin-top: 8px;
+            font-size: 0.95rem;
+            line-height: 1.35;
         }
 
         section { margin-top: 22px; }
@@ -169,16 +195,6 @@
             font-weight: 700;
         }
 
-        .note {
-            margin-top: 18px;
-            font-size: 1rem;
-            line-height: 1.5;
-            color: #111;
-            background: var(--highlight);
-            border-left: 6px solid var(--tertiary);
-            padding: 12px 14px;
-        }
-
         .code-wrapper {
             position: relative;
         }
@@ -256,29 +272,6 @@
             padding: 1px 4px;
         }
 
-        .status-strip {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 12px;
-            margin-top: 15px;
-        }
-
-        .status {
-            border: 2px solid #000;
-            padding: 14px;
-            font-weight: 700;
-            min-height: 96px;
-        }
-        .status.built { background: var(--green); }
-        .status.partial { background: var(--tertiary); }
-        .status.next { background: var(--secondary); }
-        .status span {
-            display: block;
-            margin-top: 8px;
-            font-size: 0.9rem;
-            font-weight: 400;
-        }
-
         footer {
             margin-top: 80px;
             font-size: 0.9rem;
@@ -305,8 +298,8 @@
                 transform: rotate(90deg);
                 height: 22px;
             }
-            .feature-grid,
-            .status-strip {
+            .hero-metrics,
+            .feature-grid {
                 grid-template-columns: 1fr;
             }
             .code-block { font-size: 0.92rem; }
@@ -324,35 +317,45 @@
 
     <header>
         <h1>single server</h1>
-        <div class="tagline">One VPS. Many apps. Git push to live.</div>
-        <p class="lede">A tiny deploy control plane for people who want to own their infrastructure without babysitting a different runner, secret, and workflow for every small project.</p>
+        <div class="tagline">Git push to production in &lt;5 seconds.</div>
+        <p class="lede">Run many small apps on one VPS without babysitting a different runner, secret, and workflow for every repo. Single Server listens for GitHub pushes, deploys the exact commit, and swaps each app in its own container.</p>
+        <div class="hero-metrics" aria-label="Single Server highlights">
+            <div class="metric"><strong>&lt;5s</strong><span>Fast path from push to live for small apps.</span></div>
+            <div class="metric"><strong>1 VPS</strong><span>One server can host a whole portfolio.</span></div>
+            <div class="metric"><strong>0 runners</strong><span>No repo-level GitHub Actions deploy plumbing.</span></div>
+        </div>
     </header>
 
     <section>
-        <h2><a href="#flow">The whole idea</a></h2>
-        <p>Single Server turns one blank Linux box into a home for many GitHub projects. Each app gets its own Docker container. The server owns deploys. GitHub only sends push events.</p>
+        <h2><a href="#flow">How it works</a></h2>
+        <p>GitHub is the trigger. Your server is the deploy system. Single Server keeps the allowlist, fetches the pushed SHA, builds locally, and asks Kamal to swap containers only after the new app passes its healthcheck.</p>
 
         <div class="flow-box" id="flow">
             <div class="flow-row">
                 <span class="pill">git push</span>
                 <span class="connector">-&gt;</span>
-                <span class="result">GitHub App sends a signed webhook</span>
+                <span class="result">GitHub App sends one signed webhook</span>
             </div>
             <div class="flow-row">
                 <span class="pill">apps.yml</span>
                 <span class="connector">-&gt;</span>
-                <span class="result">Only allowlisted repos can deploy</span>
+                <span class="result">Single Server checks the central allowlist</span>
             </div>
             <div class="flow-row">
-                <span class="pill">kamal</span>
+                <span class="pill">build</span>
                 <span class="connector">-&gt;</span>
-                <span class="result">Build, swap, healthcheck, commit status</span>
+                <span class="result">The host builds the image from the pushed commit</span>
+            </div>
+            <div class="flow-row">
+                <span class="pill">swap</span>
+                <span class="connector">-&gt;</span>
+                <span class="result">Kamal rolls the container forward and posts status</span>
             </div>
         </div>
     </section>
 
     <section>
-        <h2><a href="#commands">Target setup flow</a></h2>
+        <h2><a href="#commands">Use it</a></h2>
 
         <div class="commands-list" id="commands">
             <div class="command-item">
@@ -395,7 +398,6 @@
                 </div>
             </div>
         </div>
-        <p class="note">The core deploy loop is running today. The installer, init, and GitHub connect commands show the target setup flow from the working-backwards roadmap.</p>
     </section>
 
     <section>
@@ -403,7 +405,7 @@
         <div class="feature-grid" id="features">
             <div class="feature">
                 <strong>Fast deploys</strong>
-                <p>Build on the server, swap containers, healthcheck, and set a commit status. Small apps can deploy in a few seconds.</p>
+                <p>No Actions queue, no per-repo runner hop. Build on the server, swap containers, healthcheck, and set commit status.</p>
             </div>
             <div class="feature">
                 <strong>One central allowlist</strong>
@@ -419,7 +421,7 @@
             </div>
             <div class="feature">
                 <strong>Kamal without boilerplate</strong>
-                <p>Single Server generates deploy config from conventions unless an app intentionally ships its own.</p>
+                <p>Single Server generates deploy config from conventions, while Kamal handles the container rollout.</p>
             </div>
             <div class="feature">
                 <strong>Doctor included</strong>
@@ -451,19 +453,8 @@
         </div>
     </section>
 
-    <section>
-        <h2><a href="#roadmap">Built by working backwards</a></h2>
-        <p class="feature-desc">The core deploy loop is already running. The docs start from the ideal user experience, then turn the missing pieces into the roadmap.</p>
-
-        <div class="status-strip" id="roadmap">
-            <div class="status built">Built now<span>GitHub App push deploys, apps.yml allowlist, generated Kamal config, add, deploy, doctor.</span></div>
-            <div class="status partial">Being shaped<span>App onboarding and diagnostics work today, but should become even more automatic.</span></div>
-            <div class="status next">Next up<span>Installer, init, GitHub connect, DNS, storage, runtime logs, remove, upgrade.</span></div>
-        </div>
-    </section>
-
     <footer>
-        <p>MIT License - <a href="https://github.com/dvassallo/singleserver">GitHub</a> - <a href="https://github.com/dvassallo/singleserver/blob/main/docs/working-backwards.md">Working backwards docs</a></p>
+        <p>MIT License - <a href="https://github.com/dvassallo/singleserver">GitHub</a> - <a href="https://github.com/dvassallo/singleserver#readme">Docs</a></p>
     </footer>
 </main>
 
