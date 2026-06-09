@@ -132,26 +132,9 @@
             font-size: 1.8rem;
             margin: 40px 0 20px;
             line-height: 1.2;
-            display: inline-flex;
-            align-items: center;
-            gap: 10px;
+            display: inline-block;
             border-bottom: 4px solid var(--primary);
             max-width: 100%;
-        }
-
-        h2::before {
-            content: "";
-            width: 14px;
-            height: 14px;
-            flex: 0 0 auto;
-            background: var(--tertiary);
-            border: 2px solid #000;
-            box-shadow: 2px 2px 0 #000;
-            transform: rotate(-3deg);
-        }
-
-        h2 span {
-            min-width: 0;
         }
 
         section > p {
@@ -400,7 +383,7 @@
     </header>
 
     <section>
-        <h2 id="commands"><span>Get going</span></h2>
+        <h2 id="commands">Get going</h2>
         <p>Every command runs on your server.</p>
 
         <div class="commands-list">
@@ -439,7 +422,7 @@ singleserver add https://github.com/you/my-app-3</pre>
     </section>
 
     <section>
-        <h2 id="flow"><span>What happens next</span></h2>
+        <h2 id="flow">What happens next</h2>
         <p>Whenever you push to GitHub, your server fetches the commit, builds it locally, and uses Kamal to roll it out with zero downtime. Each app runs isolated in its own Docker container.</p>
 
         <div class="flow-box">
@@ -462,7 +445,7 @@ singleserver add https://github.com/you/my-app-3</pre>
     </section>
 
     <section>
-        <h2 id="how"><span>How it works</span></h2>
+        <h2 id="how">How it works</h2>
         <div class="how-list">
             <div class="how-item">
                 <strong>Install once on your server.</strong>
@@ -488,7 +471,7 @@ singleserver add https://github.com/you/my-app-3</pre>
     </section>
 
     <section>
-        <h2 id="features"><span>What you get</span></h2>
+        <h2 id="features">What you get</h2>
         <div class="feature-grid">
             <div class="feature">
                 <strong>Fast deploys</strong>
