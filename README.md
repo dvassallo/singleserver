@@ -36,8 +36,9 @@ printing when a Funnel URL exists, and `singleserver doctor`.
 
 On an interactive SSH session, the installer prompts for Tailscale login and a
 Cloudflare API token. For unattended installs, pass `TAILSCALE_AUTHKEY` or
-`TS_AUTHKEY`, `CLOUDFLARE_API_TOKEN` or `CF_API_TOKEN`, and optionally
-`SINGLESERVER_CLOUDFLARE_ZONE` or `CLOUDFLARE_ZONE`.
+`TS_AUTHKEY` and `CLOUDFLARE_API_TOKEN` or `CF_API_TOKEN`. If the Cloudflare
+token can access multiple accounts, pass the account explicitly when repairing
+Cloudflare with `singleserver cloudflare connect --account <id>`.
 
 ## Minimal config
 
@@ -58,7 +59,7 @@ kamal:     generated from conventions unless config/deploy.yml is tracked
 ```
 
 App names must be unique on the server because they drive checkout paths, Kamal
-service names, containers, storage paths, and inferred domains. If two GitHub
+service names, containers, and storage paths. If two GitHub
 owners have a repo with the same name, add one of them with `--name` or set a
 different `name` in `apps.yml`.
 
@@ -174,7 +175,7 @@ Install the daemon binary as both `/usr/local/bin/singleserverd` and `/usr/local
 ```sh
 ssh root@203.0.113.10
 singleserver tailscale connect
-singleserver cloudflare connect --zone example.com
+singleserver cloudflare connect
 singleserver list
 singleserver status
 singleserver add https://github.com/owner/repo
@@ -196,11 +197,13 @@ custom DNS record. The command can use `TS_AUTHKEY` or `TAILSCALE_AUTHKEY` for
 unattended server joins, or run `tailscale up --ssh` manually and then run
 `singleserver tailscale connect`.
 
-`singleserver cloudflare connect --zone <domain>` connects Cloudflare Tunnel
-and DNS for app domains. It stores the zone, tunnel credentials, and a
-`cloudflared` systemd service. Future app domains are created as proxied CNAME
-records to the tunnel and routed through `cloudflared`, so the server IP stays
-hidden and Cloudflare handles public TLS, proxying, CDN, and DDoS protection.
+`singleserver cloudflare connect [--account <id>] [--tunnel <name>]` connects
+Cloudflare Tunnel for app domains. It creates or reuses a tunnel, stores the
+tunnel credentials, and installs a `cloudflared` systemd service. App domains
+are managed per hostname: when you add `app.example.com`, Single Server finds
+the Cloudflare zone that owns that hostname, creates a proxied CNAME to the
+tunnel, and routes it through `cloudflared`. The server IP stays hidden while
+Cloudflare handles public TLS, proxying, CDN, and DDoS protection.
 
 `singleserver add <github-url>` validates GitHub App access, checks the repo's
 default branch and Dockerfile path, appends the normalized `owner/repo` to
@@ -210,12 +213,10 @@ current branch tip, and runs `doctor` afterward. In an interactive SSH session,
 no Dockerfile, the readiness path, optional external healthcheck URL, and whether
 to deploy immediately. It also prints the equivalent non-interactive command. In
 scripts or non-interactive shells, pass explicit generated-runtime options, such
-as `--runtime static --static-dir dist` for a static site or
-`--runtime node --start "npm start" --app-port 3000` for a web process. When Cloudflare is
-connected, the default app domain is a DNS-safe app label plus the connected
-zone, such as `my-app.example.com` or
-`singleserver-com.example.com`. Pass `--no-deploy` to configure the app and wait
-for the next push or manual deploy.
+as `--runtime static --static-dir dist` for a static site,
+`--runtime node --start "npm start" --app-port 3000` for a web process, and
+`--domain app.example.com` for the public hostname. Pass `--no-deploy` to
+configure the app and wait for the next push or manual deploy.
 
 `singleserver edit <app|owner/repo|github-url>` changes app config after an app
 has been added. With no flags in an interactive SSH session, it prompts with the

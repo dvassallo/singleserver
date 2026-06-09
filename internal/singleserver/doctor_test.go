@@ -300,7 +300,7 @@ func TestDoctorCloudflareChecksCNAMERecords(t *testing.T) {
 	t.Setenv("SINGLESERVER_STATE_DIR", dir)
 	if err := os.WriteFile(filepath.Join(dir, "cloudflare.json"), []byte(`{
   "api_token": "token",
-  "zone_id": "zone",
+  "account_id": "account",
   "tunnel_id": "tunnel",
   "credentials_file": "`+credentialsPath+`",
   "config_file": "`+configPath+`"
@@ -342,7 +342,7 @@ func TestDoctorCloudflareFailsOnMismatchedCNAMERecord(t *testing.T) {
 	t.Setenv("SINGLESERVER_STATE_DIR", dir)
 	if err := os.WriteFile(filepath.Join(dir, "cloudflare.json"), []byte(`{
   "api_token": "token",
-  "zone_id": "zone",
+  "account_id": "account",
   "tunnel_id": "tunnel",
   "credentials_file": "`+credentialsPath+`",
   "config_file": "`+configPath+`"

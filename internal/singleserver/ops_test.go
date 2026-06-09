@@ -262,6 +262,7 @@ func TestDomainsVerifyDoesNotRequireTunnelRoute(t *testing.T) {
 	tunnelConfigPath := filepath.Join(dir, "cloudflared.yml")
 	t.Setenv("SINGLESERVER_CONFIG", configPath)
 	t.Setenv("SINGLESERVER_STATE_DIR", dir)
+	stubCommandRun(t)
 	if err := os.WriteFile(configPath, []byte(`apps:
   - repo: dvassallo/fullsend
     hosts:
@@ -304,9 +305,10 @@ func TestDomainsVerifyChecksCloudflareDNSRecord(t *testing.T) {
 `), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "cloudflare.json"), []byte(`{"api_token":"token","zone_id":"zone","tunnel_id":"tunnel"}`), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "cloudflare.json"), []byte(`{"api_token":"token","account_id":"account","tunnel_id":"tunnel"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
+	stubCommandRun(t)
 
 	originalVerify := verifyCloudflareDNSRecordFunc
 	t.Cleanup(func() { verifyCloudflareDNSRecordFunc = originalVerify })
@@ -338,9 +340,10 @@ func TestDomainsVerifyFailsWhenCloudflareDNSRecordDoesNotMatch(t *testing.T) {
 `), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "cloudflare.json"), []byte(`{"api_token":"token","zone_id":"zone","tunnel_id":"tunnel"}`), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "cloudflare.json"), []byte(`{"api_token":"token","account_id":"account","tunnel_id":"tunnel"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
+	stubCommandRun(t)
 
 	originalVerify := verifyCloudflareDNSRecordFunc
 	t.Cleanup(func() { verifyCloudflareDNSRecordFunc = originalVerify })
@@ -364,6 +367,7 @@ func TestDomainsVerifyIgnoresMissingLegacyTunnelRoute(t *testing.T) {
 	tunnelConfigPath := filepath.Join(dir, "cloudflared.yml")
 	t.Setenv("SINGLESERVER_CONFIG", configPath)
 	t.Setenv("SINGLESERVER_STATE_DIR", dir)
+	stubCommandRun(t)
 	if err := os.WriteFile(configPath, []byte(`apps:
   - repo: dvassallo/fullsend
     hosts:

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -80,7 +81,7 @@ func (a *AppConfig) Normalize() error {
 	a.Branch = strings.TrimSpace(a.Branch)
 	a.RepoDir = strings.TrimSpace(a.RepoDir)
 	if a.RepoDir == "" {
-		a.RepoDir = "/srv/repos/" + a.Name
+		a.RepoDir = filepath.Join(reposRoot(), a.Name)
 	}
 	a.Healthcheck = strings.TrimSpace(a.Healthcheck)
 	a.Runtime = strings.ToLower(strings.TrimSpace(a.Runtime))
@@ -127,7 +128,7 @@ func (a *AppConfig) Normalize() error {
 	if a.Storage != nil {
 		a.Storage.Path = strings.TrimSpace(a.Storage.Path)
 		if a.Storage.Path == "" {
-			a.Storage.Path = "/srv/storage/" + a.Name
+			a.Storage.Path = filepath.Join(storageRoot(), a.Name)
 		}
 		if !strings.HasPrefix(a.Storage.Path, "/") {
 			return fmt.Errorf("storage path for %s must be absolute: %q", a.Repo, a.Storage.Path)
@@ -141,6 +142,14 @@ func (a *AppConfig) Normalize() error {
 		}
 	}
 	return nil
+}
+
+func reposRoot() string {
+	return envDefault("SINGLESERVER_REPOS_ROOT", "/srv/repos")
+}
+
+func storageRoot() string {
+	return envDefault("SINGLESERVER_STORAGE_ROOT", "/srv/storage")
 }
 
 func defaultHealthcheckPath(app AppConfig) string {

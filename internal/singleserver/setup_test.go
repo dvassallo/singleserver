@@ -17,6 +17,7 @@ func TestGitHubConnectPrintsSetupURL(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("SINGLESERVER_STATE_DIR", dir)
 	t.Setenv("SINGLESERVER_CONFIG", filepath.Join(dir, "apps.yml"))
+	setBaseDirsForTest(t, dir)
 	stubCommandRun(t)
 
 	var out bytes.Buffer
@@ -42,6 +43,7 @@ func TestTailscaleConnectStoresHostname(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("SINGLESERVER_STATE_DIR", dir)
 	t.Setenv("SINGLESERVER_CONFIG", filepath.Join(dir, "apps.yml"))
+	setBaseDirsForTest(t, dir)
 	originalOutput := commandOutputFunc
 	originalRun := commandRunFunc
 	originalRunToWriter := commandRunToWriterFunc
@@ -108,6 +110,13 @@ func TestTailscaleConnectStoresHostname(t *testing.T) {
 	if !strings.Contains(out.String(), "tailscale\tfunnel\tok\thttps://assetstacks.example.ts.net -> 127.0.0.1:8787") {
 		t.Fatalf("funnel output missing:\n%s", out.String())
 	}
+}
+
+func setBaseDirsForTest(t *testing.T, dir string) {
+	t.Helper()
+	t.Setenv("SINGLESERVER_REPOS_ROOT", filepath.Join(dir, "repos"))
+	t.Setenv("SINGLESERVER_STORAGE_ROOT", filepath.Join(dir, "storage"))
+	t.Setenv("SINGLESERVER_BACKUP_DIR", filepath.Join(dir, "backups"))
 }
 
 func TestSetupGitHubAppManifestIsPublic(t *testing.T) {

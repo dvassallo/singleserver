@@ -546,7 +546,7 @@
                 <div class="command-heading">
                     <span class="command-name">Install</span>
                     <code class="command-usage">curl -fsSL https://singleserver.com/install.sh | sh</code>
-                    <p class="command-description">Installs Docker, Kamal, Tailscale, cloudflared, the hosted <code>singleserver</code> Linux binary, the <code>singleserver.service</code> daemon, and base config files. Then it runs first-run setup: connects or repairs Tailscale SSH and Funnel, connects Cloudflare Tunnel and DNS for app domains, prints the GitHub App setup URL once a Funnel URL exists, and runs diagnostics. In an interactive SSH session it prompts for Tailscale login and a Cloudflare API token; unattended installs can pass <code>TAILSCALE_AUTHKEY</code>, <code>CLOUDFLARE_API_TOKEN</code>, and optionally <code>SINGLESERVER_CLOUDFLARE_ZONE</code>. The installer is safe to rerun.</p>
+                    <p class="command-description">Installs Docker, Kamal, Tailscale, cloudflared, the hosted <code>singleserver</code> Linux binary, the <code>singleserver.service</code> daemon, and base config files. Then it runs first-run setup: connects or repairs Tailscale SSH and Funnel, connects Cloudflare Tunnel for app domains, prints the GitHub App setup URL once a Funnel URL exists, and runs diagnostics. In an interactive SSH session it prompts for Tailscale login and a Cloudflare API token; unattended installs can pass <code>TAILSCALE_AUTHKEY</code> and <code>CLOUDFLARE_API_TOKEN</code>. The installer is safe to rerun.</p>
                 </div>
             </div>
 
@@ -582,7 +582,7 @@
                 <div class="command-details">
                     <p class="option-heading"><code>singleserver cloudflare connect</code> options</p>
                     <ul class="option-list">
-                        <li><code>--zone &lt;domain&gt;</code><span>Cloudflare zone to manage. If omitted, Single Server uses the accessible zone when there is only one.</span></li>
+                        <li><code>--account &lt;id&gt;</code><span>Cloudflare account to use when the API token can access multiple accounts. App domains still resolve their Cloudflare zones per hostname.</span></li>
                         <li><code>--tunnel &lt;name&gt;</code><span>Cloudflare Tunnel name. Defaults to a host-specific name like <code>singleserver-my-host</code>.</span></li>
                     </ul>
                 </div>
@@ -849,15 +849,15 @@
 
     <section id="config">
         <h2><a href="#config">Configuration</a></h2>
-        <p>Single Server is convention over configuration. The normal path is to add an app with only its GitHub URL. From that one input, Single Server infers the app name, checkout path, deploy branch, app domain, readiness path, generated Kamal config, and the default storage location when storage is enabled.</p>
+        <p>Single Server is convention over configuration. The normal path is to add an app with its GitHub URL and, when the app should be public, its domain. From that input, Single Server infers the app name, checkout path, deploy branch, readiness path, generated Kamal config, and the default storage location when storage is enabled.</p>
         <p>The conventions are meant to be predictable rather than hidden. <code>/etc/singleserver/apps.yml</code> is the central override file when an app needs to differ from the defaults, such as a non-default branch, multiple domains, a different container port, a custom readiness path, an optional external healthcheck URL, or a storage mount.</p>
 
         <h3 id="conventions"><a href="#conventions">Conventions</a></h3>
         <ul class="concept-list">
             <li><strong>Repository</strong> A GitHub URL like <code>https://github.com/owner/repo</code> is normalized to <code>owner/repo</code> in <code>apps.yml</code>. The URL form is the user-facing command shape; the compact form is the stored config shape.</li>
-            <li><strong>App name</strong> The app name defaults to the repository name, lowercased. It must be unique on the server because it becomes the stable identifier used for the checkout path, generated Kamal service name, image name, container names, logs, storage paths, and inferred domains.</li>
+            <li><strong>App name</strong> The app name defaults to the repository name, lowercased. It must be unique on the server because it becomes the stable identifier used for the checkout path, generated Kamal service name, image name, container names, logs, and storage paths.</li>
             <li><strong>Branch</strong> Deploys default to the repository default branch. Set <code>branch</code> only when production deploys should follow a different branch, such as <code>main</code>, <code>master</code>, or <code>production</code>.</li>
-            <li><strong>Domain</strong> If Cloudflare is connected, the default app domain is inferred from the app name and connected zone, such as <code>my-app.example.com</code>. Characters that are awkward in hostnames, such as dots or underscores, are replaced with hyphens for the inferred domain. Extra domains are added with <code>singleserver domains add</code>. Single Server writes proxied Cloudflare DNS records and tunnel routes, and rejects hostnames already assigned to another app.</li>
+            <li><strong>Domain</strong> Domains belong to apps, not to the server setup. Add the hostname you want, such as <code>app.example.com</code>, during <code>singleserver add</code> or later with <code>singleserver domains add</code>. When Cloudflare is connected, Single Server finds the Cloudflare zone that owns that hostname, writes a proxied CNAME to the server's tunnel, keeps the tunnel route in sync, and rejects hostnames already assigned to another app.</li>
             <li><strong>Checkout</strong> Repositories are checked out under <code>/srv/repos/&lt;app&gt;</code>. Before each deploy, Single Server fetches the exact pushed SHA so production matches the GitHub event that triggered it.</li>
             <li><strong>Build</strong> If the repository has a <code>Dockerfile</code>, Single Server uses it. If it does not, Single Server can generate a temporary Dockerfile from explicit settings in <code>apps.yml</code>: <code>runtime</code>, optional <code>install</code>/<code>build</code>, optional <code>static_dir</code>, and for dynamic Node/Bun apps, <code>start</code> plus <code>app_port</code>. The generated Dockerfile is written only inside the server checkout during deploy and is removed afterward.</li>
             <li><strong>Kamal config</strong> Single Server generates Kamal config from conventions and overrides. The generated proxy config binds Kamal to <code>127.0.0.1</code> because Cloudflare Tunnel is the public app ingress. A repo-level <code>config/deploy.yml</code> should only be needed for unusual apps that opt out of the generated config path.</li>
@@ -898,10 +898,10 @@
         </div>
         <ul class="settings-list">
             <li><strong><code>repo</code></strong><span><span class="setting-default">Required.</span> GitHub repository as <code>owner/repo</code>. This is the only field required for a conventional app.</span></li>
-            <li><strong><code>name</code></strong><span><span class="setting-default">Default: repository name.</span> Lowercase app identifier used for checkout, service, image, container names, logs, storage, and inferred domains. App names must be unique; set this when two repositories share the same repo name.</span></li>
+            <li><strong><code>name</code></strong><span><span class="setting-default">Default: repository name.</span> Lowercase app identifier used for checkout, service, image, container names, logs, and storage. App names must be unique; set this when two repositories share the same repo name.</span></li>
             <li><strong><code>branch</code></strong><span><span class="setting-default">Default: repository default branch.</span> Only pushes to this branch deploy automatically. Manual deploys can still name a specific ref.</span></li>
             <li><strong><code>path</code></strong><span><span class="setting-default">Default: <code>/srv/repos/&lt;app&gt;</code>.</span> Checkout directory on the server.</span></li>
-            <li><strong><code>hosts</code></strong><span><span class="setting-default">Default: DNS-safe app label plus the connected Cloudflare zone.</span> Public hostnames for generated Kamal proxy config, Cloudflare DNS, and Cloudflare Tunnel routes. Hosts must be unique across apps.</span></li>
+            <li><strong><code>hosts</code></strong><span><span class="setting-default">Default: none.</span> Public hostnames for generated Kamal proxy config, Cloudflare DNS, and Cloudflare Tunnel routes. Hosts must be unique across apps.</span></li>
             <li><strong><code>runtime</code></strong><span><span class="setting-default">Default: absent.</span> Set to <code>static</code>, <code>node</code>, or <code>bun</code> only when the repository does not have a Dockerfile and Single Server should generate one during deploy.</span></li>
             <li><strong><code>install</code></strong><span><span class="setting-default">Default: absent.</span> Optional install command for generated Node/Bun Dockerfiles. Single Server stores and runs exactly the command you provide.</span></li>
             <li><strong><code>build</code></strong><span><span class="setting-default">Default: absent.</span> Optional build command for generated Node/Bun Dockerfiles. Use this with <code>static_dir</code> for static sites that need a build step.</span></li>
@@ -1032,7 +1032,7 @@
             <li><strong><code>/etc/singleserver/github-app.json</code></strong><span>GitHub App metadata, including app ID and webhook secret.</span></li>
             <li><strong><code>/etc/singleserver/github-app.private-key.pem</code></strong><span>GitHub App private key used to request short-lived installation tokens.</span></li>
             <li><strong><code>/etc/singleserver/tailscale.json</code></strong><span>Tailscale hostname and Funnel URL detected by <code>singleserver tailscale connect</code>.</span></li>
-            <li><strong><code>/etc/singleserver/cloudflare.json</code></strong><span>Cloudflare zone, tunnel, and DNS state created by <code>singleserver cloudflare connect</code>.</span></li>
+            <li><strong><code>/etc/singleserver/cloudflare.json</code></strong><span>Cloudflare account, tunnel, and DNS state created by <code>singleserver cloudflare connect</code>.</span></li>
             <li><strong><code>/srv/repos/&lt;app&gt;</code></strong><span>Git checkout for each app.</span></li>
             <li><strong><code>/srv/storage/&lt;app&gt;</code></strong><span>Persistent storage for SQLite databases, uploads, and app-owned files.</span></li>
             <li><strong><code>/srv/backups/&lt;app&gt;</code></strong><span>Backups created by <code>singleserver backup</code>.</span></li>

@@ -190,13 +190,13 @@ func ensureBaseFiles() error {
 	if err := os.MkdirAll(stateDir, 0700); err != nil {
 		return err
 	}
-	if err := os.MkdirAll("/srv/repos", 0755); err != nil {
+	if err := os.MkdirAll(reposRoot(), 0755); err != nil {
 		return err
 	}
-	if err := os.MkdirAll("/srv/storage", 0755); err != nil {
+	if err := os.MkdirAll(storageRoot(), 0755); err != nil {
 		return err
 	}
-	if err := os.MkdirAll("/srv/backups", 0755); err != nil {
+	if err := os.MkdirAll(backupRoot(), 0755); err != nil {
 		return err
 	}
 	configPath := envDefault("SINGLESERVER_CONFIG", "/etc/singleserver/apps.yml")
