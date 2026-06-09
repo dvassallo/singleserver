@@ -482,34 +482,36 @@ singleserver add https://github.com/you/my-app-3</pre>
 
     <section>
         <h2 id="how">How it works</h2>
+        <p>Single Server is opinionated: your server is the platform. The outside services each get one clear job, while the deploy truth, app config, logs, storage, and day-to-day commands stay on the machine you control.</p>
+
         <div class="how-list">
             <div class="how-item">
-                <strong>When you run the installer.</strong>
-                <p>The install script turns a blank Linux server into the control plane. It installs Docker for app isolation, Kamal for zero-downtime container rollouts, cloudflared for Cloudflare Tunnel, Tailscale for private server access, a local Docker registry for fast image handoff, and the Single Server daemon as a systemd service. It also creates the deploy user and the server-side config directory.</p>
+                <strong>What Single Server does.</strong>
+                <p>Single Server is the coordinator. Its installer puts Docker, Kamal, cloudflared, Tailscale, a local registry, a deploy user, and the daemon on your host. The daemon keeps the app registry in apps.yml, stores provider config under /etc/singleserver, checks out pushed commits, renders Kamal config from conventions, starts deploys, records logs, and gives you one CLI for status, domains, env vars, storage, backups, and diagnostics.</p>
             </div>
             <div class="how-item">
-                <strong>When the server connects providers.</strong>
-                <p>Cloudflare becomes the public edge for the server. Single Server creates a tunnel route for its setup and webhook endpoint, then later creates proxied DNS records and tunnel routes for each app domain. Cloudflare terminates TLS, hides the origin IP, and forwards plain HTTP through cloudflared to the server. Tailscale is set up separately for private SSH access, so you do not need to expose SSH to the public internet.</p>
+                <strong>What Cloudflare does.</strong>
+                <p>Cloudflare is the public edge. Single Server creates proxied DNS records and Cloudflare Tunnel routes for the setup page, GitHub webhook endpoint, and every app domain. Cloudflare terminates TLS, hides the server IP, and forwards plain HTTP through cloudflared to Kamal's proxy, so apps do not need to know about certificates.</p>
             </div>
             <div class="how-item">
-                <strong>When GitHub is connected.</strong>
-                <p>The setup page creates or connects a GitHub App with push webhooks, read access to repository contents, and write access to commit statuses. GitHub sends signed push notifications to your server's public webhook URL. The app's short-lived installation tokens let the daemon fetch the exact commit and report deploy status back to GitHub.</p>
+                <strong>What GitHub does.</strong>
+                <p>GitHub is the event source and code source. A GitHub App sends signed push webhooks to your server, grants short-lived installation tokens so the daemon can fetch the exact commit, and receives pending, success, or failure commit statuses. Repos do not need deploy keys, GitHub Actions runners, or per-repo deploy secrets.</p>
             </div>
             <div class="how-item">
-                <strong>When you add an app.</strong>
-                <p>singleserver add verifies that the GitHub App can access the repo, reads the default branch, checks that the repo defines a Docker image, infers the app name and domain, writes the app to apps.yml, configures Cloudflare DNS and tunnel routes, renders Kamal config from conventions, and starts the first deploy.</p>
+                <strong>What Tailscale does.</strong>
+                <p>Tailscale is the private admin path. It gives you Tailscale SSH to the host, so you can run singleserver commands and inspect the machine without exposing SSH to the public internet or managing workstation keys for every server.</p>
             </div>
             <div class="how-item">
-                <strong>When you push code.</strong>
-                <p>The daemon verifies the webhook signature, confirms that the repo and branch are allowed in apps.yml, checks out the pushed SHA on your server, and uses Kamal to build the image locally. Images go through the local registry, which avoids a CI queue and an external registry round trip.</p>
+                <strong>What Docker does.</strong>
+                <p>Docker is the app boundary. Each repo's Dockerfile defines the image, and each app runs in its own container. Single Server builds images on the same server and hands them through the local registry, avoiding an external CI queue and registry round trip.</p>
             </div>
             <div class="how-item">
-                <strong>When Kamal deploys.</strong>
-                <p>Kamal starts a replacement container, waits for the healthcheck, and only moves traffic after the new container is ready. Kamal's proxy routes requests from cloudflared to the right app container. Cloudflare keeps owning public TLS, while each app only needs to serve HTTP on its container port.</p>
+                <strong>What Kamal does.</strong>
+                <p>Kamal is the rollout engine. Single Server generates the deploy config, then uses Kamal to build, boot the replacement container, run the healthcheck, and move traffic only after the new version is ready. Kamal's proxy routes requests from cloudflared to the right app container.</p>
             </div>
             <div class="how-item">
-                <strong>When you manage the server.</strong>
-                <p>The same CLI shows status, logs, domains, diagnostics, env vars, storage mounts, and SQLite-friendly backups. Day-to-day operations stay on your server instead of being spread across repo secrets, CI runners, DNS dashboards, and one-off deploy scripts.</p>
+                <strong>What your app owns.</strong>
+                <p>Your app brings the normal app pieces: code, a Dockerfile, one web port, and a health endpoint. Single Server supplies the deploy plumbing around it, including domains, TLS at the edge, generated Kamal config, server-side env vars, persistent storage, logs, and backups.</p>
             </div>
         </div>
     </section>
