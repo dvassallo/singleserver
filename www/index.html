@@ -51,7 +51,22 @@
             font-weight: 700;
             letter-spacing: 0;
             text-transform: lowercase;
-            padding-right: 54px;
+            padding-right: 0;
+            display: inline-flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: nowrap;
+        }
+
+        .brand-icon {
+            display: block;
+            width: 100px;
+            height: auto;
+            flex: 0 0 auto;
+        }
+
+        .brand-wordmark {
+            white-space: nowrap;
         }
 
         .tagline {
@@ -334,7 +349,12 @@
 
         @media (max-width: 700px) {
             body { padding: 24px 14px; }
-            h1 { font-size: 3rem; }
+            h1 {
+                font-size: 2.25rem;
+                gap: 10px;
+                margin-top: 34px;
+            }
+            .brand-icon { width: 42px; }
             main { padding: 20px; box-shadow: 8px 8px 0 #000; }
             .github-link { top: 20px; right: 20px; }
             .tagline {
@@ -356,6 +376,14 @@
             .code-block { font-size: 0.92rem; }
         }
 
+        @media (max-width: 360px) {
+            h1 {
+                font-size: 1.95rem;
+                gap: 8px;
+            }
+            .brand-icon { width: 34px; }
+        }
+
         @media (prefers-reduced-motion: reduce) {
             .tagline,
             .tagline.is-changing,
@@ -375,7 +403,7 @@
     </a>
 
     <header>
-        <h1>single server</h1>
+        <h1><img class="brand-icon" src="server-single.svg" alt="" aria-hidden="true"><span class="brand-wordmark">single server</span></h1>
         <div
             class="tagline"
             data-slogan-rotator
