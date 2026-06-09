@@ -465,7 +465,7 @@ singleserver add https://github.com/you/my-app-3</pre>
             <div class="flow-row">
                 <span class="pill">git push</span>
                 <span class="connector">&rarr;</span>
-                <span class="result">GitHub sends a webhook to your server</span>
+                <span class="result">GitHub reaches your server through Tailscale Funnel</span>
             </div>
             <div class="flow-row">
                 <span class="pill">build</span>
@@ -487,19 +487,19 @@ singleserver add https://github.com/you/my-app-3</pre>
         <div class="how-list">
             <div class="how-item">
                 <strong>What Single Server does.</strong>
-                <p>Single Server installs Docker, Kamal, cloudflared, Tailscale, a local registry, a deploy user, and a small daemon on your host. The daemon listens for GitHub webhooks, checks that the pushed repo is listed in apps.yml, fetches the pushed commit into a server-side checkout, generates Kamal config, starts the deploy, and records what happened. The CLI reads from that same server-side state for status, logs, domains, env vars, storage, backups, and diagnostics.</p>
+                <p>Single Server installs Docker, Kamal, cloudflared, Tailscale, a local registry, a deploy user, and a small daemon on your host. The daemon listens on a local port. When GitHub sends a webhook, the daemon verifies it, checks the pushed repo and branch against the app list on your server, fetches that exact commit into a server-side checkout, generates the Kamal config, starts the deploy, and records the result. The CLI reads from the same server-side state for status, logs, domains, env vars, storage, backups, and diagnostics.</p>
             </div>
             <div class="how-item">
                 <strong>What Cloudflare does.</strong>
-                <p>Single Server creates proxied DNS records for your app domains, so visitors reach Cloudflare instead of your server IP directly. It also creates a Cloudflare Tunnel and runs cloudflared on your server. The tunnel gives Cloudflare a route to the setup page, GitHub webhook endpoint, and app traffic. Cloudflare terminates TLS, hides the server IP, and forwards plain HTTP through the tunnel to Kamal's proxy, so apps do not need to know about certificates.</p>
+                <p>Single Server creates proxied DNS records for your app domains, so visitors reach Cloudflare instead of your server IP directly. It also creates a Cloudflare Tunnel and runs cloudflared on your server. The tunnel gives Cloudflare a route to app traffic only. Cloudflare terminates TLS, hides the server IP, keeps CDN and DDoS protections in front, and forwards plain HTTP through the tunnel to Kamal's proxy, so apps do not need to know about certificates.</p>
             </div>
             <div class="how-item">
                 <strong>What GitHub does.</strong>
-                <p>GitHub tells your server when code changes. During setup, Single Server creates or connects a GitHub App: a GitHub integration installed on the repos you want to deploy. The app sends signed push webhooks to your server, gives the daemon short-lived tokens to fetch the exact commit, and lets Single Server mark the commit as pending, successful, or failed. Repos do not need deploy keys, GitHub Actions runners, or per-repo deploy secrets.</p>
+                <p>GitHub tells your server when code changes. During setup, Single Server creates or connects a GitHub App: a GitHub integration installed on the repos you want to deploy. The app sends signed push webhooks to the Tailscale Funnel URL for your server, gives the daemon short-lived tokens to fetch the exact commit, and lets Single Server mark the commit as pending, successful, or failed. Repos do not need deploy keys, GitHub Actions runners, or per-repo deploy secrets.</p>
             </div>
             <div class="how-item">
                 <strong>What Tailscale does.</strong>
-                <p>Single Server installs Tailscale and enables Tailscale SSH. That gives you a private way to SSH into the host, run singleserver commands, and inspect the machine without exposing SSH to the public internet or copying SSH keys to every workstation.</p>
+                <p>Single Server installs Tailscale, enables Tailscale SSH, and starts Tailscale Funnel for the daemon's local port. Tailscale SSH gives you a private way to SSH into the host, run singleserver commands, and inspect the machine without exposing SSH to the public internet or copying SSH keys to every workstation. Tailscale Funnel gives GitHub a public *.ts.net URL for the setup page and webhook endpoint without requiring a custom DNS record for the server itself.</p>
             </div>
             <div class="how-item">
                 <strong>What Docker does.</strong>

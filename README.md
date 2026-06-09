@@ -2,8 +2,8 @@
 
 Single Server is a tiny deploy daemon for running many small apps on one server.
 
-It receives GitHub App `push` webhooks through your server's public setup URL, checks a central allowlist, fetches the exact pushed SHA, and runs Kamal on the host.
-Cloudflare Tunnel is the public ingress for webhooks and app domains, with Tailscale used for private server access.
+It receives GitHub App `push` webhooks through Tailscale Funnel, checks a central allowlist, fetches the exact pushed SHA, and runs Kamal on the host.
+Cloudflare Tunnel is the public ingress for app domains, with Tailscale used for private server access and the GitHub setup/webhook endpoint.
 All `singleserver` commands are run on that host over SSH.
 
 For the intended user experience and roadmap, see
@@ -31,9 +31,10 @@ curl -fsSL https://singleserver.com/install.sh | sh
 ```
 
 The installer downloads the hosted Linux binary and installs Docker, Kamal,
-Tailscale, and cloudflared. It also runs first-run setup: Tailscale connection,
-Cloudflare Tunnel setup when credentials are available, GitHub App setup URL
-printing when a public hook URL exists, and `singleserver doctor`.
+Tailscale, and cloudflared. It also runs first-run setup: Tailscale SSH and
+Funnel setup, Cloudflare Tunnel setup for app domains when credentials are
+available, GitHub App setup URL printing when a Funnel URL exists, and
+`singleserver doctor`.
 
 ## Minimal config
 
@@ -120,14 +121,14 @@ Secrets live on the server, not in app repositories.
 ```
 
 The installer writes the daemon's service environment under
-`/etc/singleserver/singleserver.env`. `singleserver cloudflare connect` adds the
-public webhook URL after the tunnel is ready:
+`/etc/singleserver/singleserver.env`. `singleserver tailscale connect` adds the
+public setup and webhook URL after Tailscale Funnel is ready:
 
 ```sh
 SINGLESERVER_CONFIG=/etc/singleserver/apps.yml
 SINGLESERVER_STATE_DIR=/etc/singleserver
 SINGLESERVER_PORT=8787
-SINGLESERVER_PUBLIC_URL=https://hooks.example.com
+SINGLESERVER_PUBLIC_URL=https://your-server.your-tailnet.ts.net
 ```
 
 The GitHub App setup stores its webhook secret and private key in `/etc/singleserver`, so app repositories do not need GitHub Actions secrets, deploy keys, or repo-level webhooks.
@@ -145,10 +146,10 @@ The generated GitHub App is public/installable so the same app can be installed
 on each owner account or organization that contains deployable repositories.
 Single Server still only deploys repositories listed in `apps.yml`.
 
-The daemon includes a one-time setup page:
+The daemon includes a one-time setup page exposed through Tailscale Funnel:
 
 ```text
-https://hooks.example.com/setup/github-app?token=<setup-token>
+https://your-server.your-tailnet.ts.net/setup/github-app?token=<setup-token>
 ```
 
 That page creates the GitHub App from a manifest, exchanges GitHub's callback code, and stores the app credentials under `/etc/singleserver`.
@@ -174,16 +175,18 @@ singleserver restore fullsend 20260608T181500Z --yes
 singleserver remove fullsend --delete-repo --delete-storage --yes
 ```
 
-`singleserver tailscale connect` enables Tailscale SSH when possible. It can
-use `TS_AUTHKEY` or `TAILSCALE_AUTHKEY` for unattended server joins, or run
-`tailscale up --ssh` manually and then run `singleserver tailscale connect`.
+`singleserver tailscale connect` enables Tailscale SSH and Tailscale Funnel when
+possible. Funnel exposes the local daemon to GitHub at the server's `*.ts.net`
+URL, so the GitHub App setup page and signed push webhooks do not need a
+custom DNS record. The command can use `TS_AUTHKEY` or `TAILSCALE_AUTHKEY` for
+unattended server joins, or run `tailscale up --ssh` manually and then run
+`singleserver tailscale connect`.
 
 `singleserver cloudflare connect --zone <domain>` connects Cloudflare Tunnel
-and DNS for app domains. It stores the zone,
-tunnel credentials, a `hooks.<zone>` webhook hostname, and a `cloudflared`
-systemd service. Future app domains are created as proxied CNAME records to the
-tunnel and routed through `cloudflared`, so the server IP stays hidden and
-Cloudflare handles public TLS, proxying, CDN, and DDoS protection.
+and DNS for app domains. It stores the zone, tunnel credentials, and a
+`cloudflared` systemd service. Future app domains are created as proxied CNAME
+records to the tunnel and routed through `cloudflared`, so the server IP stays
+hidden and Cloudflare handles public TLS, proxying, CDN, and DDoS protection.
 
 `singleserver add <github-url>` validates GitHub App access, checks the repo's
 default branch and `Dockerfile`, appends the normalized `owner/repo` to

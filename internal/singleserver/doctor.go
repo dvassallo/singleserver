@@ -251,23 +251,8 @@ func doctorCloudflare(w io.Writer, allApps []AppConfig, selectedApps []AppConfig
 		failed = true
 	}
 
-	if tunnelMode && state.HookHost != "" {
-		if !doctorHostResolves(w, "cloudflare", "hook_dns", state.HookHost) {
-			failed = true
-		}
-		if cloudflareClient != nil && !doctorCloudflareDNSRecord(w, "cloudflare", "hook_cloudflare_dns", state.HookHost, state, cloudflareClient) {
-			failed = true
-		}
-		if service := routes[strings.ToLower(state.HookHost)]; service == "" {
-			fmt.Fprintf(w, "cloudflare\thook_route\tfailed\t%s missing from %s\n", state.HookHost, state.ConfigFile)
-			failed = true
-		} else {
-			fmt.Fprintf(w, "cloudflare\thook_route\tok\t%s -> %s\n", state.HookHost, service)
-		}
-	}
-
 	if tunnelMode {
-		expectedHosts := expectedCloudflaredHosts(state.HookHost, allApps)
+		expectedHosts := expectedCloudflaredHosts(allApps)
 		for _, host := range staleCloudflaredHosts(routes, expectedHosts) {
 			fmt.Fprintf(w, "cloudflare\tstale_route\tfailed\t%s -> %s not in apps.yml\n", host, routes[host])
 			failed = true
@@ -554,11 +539,8 @@ func appsHaveHosts(apps []AppConfig) bool {
 	return false
 }
 
-func expectedCloudflaredHosts(hookHost string, apps []AppConfig) map[string]bool {
+func expectedCloudflaredHosts(apps []AppConfig) map[string]bool {
 	hosts := map[string]bool{}
-	if strings.TrimSpace(hookHost) != "" {
-		hosts[strings.ToLower(strings.TrimSpace(hookHost))] = true
-	}
 	for _, app := range apps {
 		for _, host := range app.Hosts {
 			host = strings.TrimSpace(host)

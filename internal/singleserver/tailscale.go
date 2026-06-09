@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,7 +14,8 @@ import (
 )
 
 type TailscaleState struct {
-	Hostname string `json:"hostname"`
+	Hostname  string `json:"hostname"`
+	FunnelURL string `json:"funnel_url"`
 }
 
 type tailscaleStatus struct {
@@ -76,7 +78,36 @@ func cliTailscaleConnect(args []string, w io.Writer) error {
 		fmt.Fprintln(w, "tailscale\tssh\tok")
 	}
 
-	return writeTailscaleStateFromStatus(status)
+	port := envDefault("SINGLESERVER_PORT", "8787")
+	if err := commandRunFunc(30*time.Second, "tailscale", "funnel", "--bg", "--yes", port); err != nil {
+		fmt.Fprintf(w, "tailscale\tfunnel\tpending\t%s\n", err)
+		return writeTailscaleStateFromStatus(status, "")
+	}
+	status, err = currentTailscaleStatus()
+	if err != nil {
+		return err
+	}
+	funnelURL := tailscaleFunnelURL(status)
+	if funnelURL == "" {
+		fmt.Fprintln(w, "tailscale\tfunnel\tpending\tcould not determine Funnel URL from tailscale status")
+		return writeTailscaleStateFromStatus(status, "")
+	}
+	if err := writeTailscaleStateFromStatus(status, funnelURL); err != nil {
+		return err
+	}
+	env, err := loadServiceEnv()
+	if err != nil {
+		return err
+	}
+	env["SINGLESERVER_PUBLIC_URL"] = funnelURL
+	if err := writeServiceEnv(env); err != nil {
+		return err
+	}
+	if err := commandRunFunc(10*time.Second, "systemctl", "restart", "singleserver.service"); err != nil {
+		return err
+	}
+	fmt.Fprintf(w, "tailscale\tfunnel\tok\t%s -> 127.0.0.1:%s\n", funnelURL, port)
+	return nil
 }
 
 func currentTailscaleStatus() (*tailscaleStatus, error) {
@@ -108,9 +139,18 @@ func tailscaleStatusName(status *tailscaleStatus) string {
 	return "-"
 }
 
-func writeTailscaleStateFromStatus(status *tailscaleStatus) error {
+func tailscaleFunnelURL(status *tailscaleStatus) string {
+	host := tailscaleStatusName(status)
+	if host == "-" || !strings.Contains(host, ".ts.net") {
+		return ""
+	}
+	return "https://" + host
+}
+
+func writeTailscaleStateFromStatus(status *tailscaleStatus, funnelURL string) error {
 	state := &TailscaleState{
-		Hostname: tailscaleStatusName(status),
+		Hostname:  tailscaleStatusName(status),
+		FunnelURL: strings.TrimRight(funnelURL, "/"),
 	}
 	return writeTailscaleState(state)
 }
@@ -180,5 +220,34 @@ func doctorTailscale(w io.Writer, appCount int) bool {
 		return appCount == 0
 	}
 	fmt.Fprintf(w, "tailscale\tstatus\tok\t%s\n", tailscaleStatusName(status))
+
+	env, _ := loadServiceEnv()
+	publicURL := strings.TrimRight(env["SINGLESERVER_PUBLIC_URL"], "/")
+	if publicURL == "" {
+		state, _ := loadTailscaleState()
+		publicURL = strings.TrimRight(state.FunnelURL, "/")
+	}
+	if publicURL == "" {
+		status := "pending"
+		if appCount > 0 {
+			status = "failed"
+		}
+		fmt.Fprintf(w, "tailscale\tfunnel\t%s\trun `singleserver tailscale connect`\n", status)
+		return appCount == 0
+	}
+	parsed, err := url.Parse(publicURL)
+	if err != nil || parsed.Scheme != "https" || !strings.HasSuffix(parsed.Hostname(), ".ts.net") {
+		fmt.Fprintf(w, "tailscale\tfunnel\tfailed\texpected Tailscale Funnel URL, got %s\n", publicURL)
+		return false
+	}
+	if err := commandRunFunc(5*time.Second, "tailscale", "funnel", "status", "--json"); err != nil {
+		status := "pending"
+		if appCount > 0 {
+			status = "failed"
+		}
+		fmt.Fprintf(w, "tailscale\tfunnel\t%s\t%s\n", status, err)
+		return appCount == 0
+	}
+	fmt.Fprintf(w, "tailscale\tfunnel\tok\t%s\n", publicURL)
 	return true
 }

@@ -56,12 +56,11 @@ func cliCloudflareConnect(args []string, w io.Writer) error {
 	fs.SetOutput(w)
 	zoneName := fs.String("zone", defaultCloudflareZone(), "Cloudflare zone name")
 	tunnelName := fs.String("tunnel", "", "Cloudflare tunnel name")
-	hookHost := fs.String("hook-host", "", "webhook hostname")
 	if err := fs.Parse(normalizeFlagArgs(args, cloudflareFlagTakesValue)); err != nil {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: singleserver cloudflare connect [--zone example.com] [--tunnel singleserver] [--hook-host hooks.example.com]")
+		return errors.New("usage: singleserver cloudflare connect [--zone example.com] [--tunnel singleserver]")
 	}
 	if err := ensureBaseFiles(); err != nil {
 		return err
@@ -92,12 +91,7 @@ func cliCloudflareConnect(args []string, w io.Writer) error {
 	state.ZoneID = zone.ID
 	state.ZoneName = zone.Name
 	applyCloudflareTunnelName(state, *tunnelName, tunnelNameSet)
-	if strings.TrimSpace(*hookHost) != "" {
-		state.HookHost = strings.TrimSpace(*hookHost)
-	}
-	if state.HookHost == "" {
-		state.HookHost = "hooks." + zone.Name
-	}
+	state.HookHost = ""
 	if state.CredentialsFile == "" {
 		state.CredentialsFile = "/etc/cloudflared/singleserver.json"
 	}
@@ -140,10 +134,7 @@ func cliCloudflareConnect(args []string, w io.Writer) error {
 	if err := writeCloudflaredCredentials(state.CredentialsFile, state); err != nil {
 		return err
 	}
-	if err := ensureCloudflaredRoute(state.ConfigFile, state.TunnelID, state.CredentialsFile, state.HookHost, "http://127.0.0.1:"+envDefault("SINGLESERVER_PORT", "8787")); err != nil {
-		return err
-	}
-	if err := client.upsertCNAME(state.ZoneID, state.HookHost, state.TunnelID+".cfargotunnel.com"); err != nil {
+	if err := ensureCloudflaredConfig(state.ConfigFile, state.TunnelID, state.CredentialsFile); err != nil {
 		return err
 	}
 	if err := writeCloudflareState(state); err != nil {
@@ -152,27 +143,16 @@ func cliCloudflareConnect(args []string, w io.Writer) error {
 	if err := pruneStaleCloudflareRoutes(client, state, w); err != nil {
 		return err
 	}
-	env, err := loadServiceEnv()
-	if err != nil {
-		return err
-	}
-	env["SINGLESERVER_PUBLIC_URL"] = "https://" + state.HookHost
-	if err := writeServiceEnv(env); err != nil {
-		return err
-	}
 	if err := writeCloudflaredService(state.ConfigFile); err != nil {
 		return err
 	}
 	if err := commandRunFunc(10*time.Second, "systemctl", "daemon-reload"); err != nil {
 		return err
 	}
-	if err := commandRunFunc(10*time.Second, "systemctl", "restart", "singleserver.service"); err != nil {
-		return err
-	}
 	if err := commandRunFunc(10*time.Second, "systemctl", "enable", "--now", "cloudflared-singleserver.service"); err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "cloudflare\tdns\tok\t%s -> %s.cfargotunnel.com\n", state.HookHost, state.TunnelID)
+	fmt.Fprintf(w, "cloudflare\tingress\tok\tapps -> %s.cfargotunnel.com\n", state.TunnelID)
 	return nil
 }
 
@@ -329,7 +309,7 @@ func cloudflareFlagTakesValue(arg string) bool {
 	if before, _, ok := strings.Cut(name, "="); ok {
 		name = before
 	}
-	return name == "zone" || name == "tunnel" || name == "hook-host"
+	return name == "zone" || name == "tunnel"
 }
 
 func githubFlagTakesValue(arg string) bool {

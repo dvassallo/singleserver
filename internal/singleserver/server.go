@@ -45,7 +45,7 @@ func Run(logger *log.Logger) error {
 	server := &Server{
 		logger:        logger,
 		configPath:    envDefault("SINGLESERVER_CONFIG", "/etc/singleserver/apps.yml"),
-		publicURL:     strings.TrimRight(envDefault("SINGLESERVER_PUBLIC_URL", "https://hooks.singleserver.com"), "/"),
+		publicURL:     strings.TrimRight(envDefault("SINGLESERVER_PUBLIC_URL", "http://127.0.0.1:"+envDefault("SINGLESERVER_PORT", "8787")), "/"),
 		setupToken:    os.Getenv("SINGLESERVER_SETUP_TOKEN"),
 		github:        github,
 		deployManager: NewDeployManager(logger, github),

@@ -87,7 +87,7 @@ Usage:
   singleserver version
   singleserver tailscale connect [--auth-key <key>] [--hostname <name>]
   singleserver github connect
-  singleserver cloudflare connect [--zone example.com] [--tunnel singleserver] [--hook-host hooks.example.com]
+  singleserver cloudflare connect [--zone example.com] [--tunnel singleserver]
   singleserver list
   singleserver status
   singleserver add <github-url> [options]
@@ -105,7 +105,7 @@ Usage:
 
 Commands:
   version        Print the installed Single Server version.
-  tailscale      Connect Tailscale SSH for private server access.
+  tailscale      Connect Tailscale SSH and Funnel for setup/webhooks.
   github         Repair or print the GitHub App setup URL.
   cloudflare     Connect Cloudflare Tunnel and DNS for public app ingress.
   list           Show configured apps.

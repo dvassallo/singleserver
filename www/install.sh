@@ -141,7 +141,7 @@ elif grep -q "^SINGLESERVER_PUBLIC_URL=" /etc/singleserver/singleserver.env 2>/d
     echo "github pending: run singleserver github connect"
   fi
 else
-  echo "github pending: connect Cloudflare first, then run singleserver github connect"
+  echo "github pending: connect Tailscale first, then run singleserver github connect"
 fi
 
 /usr/local/bin/singleserver doctor || true

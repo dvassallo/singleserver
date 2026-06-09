@@ -202,15 +202,15 @@ func TestDoctorDeployConfigFailsOnInvalidServerSideEnv(t *testing.T) {
 func TestCloudflaredRoutes(t *testing.T) {
 	config := &cloudflaredConfig{
 		Ingress: []cloudflaredIngress{
-			{Hostname: "Hooks.Example.com", Service: "http://127.0.0.1:8787"},
+			{Hostname: "Admin.Example.com", Service: "http://127.0.0.1:8787"},
 			{Hostname: "app.example.com", Service: "http://127.0.0.1:80"},
 			{Service: "http_status:404"},
 		},
 	}
 
 	routes := cloudflaredRoutes(config)
-	if routes["hooks.example.com"] != "http://127.0.0.1:8787" {
-		t.Fatalf("unexpected hook route: %#v", routes)
+	if routes["admin.example.com"] != "http://127.0.0.1:8787" {
+		t.Fatalf("unexpected admin route: %#v", routes)
 	}
 	if routes["app.example.com"] != "http://127.0.0.1:80" {
 		t.Fatalf("unexpected app route: %#v", routes)
@@ -230,15 +230,18 @@ func TestAppsHaveHosts(t *testing.T) {
 }
 
 func TestExpectedCloudflaredHosts(t *testing.T) {
-	hosts := expectedCloudflaredHosts("Hooks.Example.com", []AppConfig{
+	hosts := expectedCloudflaredHosts([]AppConfig{
 		{Repo: "dvassallo/fullsend", Name: "fullsend", Hosts: []string{"Fullsend.Game", "fullsend.assetstacks.com"}},
 		{Repo: "smallbets/userbase-homepage", Name: "userbase-homepage"},
 	})
 
-	for _, host := range []string{"hooks.example.com", "fullsend.game", "fullsend.assetstacks.com"} {
+	for _, host := range []string{"fullsend.game", "fullsend.assetstacks.com"} {
 		if !hosts[host] {
 			t.Fatalf("expected host %s in %#v", host, hosts)
 		}
+	}
+	if hosts["admin.example.com"] {
+		t.Fatalf("unexpected unrelated host set: %#v", hosts)
 	}
 	if hosts["userbase.com"] {
 		t.Fatalf("unexpected host set: %#v", hosts)
@@ -247,11 +250,11 @@ func TestExpectedCloudflaredHosts(t *testing.T) {
 
 func TestStaleCloudflaredHosts(t *testing.T) {
 	routes := map[string]string{
-		"hooks.example.com": "http://127.0.0.1:8787",
-		"old.example.com":   "http://127.0.0.1:80",
-		"z.example.com":     "http://127.0.0.1:80",
+		"app.example.com": "http://127.0.0.1:80",
+		"old.example.com": "http://127.0.0.1:80",
+		"z.example.com":   "http://127.0.0.1:80",
 	}
-	expected := map[string]bool{"hooks.example.com": true}
+	expected := map[string]bool{"app.example.com": true}
 
 	got := staleCloudflaredHosts(routes, expected)
 	if len(got) != 2 || got[0] != "old.example.com" || got[1] != "z.example.com" {
@@ -268,7 +271,6 @@ func TestDoctorCloudflareChecksCNAMERecords(t *testing.T) {
   "api_token": "token",
   "zone_id": "zone",
   "tunnel_id": "tunnel",
-  "hook_host": "hooks.example.com",
   "credentials_file": "`+credentialsPath+`",
   "config_file": "`+configPath+`"
 }`), 0600); err != nil {
@@ -278,8 +280,6 @@ func TestDoctorCloudflareChecksCNAMERecords(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(configPath, []byte(`ingress:
-  - hostname: hooks.example.com
-    service: http://127.0.0.1:8787
   - hostname: app.example.com
     service: http://127.0.0.1:80
   - service: http_status:404
@@ -299,9 +299,6 @@ func TestDoctorCloudflareChecksCNAMERecords(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected Cloudflare doctor to pass, got:\n%s", out.String())
 	}
-	if !strings.Contains(out.String(), "cloudflare\thook_cloudflare_dns\tok\thooks.example.com -> tunnel.cfargotunnel.com") {
-		t.Fatalf("expected hook Cloudflare DNS ok output, got:\n%s", out.String())
-	}
 	if !strings.Contains(out.String(), "app\tcloudflare_dns\tok\tapp.example.com -> tunnel.cfargotunnel.com") {
 		t.Fatalf("expected app Cloudflare DNS ok output, got:\n%s", out.String())
 	}
@@ -316,7 +313,6 @@ func TestDoctorCloudflareFailsOnMismatchedCNAMERecord(t *testing.T) {
   "api_token": "token",
   "zone_id": "zone",
   "tunnel_id": "tunnel",
-  "hook_host": "hooks.example.com",
   "credentials_file": "`+credentialsPath+`",
   "config_file": "`+configPath+`"
 }`), 0600); err != nil {
@@ -326,8 +322,6 @@ func TestDoctorCloudflareFailsOnMismatchedCNAMERecord(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(configPath, []byte(`ingress:
-  - hostname: hooks.example.com
-    service: http://127.0.0.1:8787
   - hostname: app.example.com
     service: http://127.0.0.1:80
   - service: http_status:404

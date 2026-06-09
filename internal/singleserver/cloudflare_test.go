@@ -3,6 +3,7 @@ package singleserver
 import (
 	"bytes"
 	"errors"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -32,6 +33,37 @@ func TestWriteCloudflaredCredentialsWritesFile(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestEnsureCloudflaredConfigPreservesAppRoutes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "cloudflared.yml")
+	if err := os.WriteFile(path, []byte(`tunnel: old
+credentials-file: /old.json
+ingress:
+  - hostname: app.example.com
+    service: http://127.0.0.1:80
+  - service: http_status:404
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ensureCloudflaredConfig(path, "new-tunnel", "/new.json"); err != nil {
+		t.Fatal(err)
+	}
+	config, err := readCloudflaredConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.Tunnel != "new-tunnel" || config.CredentialsFile != "/new.json" {
+		t.Fatalf("unexpected tunnel config: %#v", config)
+	}
+	routes := cloudflaredRoutes(config)
+	if routes["app.example.com"] != "http://127.0.0.1:80" {
+		t.Fatalf("app route not preserved: %#v", routes)
+	}
+	if got := config.Ingress[len(config.Ingress)-1]; got.Hostname != "" || got.Service != "http_status:404" {
+		t.Fatalf("expected fallback route last, got %#v", got)
 	}
 }
 

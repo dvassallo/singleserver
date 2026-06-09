@@ -349,6 +349,32 @@ func ensureCloudflaredRoute(configPath string, tunnelID string, credentialsFile 
 	return writeFileAtomic(configPath, buf.Bytes())
 }
 
+func ensureCloudflaredConfig(configPath string, tunnelID string, credentialsFile string) error {
+	config := cloudflaredConfig{
+		Tunnel:          tunnelID,
+		CredentialsFile: credentialsFile,
+	}
+	if body, err := os.ReadFile(configPath); err == nil && len(bytes.TrimSpace(body)) > 0 {
+		_ = yaml.Unmarshal(body, &config)
+	}
+	config.Tunnel = tunnelID
+	config.CredentialsFile = credentialsFile
+	if len(config.Ingress) == 0 || config.Ingress[len(config.Ingress)-1].Hostname != "" {
+		config.Ingress = append(config.Ingress, cloudflaredIngress{Service: "http_status:404"})
+	}
+
+	var buf bytes.Buffer
+	encoder := yaml.NewEncoder(&buf)
+	encoder.SetIndent(2)
+	if err := encoder.Encode(config); err != nil {
+		return err
+	}
+	if err := encoder.Close(); err != nil {
+		return err
+	}
+	return writeFileAtomic(configPath, buf.Bytes())
+}
+
 func removeCloudflaredRoute(configPath string, hostname string) error {
 	body, err := os.ReadFile(configPath)
 	if err != nil {
@@ -409,7 +435,7 @@ func pruneStaleCloudflareRoutes(client *CloudflareClient, state *CloudflareState
 		}
 		return err
 	}
-	expected := expectedCloudflaredHosts(state.HookHost, config.Apps)
+	expected := expectedCloudflaredHosts(config.Apps)
 	routes := cloudflaredRoutes(cloudflaredConfig)
 	for _, host := range staleCloudflaredHosts(routes, expected) {
 		if state.ZoneID != "" && client != nil {

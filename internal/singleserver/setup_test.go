@@ -75,17 +75,30 @@ func TestTailscaleConnectStoresHostname(t *testing.T) {
 	if !strings.Contains(string(body), `"hostname": "assetstacks.example.ts.net"`) {
 		t.Fatalf("hostname not stored:\n%s", body)
 	}
-	if strings.Contains(strings.Join(runCommands, "\n"), "funnel") {
-		t.Fatalf("unexpected funnel command: %#v", runCommands)
+	if !strings.Contains(string(body), `"funnel_url": "https://assetstacks.example.ts.net"`) {
+		t.Fatalf("funnel URL not stored:\n%s", body)
+	}
+	envBody, err := os.ReadFile(filepath.Join(dir, "singleserver.env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(envBody), "SINGLESERVER_PUBLIC_URL='https://assetstacks.example.ts.net'") {
+		t.Fatalf("public URL not stored in env:\n%s", envBody)
+	}
+	if !strings.Contains(strings.Join(runCommands, "\n"), "tailscale funnel --bg --yes 8787") {
+		t.Fatalf("expected funnel command: %#v", runCommands)
 	}
 	if !strings.Contains(out.String(), "tailscale\tssh\tok") {
 		t.Fatalf("ssh output missing:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "tailscale\tfunnel\tok\thttps://assetstacks.example.ts.net -> 127.0.0.1:8787") {
+		t.Fatalf("funnel output missing:\n%s", out.String())
 	}
 }
 
 func TestSetupGitHubAppManifestIsPublic(t *testing.T) {
 	server := &Server{
-		publicURL:  "https://hooks.example.com",
+		publicURL:  "https://assetstacks.example.ts.net",
 		setupToken: "setup-token",
 	}
 	req := httptest.NewRequest("GET", "/setup/github-app?token=setup-token", nil)

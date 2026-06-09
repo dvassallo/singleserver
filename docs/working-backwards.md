@@ -38,8 +38,10 @@ Single Server has a few moving parts:
 
 - **Server:** one VPS running Docker, Kamal, Tailscale, cloudflared, and the
   Single Server daemon. This is where every `singleserver` command runs.
-- **Tailscale:** the private admin network. Operators can reach the host with
-  Tailscale SSH without managing workstation SSH keys.
+- **Tailscale:** the private admin network and webhook exposure. Operators can
+  reach the host with Tailscale SSH without managing workstation SSH keys, and
+  Tailscale Funnel exposes the local setup/webhook endpoint to GitHub at a
+  stable `*.ts.net` URL.
 - **GitHub App:** the event source and deploy credential provider. Push
   webhooks trigger deploys; installation tokens fetch code and set commit
   statuses.
@@ -99,18 +101,17 @@ The installer should:
 - Create `/etc/singleserver`
 - Create `/etc/singleserver/apps.yml`
 - Create `/etc/singleserver/singleserver.env`
-- Connect or repair Tailscale
-- Connect Cloudflare Tunnel and DNS when a token is available
-- Print the GitHub App setup URL once a public hook URL exists
+- Connect or repair Tailscale SSH and Funnel
+- Connect Cloudflare Tunnel and DNS for app domains when a token is available
+- Print the GitHub App setup URL once a Tailscale Funnel URL exists
 - Run `singleserver doctor`
 
 The command should be safe to rerun. If a provider is missing credentials or
 needs browser approval, the installer should print the specific repair command
 and continue to diagnostics.
 
-The host itself should not need a user-facing domain. If the implementation
-needs a stable webhook or control URL, the installer should use a small
-Cloudflare hostname such as `hooks.example.com`. App domains should be selected
+The host itself should not need a user-facing domain. Tailscale Funnel supplies
+the stable setup and webhook URL for the daemon. App domains should be selected
 or inferred when apps are added.
 
 ### 3. Repair Provider Connections
@@ -146,12 +147,14 @@ After the browser approval, the CLI should write:
 All follow-up commands continue to run on the server over SSH.
 
 `singleserver tailscale connect` should install or repair the server's
-Tailscale connection and enable Tailscale SSH when possible.
+Tailscale connection, enable Tailscale SSH when possible, enable Tailscale
+Funnel for the daemon's local port, and store the resulting public `*.ts.net`
+URL for GitHub setup and webhooks.
 
 `singleserver cloudflare connect --zone <domain>` should connect app-domain DNS
 automation for one Cloudflare zone. It should create or reuse a Cloudflare
-Tunnel, configure `cloudflared`, store a `hooks.<zone>` setup/webhook hostname,
-and create proxied CNAME records to the tunnel for future app domains.
+Tunnel, configure `cloudflared`, and prepare proxied CNAME records to the tunnel
+for future app domains.
 
 ## Adding Apps
 
@@ -437,7 +440,7 @@ Status key:
 | `singleserver doctor` | Built | Checks daemon, config, Docker, local deploy user/SSH, local registry, disk, Tailscale, Cloudflare Tunnel routes, Cloudflare DNS targets, resolver DNS, GitHub App access, checkouts, deploy config, last deploy, and healthchecks. |
 | Installer script | Built | `https://singleserver.com/install.sh` installs Docker, Kamal, Tailscale, cloudflared, the hosted Single Server binary, the systemd service, local registry, base config, first-run provider setup, and `doctor`. |
 | `singleserver github connect` | Built | Repair command that prints the GitHub App setup URL for the public/installable Single Server GitHub App. |
-| `singleserver tailscale connect` | Built | Repair command that connects Tailscale SSH for private server access. |
+| `singleserver tailscale connect` | Built | Repair command that connects Tailscale SSH for private server access and Tailscale Funnel for GitHub setup/webhooks. |
 | DNS provider integration | Built | Cloudflare DNS is first-class for app domains. |
 | Ingress setup | Built | App domains route through proxied Cloudflare Tunnel records by default; Kamal's proxy handles host routing to containers behind the tunnel. |
 | App domain management | Built | Add/remove/list/verify hosts after app creation; add/remove deploy by default and support `--no-deploy`. |
