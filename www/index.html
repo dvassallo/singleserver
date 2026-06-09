@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Single Server - Git push to production in under 5 seconds</title>
-    <meta name="description" content="Single Server is the easiest way to run multiple apps on a single server, with fast GitHub deploys and one central control plane.">
+    <meta name="description" content="The easiest way to deploy multiple GitHub repos on a single server with Cloudflare, Tailscale, and Kamal.">
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -239,6 +239,11 @@
             white-space: nowrap;
         }
 
+        .code-block.multiline {
+            line-height: 1.7;
+            white-space: pre;
+        }
+
         .code-block span { color: var(--secondary); }
         .code-block .keyword { color: var(--primary); }
         .code-block .flag { color: var(--tertiary); }
@@ -268,6 +273,28 @@
         }
         .copy-btn svg { width: 16px; height: 16px; display: block; }
 
+        .how-list {
+            margin-top: 16px;
+            border-top: 2px solid #000;
+        }
+
+        .how-item {
+            padding: 18px 0;
+            border-bottom: 2px solid #000;
+        }
+
+        .how-item strong {
+            display: block;
+            font-size: 1.12rem;
+            margin-bottom: 6px;
+        }
+
+        .how-item p {
+            font-size: 1.05rem;
+            line-height: 1.6;
+            color: #222;
+        }
+
         .feature-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -294,7 +321,8 @@
             color: #222;
         }
 
-        .feature code {
+        .feature code,
+        .how-item code {
             font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
             background: var(--highlight);
             padding: 1px 4px;
@@ -360,18 +388,18 @@
             data-slogan-rotator
             data-slogans='["Git push to production in &lt;5 seconds.","Zero-downtime deploys.","Multiple apps on one server.","Automatic Docker containerization.","Zero-overhead go infrastructure."]'
         ><span class="tagline-text">Git push to production in &lt;5 seconds.</span></div>
-        <p class="lede">The easiest way to run multiple apps on a single server. Install once, add apps, and manage everything from your server.</p>
+        <p class="lede">The easiest way to deploy multiple GitHub repos on a single server with Cloudflare, Tailscale, and Kamal. All you need is a single Linux server.</p>
     </header>
 
     <section>
-        <h2><a href="#commands">Use it</a></h2>
-        <p>Every command runs on your server. The installer connects Tailscale, Cloudflare Tunnel, and GitHub; app domains route through Cloudflare by default.</p>
+        <h2><a href="#commands">Get going</a></h2>
+        <p>Every command runs on your server.</p>
 
         <div class="commands-list" id="commands">
             <div class="command-item">
-                <p class="step-desc">SSH to your Linux server.</p>
+                <p class="step-desc">SSH to your Linux server:</p>
                 <div class="code-wrapper">
-                    <code class="code-block">ssh root@203.0.113.10</code>
+                    <code class="code-block">ssh root@&lt;server_ip&gt;</code>
                     <button class="copy-btn" aria-label="Copy to clipboard">
                         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
                     </button>
@@ -379,7 +407,7 @@
             </div>
 
             <div class="command-item">
-                <p class="step-desc">Install and set up Single Server.</p>
+                <p class="step-desc">Set up your server:</p>
                 <div class="code-wrapper">
                     <code class="code-block">curl -fsSL <span>https://singleserver.com/install.sh</span> | sh</code>
                     <button class="copy-btn" aria-label="Copy to clipboard">
@@ -389,19 +417,11 @@
             </div>
 
             <div class="command-item">
-                <p class="step-desc">Add your apps.</p>
+                <p class="step-desc">Add your apps:</p>
                 <div class="code-wrapper">
-                    <code class="code-block">singleserver <span class="keyword">add</span> <span>https://github.com/you/my-app</span></code>
-                    <button class="copy-btn" aria-label="Copy to clipboard">
-                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
-                    </button>
-                </div>
-            </div>
-
-            <div class="command-item">
-                <p class="step-desc">Check what is running.</p>
-                <div class="code-wrapper">
-                    <code class="code-block">singleserver <span class="keyword">status</span></code>
+                    <pre class="code-block multiline">singleserver add https://github.com/you/my-app-1
+singleserver add https://github.com/you/my-app-2
+singleserver add https://github.com/you/my-app-3</pre>
                     <button class="copy-btn" aria-label="Copy to clipboard">
                         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
                     </button>
@@ -412,7 +432,7 @@
 
     <section>
         <h2><a href="#flow">What happens next</a></h2>
-        <p>Whenever you push to GitHub, your server fetches the commit, builds it locally, and uses Kamal to roll it out with zero downtime.</p>
+        <p>Whenever you push to GitHub, your server fetches the commit, builds it locally, and uses Kamal to roll it out with zero downtime. Each app runs isolated in its own Docker container.</p>
 
         <div class="flow-box" id="flow">
             <div class="flow-row">
@@ -429,6 +449,32 @@
                 <span class="pill">live</span>
                 <span class="connector">&rarr;</span>
                 <span class="result">Kamal rolls it out with zero downtime</span>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <h2><a href="#how">How it works</a></h2>
+        <div class="how-list" id="how">
+            <div class="how-item">
+                <strong>Install once on your server.</strong>
+                <p>The installer prepares the machine with Docker, Kamal, Tailscale, cloudflared, a local Docker registry, a deploy user, and the Single Server daemon. The daemon runs under systemd, listens locally, and keeps its state in <code>/etc/singleserver</code>.</p>
+            </div>
+            <div class="how-item">
+                <strong>Connect the outside world.</strong>
+                <p>Cloudflare Tunnel exposes the small public surface your server needs: GitHub webhooks, setup pages, and app domains. Tailscale gives you private SSH access to the machine. GitHub sends signed push webhooks to your server, and the GitHub App gives Single Server short-lived tokens to fetch code and report commit status.</p>
+            </div>
+            <div class="how-item">
+                <strong>Add repos from the host.</strong>
+                <p><code>singleserver add</code> checks that the GitHub App can read the repo, confirms there is a <code>Dockerfile</code>, infers the app name and default domain, writes the app to <code>/etc/singleserver/apps.yml</code>, and configures Cloudflare DNS and tunnel routes for the app.</p>
+            </div>
+            <div class="how-item">
+                <strong>Build and deploy locally.</strong>
+                <p>On each push, Single Server verifies the webhook, checks the repo against <code>apps.yml</code>, fetches the exact pushed commit, and asks Kamal to build the Docker image on the same server. Images go through the local registry, so deploys avoid an external CI queue and registry round trip.</p>
+            </div>
+            <div class="how-item">
+                <strong>Swap traffic safely.</strong>
+                <p>Kamal starts the replacement container, waits for the healthcheck, and only then moves traffic to the new version. App logs, deploy logs, domains, server-side env vars, persistent storage, SQLite-friendly backups, and diagnostics stay available from the same <code>singleserver</code> CLI.</p>
             </div>
         </div>
     </section>
