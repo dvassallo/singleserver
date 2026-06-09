@@ -108,6 +108,7 @@ func TestTailscaleConnectStoresHostname(t *testing.T) {
 }
 
 func TestSetupGitHubAppManifestIsPublic(t *testing.T) {
+	t.Setenv("SINGLESERVER_GITHUB_APP_NAME", "Single Server test-host")
 	server := &Server{
 		publicURL:  "https://assetstacks.example.ts.net",
 		setupToken: "setup-token",
@@ -124,6 +125,26 @@ func TestSetupGitHubAppManifestIsPublic(t *testing.T) {
 	manifest := setupManifestFromBody(t, body)
 	if manifest["public"] != true {
 		t.Fatalf("expected public manifest, got %#v", manifest["public"])
+	}
+	if manifest["name"] != "Single Server test-host" {
+		t.Fatalf("expected custom app name, got %#v", manifest["name"])
+	}
+}
+
+func TestGitHubAppNameFromHostname(t *testing.T) {
+	tests := []struct {
+		hostname string
+		want     string
+	}{
+		{hostname: "ubuntu-2gb-hil-2", want: "Single Server ubuntu-2gb-hil-2"},
+		{hostname: "Single_Server.local", want: "Single Server single-server-local"},
+		{hostname: "", want: "Single Server"},
+	}
+
+	for _, test := range tests {
+		if got := githubAppNameFromHostname(test.hostname); got != test.want {
+			t.Fatalf("githubAppNameFromHostname(%q) = %q, want %q", test.hostname, got, test.want)
+		}
 	}
 }
 

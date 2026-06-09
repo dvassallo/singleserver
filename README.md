@@ -18,7 +18,7 @@ Product:     Single Server
 Repo:        dvassallo/singleserver
 Binary:      singleserver
 Daemon:      singleserver.service
-GitHub App:  Single Server
+GitHub App:  Single Server <hostname>
 ```
 
 ## Install

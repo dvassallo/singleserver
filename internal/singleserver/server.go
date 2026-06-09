@@ -156,7 +156,7 @@ func (s *Server) handleSetupGitHubApp(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "bad_setup_token"})
 		return
 	}
-	appName := "Single Server"
+	appName := defaultGitHubAppName()
 	manifest := map[string]any{
 		"name":        appName,
 		"url":         "https://singleserver.com",
@@ -186,6 +186,23 @@ func (s *Server) handleSetupGitHubApp(w http.ResponseWriter, r *http.Request) {
   <button type="submit">Create GitHub App</button>
 </form>
 `, html.EscapeString(appName), html.EscapeString(state), html.EscapeString(string(manifestJSON)))
+}
+
+func defaultGitHubAppName() string {
+	name := strings.TrimSpace(os.Getenv("SINGLESERVER_GITHUB_APP_NAME"))
+	if name != "" {
+		return name
+	}
+	hostname, _ := os.Hostname()
+	return githubAppNameFromHostname(hostname)
+}
+
+func githubAppNameFromHostname(hostname string) string {
+	label := dnsLabelFromAppName(hostname)
+	if label == "" {
+		return "Single Server"
+	}
+	return "Single Server " + label
 }
 
 func (s *Server) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
