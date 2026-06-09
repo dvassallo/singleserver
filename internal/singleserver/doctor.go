@@ -62,7 +62,7 @@ func cliDoctor(args []string, w io.Writer) error {
 	}
 
 	github := NewGitHubClient(envDefault("SINGLESERVER_STATE_DIR", "/etc/singleserver"))
-	if !doctorGitHubSetup(w, github, len(config.Apps)) {
+	if !doctorGitHubSetup(w, github, len(config.Apps), expectedGitHubWebhookURL()) {
 		failed = true
 	}
 	for _, app := range apps {
@@ -308,7 +308,11 @@ func doctorCloudflareDNSRecord(w io.Writer, scope string, check string, host str
 	return true
 }
 
-func doctorGitHubSetup(w io.Writer, github *GitHubClient, appCount int) bool {
+var githubHookConfigFunc = func(github *GitHubClient) (*GitHubHookConfig, error) {
+	return github.HookConfig()
+}
+
+func doctorGitHubSetup(w io.Writer, github *GitHubClient, appCount int, expectedWebhookURL string) bool {
 	secrets, err := github.LoadSecrets()
 	if err != nil {
 		status := "pending"
@@ -327,7 +331,32 @@ func doctorGitHubSetup(w io.Writer, github *GitHubClient, appCount int) bool {
 		return appCount == 0
 	}
 	fmt.Fprintf(w, "github\tsetup\tok\tapp_id=%d\tslug=%s\n", secrets.AppID, valueOrDash(secrets.Slug))
+	if expectedWebhookURL != "" {
+		config, err := githubHookConfigFunc(github)
+		if err != nil {
+			fmt.Fprintf(w, "github\twebhook\tfailed\t%s\n", err)
+			return false
+		}
+		actualWebhookURL := strings.TrimRight(config.URL, "/")
+		if actualWebhookURL != expectedWebhookURL {
+			fmt.Fprintf(w, "github\twebhook\tfailed\texpected=%s\tactual=%s\n", expectedWebhookURL, valueOrDash(actualWebhookURL))
+			return false
+		}
+		fmt.Fprintf(w, "github\twebhook\tok\t%s\n", expectedWebhookURL)
+	}
 	return true
+}
+
+func expectedGitHubWebhookURL() string {
+	env, err := loadServiceEnv()
+	if err != nil {
+		return ""
+	}
+	publicURL := strings.TrimRight(env["SINGLESERVER_PUBLIC_URL"], "/")
+	if publicURL == "" {
+		return ""
+	}
+	return publicURL + "/github/webhook"
 }
 
 func doctorApps(apps []AppConfig, args []string) ([]AppConfig, error) {

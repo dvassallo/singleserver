@@ -59,6 +59,10 @@ type RepositoryContentResponse struct {
 	Type string `json:"type"`
 }
 
+type GitHubHookConfig struct {
+	URL string `json:"url"`
+}
+
 type GitHubClient struct {
 	httpClient *http.Client
 	stateDir   string
@@ -210,6 +214,18 @@ func (c *GitHubClient) RepositoryInstallationID(repo string) (int64, error) {
 		return 0, errors.New("repository installation id is missing")
 	}
 	return installation.ID, nil
+}
+
+func (c *GitHubClient) HookConfig() (*GitHubHookConfig, error) {
+	jwt, err := c.AppJWT()
+	if err != nil {
+		return nil, err
+	}
+	var config GitHubHookConfig
+	if err := c.request("GET", "/app/hook/config", "Bearer "+jwt, nil, &config); err != nil {
+		return nil, err
+	}
+	return &config, nil
 }
 
 func (c *GitHubClient) RepositoryDefaultBranch(repo string, token string) (string, error) {
