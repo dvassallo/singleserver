@@ -87,7 +87,7 @@ Usage:
   singleserver version
   singleserver tailscale connect [--auth-key <key>] [--hostname <name>]
   singleserver github connect
-  singleserver cloudflare connect [--zone example.com] [--tunnel singleserver]
+  singleserver cloudflare connect [--zone example.com] [--tunnel <name>]
   singleserver list
   singleserver status
   singleserver add <github-url> [options]

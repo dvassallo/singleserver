@@ -174,6 +174,23 @@ func TestApplyCloudflareTunnelNameClearsUnknownTunnelWhenExplicit(t *testing.T) 
 	}
 }
 
+func TestCloudflareTunnelNameFromHostname(t *testing.T) {
+	tests := []struct {
+		hostname string
+		want     string
+	}{
+		{hostname: "ubuntu-2gb-hil-2", want: "singleserver-ubuntu-2gb-hil-2"},
+		{hostname: "Single_Server.local", want: "singleserver-single-server-local"},
+		{hostname: "", want: "singleserver"},
+	}
+
+	for _, test := range tests {
+		if got := cloudflareTunnelNameFromHostname(test.hostname); got != test.want {
+			t.Fatalf("cloudflareTunnelNameFromHostname(%q) = %q, want %q", test.hostname, got, test.want)
+		}
+	}
+}
+
 func setupManifestFromBody(t *testing.T, body string) map[string]any {
 	t.Helper()
 	const prefix = `name="manifest" value="`

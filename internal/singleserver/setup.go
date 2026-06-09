@@ -60,7 +60,7 @@ func cliCloudflareConnect(args []string, w io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: singleserver cloudflare connect [--zone example.com] [--tunnel singleserver]")
+		return errors.New("usage: singleserver cloudflare connect [--zone example.com] [--tunnel <name>]")
 	}
 	if err := ensureBaseFiles(); err != nil {
 		return err
@@ -159,7 +159,7 @@ func cliCloudflareConnect(args []string, w io.Writer) error {
 func applyCloudflareTunnelName(state *CloudflareState, requestedName string, requestedExplicitly bool) {
 	name := strings.TrimSpace(requestedName)
 	if name == "" {
-		name = "singleserver"
+		name = defaultCloudflareTunnelName()
 	}
 	existingName := strings.TrimSpace(state.TunnelName)
 	switch {
@@ -171,6 +171,19 @@ func applyCloudflareTunnelName(state *CloudflareState, requestedName string, req
 		state.TunnelSecret = ""
 	}
 	state.TunnelName = name
+}
+
+func defaultCloudflareTunnelName() string {
+	hostname, _ := os.Hostname()
+	return cloudflareTunnelNameFromHostname(hostname)
+}
+
+func cloudflareTunnelNameFromHostname(hostname string) string {
+	label := dnsLabelFromAppName(hostname)
+	if label == "" {
+		return "singleserver"
+	}
+	return "singleserver-" + label
 }
 
 func ensureBaseFiles() error {
