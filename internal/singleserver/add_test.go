@@ -1,6 +1,7 @@
 package singleserver
 
 import (
+	"bytes"
 	"io"
 	"os"
 	"path/filepath"
@@ -15,6 +16,10 @@ func TestParseAddArgsAllowsFlagsAfterRepo(t *testing.T) {
 		"smallbets/userbase-homepage",
 		"--no-deploy",
 		"--app-port", "8080",
+		"--runtime", "node",
+		"--install", "npm ci",
+		"--build", "npm run build",
+		"--start", "npm start",
 	}, io.Discard)
 	if err != nil {
 		t.Fatal(err)
@@ -27,6 +32,9 @@ func TestParseAddArgsAllowsFlagsAfterRepo(t *testing.T) {
 	}
 	if !opts.appPortSet || opts.appPort != 8080 {
 		t.Fatalf("unexpected app port: set=%v value=%d", opts.appPortSet, opts.appPort)
+	}
+	if opts.runtime != "node" || opts.installCommand != "npm ci" || opts.buildCommand != "npm run build" || opts.startCommand != "npm start" {
+		t.Fatalf("unexpected generated Dockerfile options: %#v", opts)
 	}
 }
 
@@ -68,59 +76,169 @@ func TestParseAddArgsRejectsNonGitHubURL(t *testing.T) {
 	}
 }
 
-func TestApplyDefaultAppDomainUsesCloudflareZone(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("SINGLESERVER_STATE_DIR", dir)
-	if err := os.WriteFile(filepath.Join(dir, "cloudflare.json"), []byte(`{"zone_name":"nobrainer.host","zone_id":"zone","tunnel_id":"tunnel","config_file":"/etc/cloudflared/singleserver.yml"}`), 0600); err != nil {
-		t.Fatal(err)
+func TestEnsureGitHubSetupReadyExplainsMissingSetup(t *testing.T) {
+	err := ensureGitHubSetupReady(NewGitHubClient(t.TempDir()))
+	if err == nil {
+		t.Fatal("expected missing setup error")
 	}
-
-	opts := addOptions{repo: "dvassallo/fullsend"}
-	app, entry, err := opts.app()
-	if err != nil {
-		t.Fatal(err)
+	text := err.Error()
+	if !strings.Contains(text, "GitHub is not connected yet") || !strings.Contains(text, "singleserver github connect") {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if err := applyDefaultAppDomain(&app, &entry); err != nil {
-		t.Fatal(err)
-	}
-
-	if len(app.Hosts) != 1 || app.Hosts[0] != "fullsend.nobrainer.host" {
-		t.Fatalf("unexpected hosts: %#v", app.Hosts)
-	}
-	if app.Healthcheck != "https://fullsend.nobrainer.host/up" {
-		t.Fatalf("unexpected healthcheck: %s", app.Healthcheck)
-	}
-	if len(entry.hosts) != 1 || entry.hosts[0] != "fullsend.nobrainer.host" {
-		t.Fatalf("unexpected entry hosts: %#v", entry.hosts)
-	}
-	if entry.healthcheck != "https://fullsend.nobrainer.host/up" {
-		t.Fatalf("unexpected entry healthcheck: %s", entry.healthcheck)
+	if strings.Contains(text, "github-app.json") {
+		t.Fatalf("raw file error leaked: %v", err)
 	}
 }
 
-func TestApplyDefaultAppDomainUsesDNSSafeLabel(t *testing.T) {
+func TestEnsureGitHubSetupReadyExplainsIncompleteSetup(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("SINGLESERVER_STATE_DIR", dir)
-	if err := os.WriteFile(filepath.Join(dir, "cloudflare.json"), []byte(`{"zone_name":"nobrainer.host","zone_id":"zone","tunnel_id":"tunnel","config_file":"/etc/cloudflared/singleserver.yml"}`), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "github-app.json"), []byte(`{"app_id":123,"webhook_secret":"secret"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 
-	opts := addOptions{repo: "dvassallo/singleserver.com"}
+	err := ensureGitHubSetupReady(NewGitHubClient(dir))
+	if err == nil {
+		t.Fatal("expected incomplete setup error")
+	}
+	text := err.Error()
+	if !strings.Contains(text, "GitHub App setup is incomplete") || !strings.Contains(text, "singleserver github connect") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestPromptAddOptionsUsesDockerfileDefaults(t *testing.T) {
+	opts := addOptions{repo: "smallbets/app"}
+	var out bytes.Buffer
+	got, err := promptAddOptions(opts, strings.NewReader("\n\n\n\n"), &out, addPromptContext{
+		hasDockerfile: true,
+		targetBranch:  "main",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.healthcheckPathSet {
+		t.Fatalf("default readiness path should not be persisted: %#v", got)
+	}
+	if got.healthcheck != "" {
+		t.Fatalf("unexpected external healthcheck: %s", got.healthcheck)
+	}
+	if got.noDeploy {
+		t.Fatal("expected deploy to stay enabled")
+	}
+	text := out.String()
+	if !strings.Contains(text, "Dockerfile found") {
+		t.Fatalf("expected Dockerfile prompt output:\n%s", text)
+	}
+	if !strings.Contains(text, "Equivalent command:") {
+		t.Fatalf("expected equivalent command:\n%s", text)
+	}
+}
+
+func TestPromptAddOptionsGeneratedNodeStaticBuild(t *testing.T) {
+	input := strings.Join([]string{
+		"node",
+		"npm ci",
+		"npm run build",
+		"dist",
+		"",
+		"",
+		"",
+		"n",
+	}, "\n") + "\n"
+	var out bytes.Buffer
+	got, err := promptAddOptions(addOptions{repo: "smallbets/site"}, strings.NewReader(input), &out, addPromptContext{
+		hasDockerfile: false,
+		targetBranch:  "main",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.runtime != "node" || got.installCommand != "npm ci" || got.buildCommand != "npm run build" || got.staticDir != "dist" {
+		t.Fatalf("unexpected generated static options: %#v", got)
+	}
+	if got.startCommand != "" || got.appPortSet {
+		t.Fatalf("static build should not prompt for start/app port: %#v", got)
+	}
+	if !got.noDeploy {
+		t.Fatal("expected deploy to be disabled")
+	}
+	text := out.String()
+	if !strings.Contains(text, "--runtime 'node'") || !strings.Contains(text, "--static-dir 'dist'") || !strings.Contains(text, "--no-deploy") {
+		t.Fatalf("unexpected equivalent command:\n%s", text)
+	}
+}
+
+func TestPromptAddOptionsGeneratedBunDynamicApp(t *testing.T) {
+	input := strings.Join([]string{
+		"bun",
+		"bun install --frozen-lockfile",
+		"",
+		"",
+		"bun run start",
+		"abc",
+		"3000",
+		"",
+		"/ready",
+		"https://app.example.com/ready",
+		"y",
+	}, "\n") + "\n"
+	var out bytes.Buffer
+	got, err := promptAddOptions(addOptions{repo: "smallbets/app"}, strings.NewReader(input), &out, addPromptContext{
+		hasDockerfile: false,
+		targetBranch:  "main",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.runtime != "bun" || got.installCommand != "bun install --frozen-lockfile" || got.startCommand != "bun run start" {
+		t.Fatalf("unexpected generated dynamic options: %#v", got)
+	}
+	if !got.appPortSet || got.appPort != 3000 {
+		t.Fatalf("unexpected app port: %#v", got)
+	}
+	if !got.healthcheckPathSet || got.healthcheckPath != "/ready" {
+		t.Fatalf("unexpected readiness path: %#v", got)
+	}
+	if got.healthcheck != "https://app.example.com/ready" {
+		t.Fatalf("unexpected external healthcheck: %s", got.healthcheck)
+	}
+	if got.noDeploy {
+		t.Fatal("expected deploy to stay enabled")
+	}
+	if !strings.Contains(out.String(), "Enter a port from 1 to 65535.") {
+		t.Fatalf("expected invalid port guidance:\n%s", out.String())
+	}
+}
+
+func TestAddOptionsUseExplicitDomains(t *testing.T) {
+	opts := addOptions{repo: "dvassallo/fullsend", hosts: []string{"fullsend.game", "www.fullsend.game"}}
 	app, entry, err := opts.app()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if app.Name != "singleserver.com" {
-		t.Fatalf("unexpected app name: %s", app.Name)
-	}
-	if err := applyDefaultAppDomain(&app, &entry); err != nil {
-		t.Fatal(err)
-	}
-	if len(app.Hosts) != 1 || app.Hosts[0] != "singleserver-com.nobrainer.host" {
+
+	if len(app.Hosts) != 2 || app.Hosts[0] != "fullsend.game" || app.Hosts[1] != "www.fullsend.game" {
 		t.Fatalf("unexpected hosts: %#v", app.Hosts)
 	}
-	if app.Healthcheck != "https://singleserver-com.nobrainer.host/up" {
-		t.Fatalf("unexpected healthcheck: %s", app.Healthcheck)
+	if len(entry.hosts) != 2 || entry.hosts[0] != "fullsend.game" || entry.hosts[1] != "www.fullsend.game" {
+		t.Fatalf("unexpected entry hosts: %#v", entry.hosts)
+	}
+}
+
+func TestParseAddArgsAcceptsRepeatedDomains(t *testing.T) {
+	opts, err := parseAddArgs([]string{
+		"https://github.com/dvassallo/fullsend",
+		"--domain", "fullsend.game",
+		"--domain", "www.fullsend.game",
+	}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !opts.hostsSet {
+		t.Fatal("expected hostsSet")
+	}
+	if len(opts.hosts) != 2 || opts.hosts[0] != "fullsend.game" || opts.hosts[1] != "www.fullsend.game" {
+		t.Fatalf("unexpected domains: %#v", opts.hosts)
 	}
 }
 
@@ -133,6 +251,10 @@ func TestAppendAppToConfigYAML(t *testing.T) {
 		hosts:           []string{"userbase.com", "www.userbase.com"},
 		healthcheck:     "https://userbase.com/up",
 		healthcheckPath: "/up",
+		runtime:         "node",
+		installCommand:  "npm ci",
+		buildCommand:    "npm run build",
+		startCommand:    "npm start",
 		appPort:         8080,
 		appPortSet:      true,
 	})
@@ -159,6 +281,50 @@ func TestAppendAppToConfigYAML(t *testing.T) {
 	}
 	if app.HealthcheckPath != "/up" {
 		t.Fatalf("unexpected healthcheck path: %s", app.HealthcheckPath)
+	}
+	if app.Runtime != "node" || app.InstallCommand != "npm ci" || app.BuildCommand != "npm run build" || app.StartCommand != "npm start" {
+		t.Fatalf("unexpected generated Dockerfile config: %#v", app)
+	}
+}
+
+func TestAppendAppToConfigYAMLWritesStaticRuntime(t *testing.T) {
+	updated, err := appendAppToConfigYAML(nil, addAppEntry{
+		repo:      "smallbets/homepage",
+		runtime:   "static",
+		staticDir: ".",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(updated)
+	if !strings.Contains(got, "runtime: static") {
+		t.Fatalf("runtime missing:\n%s", got)
+	}
+	if strings.Contains(got, "static_dir") {
+		t.Fatalf("default static_dir should be omitted:\n%s", got)
+	}
+}
+
+func TestParseAddArgsStaticDir(t *testing.T) {
+	opts, err := parseAddArgs([]string{
+		"https://github.com/smallbets/userbase-homepage",
+		"--runtime", "bun",
+		"--install", "bun install --frozen-lockfile",
+		"--build", "bun run build",
+		"--static-dir", "dist",
+	}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	app, entry, err := opts.app()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if app.Runtime != "bun" || app.StaticDir != "dist" {
+		t.Fatalf("unexpected app: %#v", app)
+	}
+	if entry.runtime != "bun" || entry.staticDir != "dist" {
+		t.Fatalf("unexpected config entry: %#v", entry)
 	}
 }
 

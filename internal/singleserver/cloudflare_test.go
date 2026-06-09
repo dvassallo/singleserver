@@ -99,6 +99,28 @@ func TestConflictingCNAMERecord(t *testing.T) {
 	}
 }
 
+func TestZoneForHostnameFromListChoosesMostSpecificZone(t *testing.T) {
+	zones := []cloudflareZone{
+		{ID: "example", Name: "example.com"},
+		{ID: "app", Name: "app.example.com"},
+	}
+
+	zone, err := zoneForHostnameFromList("www.app.example.com", zones)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if zone.ID != "app" {
+		t.Fatalf("expected most specific zone, got %#v", zone)
+	}
+}
+
+func TestZoneForHostnameFromListRequiresMatchingZone(t *testing.T) {
+	_, err := zoneForHostnameFromList("app.other.com", []cloudflareZone{{ID: "example", Name: "example.com"}})
+	if err == nil || !strings.Contains(err.Error(), "cannot access a zone") {
+		t.Fatalf("expected missing zone error, got %v", err)
+	}
+}
+
 func TestSyncCloudflareAddRollsBackRouteWhenDNSFails(t *testing.T) {
 	state := &CloudflareState{TunnelID: "tunnel"}
 	calls := []string{}

@@ -53,6 +53,8 @@ func RunCLI(args []string, logger *log.Logger) error {
 		return cliStatus(os.Stdout)
 	case "add":
 		return cliAdd(args[1:], os.Stdout, logger)
+	case "edit":
+		return cliEdit(args[1:], os.Stdout, logger)
 	case "deploy":
 		return cliDeploy(args[1:], os.Stdout, logger)
 	case "render-deploy":
@@ -87,10 +89,11 @@ Usage:
   singleserver version
   singleserver tailscale connect [--auth-key <key>] [--hostname <name>]
   singleserver github connect
-  singleserver cloudflare connect [--zone example.com] [--tunnel <name>]
+  singleserver cloudflare connect [--account <id>] [--tunnel <name>]
   singleserver list
   singleserver status
   singleserver add <github-url> [options]
+  singleserver edit <app|owner/repo|github-url> [options]
   singleserver deploy <owner/repo|app> [ref]
   singleserver render-deploy <owner/repo|app>
   singleserver doctor [app]
@@ -109,11 +112,12 @@ Commands:
   github         Repair or print the GitHub App setup URL.
   cloudflare     Connect Cloudflare Tunnel and DNS for public app ingress.
   list           Show configured apps.
-  status         Check the local daemon and configured healthchecks.
-  add            Add a GitHub repository to apps.yml.
+  status         Check the local daemon, apps, and optional healthchecks.
+  add            Add and deploy a GitHub repository.
+  edit           Edit app config interactively or with flags.
   deploy         Deploy a configured app immediately.
   render-deploy  Print the generated Kamal deploy.yml for a configured app.
-  doctor         Check config, deploy plumbing, GitHub App access, checkouts, deploy logs, and healthchecks.
+  doctor         Check config, deploy plumbing, GitHub App access, checkouts, deploy logs, and optional healthchecks.
   logs           Show recent deploy logs, optionally filtered by app.
   domains        Manage app domains in apps.yml.
   env            Manage server-side app environment variables.
@@ -212,7 +216,7 @@ func cliStatus(w io.Writer) error {
 			prefix += "\t" + lastDeployDetail
 		}
 		if app.Healthcheck == "" {
-			fmt.Fprintf(w, "%s\thealthcheck=unknown\tno healthcheck configured\n", prefix)
+			fmt.Fprintf(w, "%s\thealthcheck=assumed\tno external healthcheck configured\n", prefix)
 			continue
 		}
 		status := "ok"
@@ -267,7 +271,7 @@ func displayHosts(app AppConfig) string {
 
 func displayHealthcheck(app AppConfig) string {
 	if strings.TrimSpace(app.Healthcheck) == "" {
-		return "-"
+		return "assumed"
 	}
 	return app.Healthcheck
 }
@@ -340,6 +344,8 @@ func cliDeploy(args []string, w io.Writer, logger *log.Logger) error {
 	fmt.Fprintf(w, "%s\tdeploy\tok\t%dms\tref=%s\tsha=%s\n", app.Name, timing.TotalMS, ref, shortSHA(sha))
 	if app.Healthcheck != "" {
 		fmt.Fprintf(w, "%s\thealthcheck\tok\t%s\n", app.Name, app.Healthcheck)
+	} else {
+		fmt.Fprintf(w, "%s\thealthcheck\tassumed\tno external healthcheck configured\n", app.Name)
 	}
 	if liveURL := appLiveURL(*app); liveURL != "" {
 		fmt.Fprintf(w, "%s\tlive\tok\t%s\n", app.Name, liveURL)

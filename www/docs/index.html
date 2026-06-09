@@ -529,10 +529,10 @@
             <li><strong>The daemon</strong> The daemon listens locally on <code>127.0.0.1</code>. Tailscale Funnel exposes the small public surface it needs: the GitHub setup page and signed GitHub webhooks. When a webhook arrives, the daemon verifies the signature, checks the repository and branch against <code>apps.yml</code>, fetches the exact pushed SHA, runs the deploy, writes logs, and reports the result.</li>
             <li><strong>GitHub App</strong> The GitHub App is how the server receives push events and reads code. It sends signed webhooks to your server, issues short-lived installation tokens for repository fetches, and lets the daemon write pending, success, and failure commit statuses back to GitHub. GitHub triggers the deploy, but the deploy runs on your server. <code>doctor</code> verifies that the GitHub App webhook URL points at this server's public setup URL.</li>
             <li><strong><code>apps.yml</code></strong> This is the central app registry and deployment allowlist. Installing the GitHub App on a repository only grants access; it does not make that repository deployable. A pushed repository must also match an app entry in <code>/etc/singleserver/apps.yml</code>, and the pushed branch must match that app's configured branch.</li>
-            <li><strong>App containers</strong> Every app runs in its own Docker container. Single Server prepares the checkout and generated deploy config, then Kamal builds the image, starts the replacement container, runs the healthcheck, and moves traffic only after the new container is ready. Kamal's proxy binds to the server loopback interface, so app traffic comes from cloudflared instead of exposing the proxy directly on the public internet.</li>
+            <li><strong>App containers</strong> Every app runs in its own Docker container. Single Server prepares the checkout and generated deploy config, then Kamal builds the image, starts the replacement container, waits for the readiness path, and moves traffic only after the new container is ready. Kamal's proxy binds to the server loopback interface, so app traffic comes from cloudflared instead of exposing the proxy directly on the public internet.</li>
             <li><strong>Tailscale</strong> Tailscale provides private server access and the public webhook URL. Tailscale SSH lets operators reach the server without managing SSH keys on every workstation. Tailscale Funnel forwards GitHub setup and webhook requests from the server's <code>*.ts.net</code> URL to the daemon's local port.</li>
             <li><strong>Cloudflare Tunnel</strong> Cloudflare is the public edge for app domains. Single Server creates proxied CNAME records to a Cloudflare Tunnel, keeps cloudflared routes in sync, and lets Cloudflare handle public TLS, proxying, CDN features, and DDoS protection while the server IP stays hidden.</li>
-            <li><strong>Central state</strong> Domains, server-side environment files, storage mounts, backups, deploy logs, and provider credentials are server concerns. Repositories stay focused on application code and a Dockerfile. When an app needs an exception, the exception belongs in <code>apps.yml</code> or a server-side command, not in GitHub Actions secrets or a repo-specific runner.</li>
+            <li><strong>Central state</strong> Domains, server-side environment files, storage mounts, backups, deploy logs, and provider credentials are server concerns. Repositories stay focused on application code, with build details either in a repo Dockerfile or in explicit runtime settings stored on the server. When an app needs an exception, the exception belongs in <code>apps.yml</code> or a server-side command, not in GitHub Actions secrets or a repo-specific runner.</li>
         </ul>
     </section>
 
@@ -595,7 +595,7 @@
                 <div class="command-heading">
                     <span class="command-name">Add an app</span>
                     <code class="command-usage">singleserver add https://github.com/owner/repo [options]</code>
-                    <p class="command-description">Adds a GitHub repository, verifies app access, checks for a Dockerfile, writes <code>apps.yml</code>, validates the generated Kamal config, configures app routing, deploys the current branch tip, runs the healthcheck, and prints the live URL.</p>
+                    <p class="command-description">Adds a GitHub repository, verifies app access, writes <code>apps.yml</code>, validates generated deploy config, configures app routing, deploys the current branch tip, and prints the live URL. In an interactive SSH session, Single Server prompts for missing runtime settings, readiness path, optional external healthcheck URL, and whether to deploy immediately. It also prints the equivalent non-interactive command. In scripts, pass the same answers as flags.</p>
                 </div>
                 <div class="command-details">
                     <p class="option-heading"><code>singleserver add</code> arguments</p>
@@ -604,14 +604,75 @@
                     </ul>
                 </div>
                 <div class="command-details">
+                    <p class="option-heading"><code>singleserver add</code> generated Dockerfile examples</p>
+                    <ul class="option-list">
+                        <li><code>--runtime static --static-dir dist</code><span>Serve an already-built static directory with nginx. <code>--static-dir</code> defaults to the repository root.</span></li>
+                        <li><code>--runtime node --install "npm ci" --build "npm run build" --static-dir dist</code><span>Run explicit Node commands, then serve the named static output directory with nginx.</span></li>
+                        <li><code>--runtime bun --install "bun install --frozen-lockfile" --build "bun run build" --start "bun run start" --app-port 3000</code><span>Build and run a Bun web process. Dynamic Node/Bun apps must provide both <code>--start</code> and <code>--app-port</code>.</span></li>
+                    </ul>
+                </div>
+                <div class="command-details">
+                    <p class="option-heading"><code>singleserver add</code> interactive prompts</p>
+                    <ul class="option-list">
+                        <li><code>Dockerfile found</code><span>Single Server uses the repo Dockerfile as-is, then asks for the readiness path, optional external healthcheck URL, and deploy confirmation.</span></li>
+                        <li><code>No Dockerfile found</code><span>Single Server asks for <code>static</code>, <code>node</code>, or <code>bun</code>, then asks only the follow-up questions needed for that runtime.</span></li>
+                        <li><code>Equivalent command</code><span>After the prompts, Single Server prints the flag-based command that would make the same app entry without prompting.</span></li>
+                    </ul>
+                </div>
+                <div class="command-details">
                     <p class="option-heading"><code>singleserver add</code> options</p>
                     <ul class="option-list">
                         <li><code>--branch &lt;name&gt;</code><span>Deploy only this branch. Defaults to the repository default branch.</span></li>
-                        <li><code>--app-port &lt;port&gt;</code><span>Container port used by the generated Kamal proxy. Defaults to <code>80</code>.</span></li>
-                        <li><code>--healthcheck-path &lt;path&gt;</code><span>Path Kamal uses for container healthchecks. Defaults to <code>/up</code>.</span></li>
-                        <li><code>--healthcheck &lt;url&gt;</code><span>External URL Single Server checks after deploys and in <code>status</code>/<code>doctor</code>.</span></li>
+                        <li><code>--runtime static|node|bun</code><span>Generate a temporary Dockerfile when the repository does not have one. Repos with their own Dockerfile should omit this.</span></li>
+                        <li><code>--install &lt;cmd&gt;</code><span>Optional install command for generated Node/Bun Dockerfiles, such as <code>npm ci</code> or <code>bun install --frozen-lockfile</code>.</span></li>
+                        <li><code>--build &lt;cmd&gt;</code><span>Optional build command for generated Node/Bun Dockerfiles, such as <code>npm run build</code> or <code>bun run build</code>.</span></li>
+                        <li><code>--start &lt;cmd&gt;</code><span>Start command for dynamic Node/Bun apps. Do not use this for static output; nginx serves static output.</span></li>
+                        <li><code>--static-dir &lt;dir&gt;</code><span>Static files to serve from the repo or from the output of the Node/Bun build. Defaults to <code>.</code> for <code>--runtime static</code>. Must be a relative path inside the repo.</span></li>
+                        <li><code>--app-port &lt;port&gt;</code><span>Container port used by the generated Kamal proxy. Defaults to <code>80</code>. Required for dynamic Node/Bun generated Dockerfiles.</span></li>
+                        <li><code>--healthcheck-path &lt;path&gt;</code><span>Path Kamal uses to decide when the replacement container is ready. Defaults to <code>/</code> for normal app containers and <code>/up</code> for generated static output.</span></li>
+                        <li><code>--healthcheck &lt;url&gt;</code><span>Optional external URL Single Server checks after deploys and in <code>status</code>/<code>doctor</code>. If omitted, the external check is treated as assumed healthy.</span></li>
                         <li><code>--name &lt;app&gt;</code><span>Override the app name. Defaults to the repository name lowercased.</span></li>
                         <li><code>--no-deploy</code><span>Configure the app but wait for the next push or manual deploy.</span></li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="command-entry" id="edit-options">
+                <div class="command-heading">
+                    <span class="command-name">Edit an app</span>
+                    <code class="command-usage">singleserver edit &lt;app|owner/repo|github-url&gt; [options]</code>
+                    <p class="command-description">Changes an app after it has been added. With no flags in an interactive SSH session, Single Server prompts from the current <code>apps.yml</code> settings and prints the equivalent non-interactive command. In scripts, pass the same settings as flags. By default, the config change deploys immediately; use <code>--no-deploy</code> to stage the change.</p>
+                </div>
+                <div class="command-details">
+                    <p class="option-heading"><code>singleserver edit</code> arguments</p>
+                    <ul class="option-list">
+                        <li><code>&lt;app|owner/repo|github-url&gt;</code><span>Required. The app name, configured repo, or full GitHub URL for an app already listed in <code>apps.yml</code>.</span></li>
+                    </ul>
+                </div>
+                <div class="command-details">
+                    <p class="option-heading"><code>singleserver edit</code> common examples</p>
+                    <ul class="option-list">
+                        <li><code>singleserver edit my-app</code><span>Open the interactive editor for the app's build mode, readiness path, external healthcheck, and deploy choice.</span></li>
+                        <li><code>singleserver edit my-app --healthcheck-path /ready</code><span>Change the container readiness path Kamal checks before moving traffic.</span></li>
+                        <li><code>singleserver edit my-app --dockerfile --no-healthcheck</code><span>Switch back to the repository Dockerfile and clear the optional external healthcheck URL.</span></li>
+                        <li><code>singleserver edit my-app --runtime static --static-dir public</code><span>Use a generated static-site Dockerfile and serve <code>public</code>.</span></li>
+                    </ul>
+                </div>
+                <div class="command-details">
+                    <p class="option-heading"><code>singleserver edit</code> options</p>
+                    <ul class="option-list">
+                        <li><code>--branch &lt;name&gt;</code><span>Change the production branch for the app.</span></li>
+                        <li><code>--dockerfile</code><span>Use the repository Dockerfile and clear generated Dockerfile runtime settings.</span></li>
+                        <li><code>--runtime static|node|bun</code><span>Use a generated Dockerfile. Add runtime-specific flags just like <code>singleserver add</code>.</span></li>
+                        <li><code>--install &lt;cmd&gt;</code><span>Set or replace the generated Node/Bun install command.</span></li>
+                        <li><code>--build &lt;cmd&gt;</code><span>Set or replace the generated Node/Bun build command.</span></li>
+                        <li><code>--start &lt;cmd&gt;</code><span>Set or replace the generated Node/Bun process start command.</span></li>
+                        <li><code>--static-dir &lt;dir&gt;</code><span>Set the static directory for generated static output.</span></li>
+                        <li><code>--app-port &lt;port&gt;</code><span>Set the app container port. Dynamic generated Node/Bun apps need this when the current app does not already have an explicit port.</span></li>
+                        <li><code>--healthcheck-path &lt;path&gt;</code><span>Set the container readiness path. Defaults stay <code>/</code> for app processes and <code>/up</code> for generated static output.</span></li>
+                        <li><code>--healthcheck &lt;url&gt;</code><span>Set the optional external healthcheck URL used after deploys and by <code>status</code>/<code>doctor</code>.</span></li>
+                        <li><code>--no-healthcheck</code><span>Clear the optional external healthcheck URL. Container readiness still runs during deploys.</span></li>
+                        <li><code>--no-deploy</code><span>Write <code>apps.yml</code> without deploying immediately.</span></li>
                     </ul>
                 </div>
             </div>
@@ -620,7 +681,7 @@
                 <div class="command-heading">
                     <span class="command-name">Deploy manually</span>
                     <code class="command-usage">singleserver deploy &lt;owner/repo|app&gt; [ref]</code>
-                    <p class="command-description">Deploys a configured app immediately. If <code>ref</code> is omitted, it deploys the configured branch or the repository default branch. Manual deploys use the same checkout, build, rollout, healthcheck, and GitHub status path as push-triggered deploys.</p>
+                    <p class="command-description">Deploys a configured app immediately. If <code>ref</code> is omitted, it deploys the configured branch or the repository default branch. Manual deploys use the same checkout, build, rollout, optional external healthcheck, and GitHub status path as push-triggered deploys.</p>
                 </div>
                 <div class="command-details">
                     <p class="option-heading"><code>singleserver deploy</code> arguments</p>
@@ -635,7 +696,7 @@
                 <div class="command-heading">
                     <span class="command-name">List apps</span>
                     <code class="command-usage">singleserver list</code>
-                    <p class="command-description">Prints configured apps, their repositories, branches, domains, healthcheck URLs, and current health state.</p>
+                    <p class="command-description">Prints configured apps, their repositories, branches, domains, external healthcheck setting, and current health state.</p>
                 </div>
             </div>
 
@@ -643,7 +704,7 @@
                 <div class="command-heading">
                     <span class="command-name">Check status</span>
                     <code class="command-usage">singleserver status</code>
-                    <p class="command-description">Summarizes daemon health, app deploy status, app domains, runtime state, and healthchecks. This is the quick operational view.</p>
+                    <p class="command-description">Summarizes daemon health, app deploy status, app domains, runtime state, and optional external healthchecks. This is the quick operational view.</p>
                 </div>
             </div>
 
@@ -651,7 +712,7 @@
                 <div class="command-heading">
                     <span class="command-name">Run diagnostics</span>
                     <code class="command-usage">singleserver doctor [app]</code>
-                    <p class="command-description">Runs deeper checks for daemon health, config validity, deploy user SSH, local registry, Tailscale, GitHub App access, generated deploy config, checkout state, recent deploy outcome, disk, Docker, Cloudflare Tunnel routes, Cloudflare DNS targets, resolver DNS, and healthchecks.</p>
+                    <p class="command-description">Runs deeper checks for daemon health, config validity, deploy user SSH, local registry, Tailscale, GitHub App access, generated deploy config, checkout state, recent deploy outcome, disk, Docker, Cloudflare Tunnel routes, Cloudflare DNS targets, resolver DNS, and optional external healthchecks.</p>
                 </div>
             </div>
 
@@ -707,8 +768,8 @@
                 <div class="command-details">
                     <p class="option-heading"><code>singleserver domains</code> subcommands</p>
                     <ul class="option-list">
-                        <li><code>add &lt;app&gt; &lt;domain&gt;</code><span>Add the hostname to the app, create or update the proxied Cloudflare DNS record and tunnel route, set a default external healthcheck if one is missing, and redeploy the app.</span></li>
-                        <li><code>remove &lt;app&gt; &lt;domain&gt;</code><span>Remove the hostname from the app, remove the matching Cloudflare DNS record and tunnel route, clear a matching default healthcheck, and redeploy the app.</span></li>
+                        <li><code>add &lt;app&gt; &lt;domain&gt;</code><span>Add the hostname to the app, create or update the proxied Cloudflare DNS record and tunnel route, and redeploy the app.</span></li>
+                        <li><code>remove &lt;app&gt; &lt;domain&gt;</code><span>Remove the hostname from the app, remove the matching Cloudflare DNS record and tunnel route, clear a matching legacy auto-healthcheck when present, and redeploy the app.</span></li>
                         <li><code>list [app]</code><span>Print all configured domains, optionally scoped to one app.</span></li>
                         <li><code>verify [app]</code><span>Check resolver DNS and Cloudflare DNS records when available, optionally scoped to one app.</span></li>
                     </ul>
@@ -788,8 +849,8 @@
 
     <section id="config">
         <h2><a href="#config">Configuration</a></h2>
-        <p>Single Server is convention over configuration. The normal path is to add an app with only its GitHub URL. From that one input, Single Server infers the app name, checkout path, deploy branch, app domain, healthcheck path, generated Kamal config, and the default storage location when storage is enabled.</p>
-        <p>The conventions are meant to be predictable rather than hidden. <code>/etc/singleserver/apps.yml</code> is the central override file when an app needs to differ from the defaults, such as a non-default branch, multiple domains, a different container port, a custom healthcheck, or a storage mount.</p>
+        <p>Single Server is convention over configuration. The normal path is to add an app with only its GitHub URL. From that one input, Single Server infers the app name, checkout path, deploy branch, app domain, readiness path, generated Kamal config, and the default storage location when storage is enabled.</p>
+        <p>The conventions are meant to be predictable rather than hidden. <code>/etc/singleserver/apps.yml</code> is the central override file when an app needs to differ from the defaults, such as a non-default branch, multiple domains, a different container port, a custom readiness path, an optional external healthcheck URL, or a storage mount.</p>
 
         <h3 id="conventions"><a href="#conventions">Conventions</a></h3>
         <ul class="concept-list">
@@ -798,10 +859,10 @@
             <li><strong>Branch</strong> Deploys default to the repository default branch. Set <code>branch</code> only when production deploys should follow a different branch, such as <code>main</code>, <code>master</code>, or <code>production</code>.</li>
             <li><strong>Domain</strong> If Cloudflare is connected, the default app domain is inferred from the app name and connected zone, such as <code>my-app.example.com</code>. Characters that are awkward in hostnames, such as dots or underscores, are replaced with hyphens for the inferred domain. Extra domains are added with <code>singleserver domains add</code>. Single Server writes proxied Cloudflare DNS records and tunnel routes, and rejects hostnames already assigned to another app.</li>
             <li><strong>Checkout</strong> Repositories are checked out under <code>/srv/repos/&lt;app&gt;</code>. Before each deploy, Single Server fetches the exact pushed SHA so production matches the GitHub event that triggered it.</li>
-            <li><strong>Build</strong> The app repository owns its <code>Dockerfile</code>. Single Server verifies the Dockerfile exists and uses it, but it does not generate application build instructions.</li>
+            <li><strong>Build</strong> If the repository has a <code>Dockerfile</code>, Single Server uses it. If it does not, Single Server can generate a temporary Dockerfile from explicit settings in <code>apps.yml</code>: <code>runtime</code>, optional <code>install</code>/<code>build</code>, optional <code>static_dir</code>, and for dynamic Node/Bun apps, <code>start</code> plus <code>app_port</code>. The generated Dockerfile is written only inside the server checkout during deploy and is removed afterward.</li>
             <li><strong>Kamal config</strong> Single Server generates Kamal config from conventions and overrides. The generated proxy config binds Kamal to <code>127.0.0.1</code> because Cloudflare Tunnel is the public app ingress. A repo-level <code>config/deploy.yml</code> should only be needed for unusual apps that opt out of the generated config path.</li>
-            <li><strong>Port</strong> Apps listen on port <code>80</code> by default. Use <code>--app-port</code> or <code>app_port</code> when the container listens somewhere else, such as a Node or Bun app on <code>3000</code>.</li>
-            <li><strong>Healthcheck</strong> The default container healthcheck path is <code>/up</code>. Kamal uses that path to decide when the replacement container is ready, and Single Server uses the public app domain plus that path as the external healthcheck unless an app sets a different healthcheck URL.</li>
+            <li><strong>Port</strong> Apps listen on port <code>80</code> by default. Static generated Dockerfiles always serve nginx on port <code>80</code>. Dynamic generated Node/Bun apps must set <code>--app-port</code> or <code>app_port</code> so Single Server does not guess which port the process listens on.</li>
+            <li><strong>Readiness and healthchecks</strong> Kamal still needs a path to decide when the replacement container is ready before it moves traffic. For normal app containers, Single Server defaults that readiness path to <code>/</code>. For generated static output, it defaults to <code>/up</code> and the generated nginx image serves that path automatically. A public <code>healthcheck</code> URL is optional; when it is absent, Single Server reports the external check as assumed healthy instead of failing the app.</li>
             <li><strong>Secrets</strong> Secrets live on the server in app env files. They are injected into generated Kamal config without requiring GitHub repository secrets, deploy keys, or GitHub Actions workflows.</li>
             <li><strong>Storage</strong> Persistent app data defaults to <code>/srv/storage/&lt;app&gt;</code> and mounts into the container at <code>/storage</code>. This is the expected place for SQLite databases, uploads, and other app-owned data.</li>
             <li><strong>Backups</strong> Backups are written under <code>/srv/backups/&lt;app&gt;</code>. Storage-enabled apps can be backed up and restored from the server without adding app-specific backup code to the repository.</li>
@@ -823,12 +884,14 @@
             <pre class="code-block">apps:
   - repo: smallbets/userbase-homepage
     branch: master
+    runtime: node
+    install: npm ci
+    build: npm run build
+    static_dir: dist
     hosts:
       - userbase.com
       - www.userbase.com
-    app_port: 80
-    healthcheck_path: /up
-    healthcheck: https://userbase.com/up</pre>
+    app_port: 80</pre>
             <button class="copy-btn" aria-label="Copy to clipboard">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2zm0 16H8V7h11v14z"/></svg>
             </button>
@@ -839,9 +902,14 @@
             <li><strong><code>branch</code></strong><span><span class="setting-default">Default: repository default branch.</span> Only pushes to this branch deploy automatically. Manual deploys can still name a specific ref.</span></li>
             <li><strong><code>path</code></strong><span><span class="setting-default">Default: <code>/srv/repos/&lt;app&gt;</code>.</span> Checkout directory on the server.</span></li>
             <li><strong><code>hosts</code></strong><span><span class="setting-default">Default: DNS-safe app label plus the connected Cloudflare zone.</span> Public hostnames for generated Kamal proxy config, Cloudflare DNS, and Cloudflare Tunnel routes. Hosts must be unique across apps.</span></li>
+            <li><strong><code>runtime</code></strong><span><span class="setting-default">Default: absent.</span> Set to <code>static</code>, <code>node</code>, or <code>bun</code> only when the repository does not have a Dockerfile and Single Server should generate one during deploy.</span></li>
+            <li><strong><code>install</code></strong><span><span class="setting-default">Default: absent.</span> Optional install command for generated Node/Bun Dockerfiles. Single Server stores and runs exactly the command you provide.</span></li>
+            <li><strong><code>build</code></strong><span><span class="setting-default">Default: absent.</span> Optional build command for generated Node/Bun Dockerfiles. Use this with <code>static_dir</code> for static sites that need a build step.</span></li>
+            <li><strong><code>start</code></strong><span><span class="setting-default">Default: absent.</span> Start command for dynamic generated Node/Bun apps. Required when <code>runtime</code> is <code>node</code> or <code>bun</code> and <code>static_dir</code> is not set.</span></li>
+            <li><strong><code>static_dir</code></strong><span><span class="setting-default">Default: <code>.</code> for <code>runtime: static</code>.</span> Relative directory to serve with nginx. For Node/Bun static builds, this is the output directory after the build command runs.</span></li>
             <li><strong><code>app_port</code></strong><span><span class="setting-default">Default: <code>80</code>.</span> Container port that receives web traffic from Kamal.</span></li>
-            <li><strong><code>healthcheck_path</code></strong><span><span class="setting-default">Default: <code>/up</code>.</span> Container healthcheck path used by generated Kamal config.</span></li>
-            <li><strong><code>healthcheck</code></strong><span><span class="setting-default">Default: app domain plus healthcheck path.</span> External healthcheck URL used by Single Server after deploys and in status checks.</span></li>
+            <li><strong><code>healthcheck_path</code></strong><span><span class="setting-default">Default: <code>/</code> for normal apps, <code>/up</code> for generated static output.</span> Container readiness path used by generated Kamal config.</span></li>
+            <li><strong><code>healthcheck</code></strong><span><span class="setting-default">Default: absent.</span> Optional external healthcheck URL used by Single Server after deploys and in status checks. When absent, the external healthcheck is treated as assumed healthy.</span></li>
             <li><strong><code>storage</code></strong><span><span class="setting-default">Default: absent until enabled.</span> Persistent storage mapping with optional <code>path</code> and <code>mount</code> fields.</span></li>
         </ul>
 
@@ -853,19 +921,24 @@
             <li><strong>Registry</strong><span><span class="setting-default">Default: <code>127.0.0.1:5555</code>.</span> Images are built and pushed to the local registry so deploys do not wait on an external registry round trip.</span></li>
             <li><strong>Builder</strong><span><span class="setting-default">Default: local Docker builder for the server architecture.</span> The server builds the image from the checked-out commit.</span></li>
             <li><strong>Proxy</strong><span><span class="setting-default">Default: <code>ssl: false</code> behind Cloudflare Tunnel, forwarded headers on, app port <code>80</code>.</span> Kamal's proxy handles host routing to containers behind the tunnel while Cloudflare handles public TLS at the edge.</span></li>
-            <li><strong>Healthcheck</strong><span><span class="setting-default">Default: <code>/up</code>, interval <code>1</code>, timeout <code>1</code>.</span> Fast local healthchecks keep zero-downtime swaps quick for small apps.</span></li>
+            <li><strong>Readiness</strong><span><span class="setting-default">Default: <code>/</code> for normal apps, <code>/up</code> for generated static output, interval <code>1</code>, timeout <code>1</code>.</span> Fast local readiness checks keep zero-downtime swaps quick for small apps.</span></li>
             <li><strong>Timeouts</strong><span><span class="setting-default">Default: deploy <code>10s</code>, drain <code>1s</code>.</span> Defaults are tuned for fast local builds and small app containers.</span></li>
         </ul>
     </section>
 
     <section id="contract">
         <h2><a href="#contract">App Contract</a></h2>
-        <p>Your apps need a Dockerfile, one web port, and a health endpoint. They do not need GitHub Actions workflows, deploy keys, repo-level deploy secrets, repo-level webhooks, or a Kamal config.</p>
+        <p>Your apps need one web port. A dedicated health endpoint is optional. They can bring their own Dockerfile, or they can let Single Server generate one from explicit runtime settings. They do not need GitHub Actions workflows, deploy keys, repo-level deploy secrets, repo-level webhooks, or a Kamal config.</p>
         <div class="flow-box">
             <div class="flow-row">
                 <span class="pill">Dockerfile</span>
                 <span class="connector">&rarr;</span>
-                <span class="result">Your repo defines how it builds</span>
+                <span class="result">Used as-is when present</span>
+            </div>
+            <div class="flow-row">
+                <span class="pill">runtime</span>
+                <span class="connector">&rarr;</span>
+                <span class="result">Generates a temporary Dockerfile when needed</span>
             </div>
             <div class="flow-row">
                 <span class="pill">port 80</span>
@@ -873,37 +946,41 @@
                 <span class="result">Default app port, override with <code>--app-port</code></span>
             </div>
             <div class="flow-row">
-                <span class="pill">/up</span>
+                <span class="pill">/</span>
                 <span class="connector">&rarr;</span>
-                <span class="result">Default healthcheck path, override with <code>--healthcheck-path</code></span>
+                <span class="result">Default readiness path, override with <code>--healthcheck-path</code></span>
             </div>
         </div>
 
-        <h3 id="dockerfile-examples"><a href="#dockerfile-examples">Dockerfile Examples</a></h3>
-        <p>Static site:</p>
+        <h3 id="dockerfile-examples"><a href="#dockerfile-examples">Generated Dockerfile Examples</a></h3>
+        <p>Static site that already has files ready to serve:</p>
         <div class="code-wrapper">
-            <pre class="code-block">FROM nginx:alpine
-COPY dist /usr/share/nginx/html</pre>
+            <pre class="code-block">singleserver add https://github.com/you/site \
+  --runtime static \
+  --static-dir dist</pre>
             <button class="copy-btn" aria-label="Copy to clipboard">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
             </button>
         </div>
-        <p>Node or Bun app:</p>
+        <p>Node site that builds static files:</p>
         <div class="code-wrapper">
-            <pre class="code-block">FROM oven/bun:1
-WORKDIR /app
-COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile
-COPY . .
-ENV PORT=3000
-EXPOSE 3000
-CMD ["bun", "start"]</pre>
+            <pre class="code-block">singleserver add https://github.com/you/site \
+  --runtime node \
+  --install "npm ci" \
+  --build "npm run build" \
+  --static-dir dist</pre>
             <button class="copy-btn" aria-label="Copy to clipboard">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
             </button>
         </div>
+        <p>Bun app that runs as a web process:</p>
         <div class="code-wrapper">
-            <pre class="code-block">singleserver add https://github.com/you/my-node-app --app-port 3000</pre>
+            <pre class="code-block">singleserver add https://github.com/you/app \
+  --runtime bun \
+  --install "bun install --frozen-lockfile" \
+  --build "bun run build" \
+  --start "bun run start" \
+  --app-port 3000</pre>
             <button class="copy-btn" aria-label="Copy to clipboard">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
             </button>

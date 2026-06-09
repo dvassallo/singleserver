@@ -194,7 +194,9 @@ func doctorCloudflare(w io.Writer, allApps []AppConfig, selectedApps []AppConfig
 	}
 
 	failed := false
-	if state.ZoneID == "" {
+	token := cloudflareTokenFromEnvOrState(state)
+	cloudflareConfigured := state.TunnelID != "" || token != ""
+	if !cloudflareConfigured {
 		if appsHaveHosts(selectedApps) {
 			fmt.Fprintln(w, "cloudflare\tskipped\tconnect Cloudflare with `singleserver cloudflare connect` to verify DNS and tunnel routes")
 		} else {
@@ -202,10 +204,10 @@ func doctorCloudflare(w io.Writer, allApps []AppConfig, selectedApps []AppConfig
 		}
 	} else {
 		if state.TunnelID == "" {
-			fmt.Fprintf(w, "cloudflare\tstate\tfailed\tzone=%s\tmissing tunnel; run `singleserver cloudflare connect`\n", valueOrDash(state.ZoneName))
+			fmt.Fprintln(w, "cloudflare\tstate\tfailed\tmissing tunnel; run `singleserver cloudflare connect`")
 			failed = true
 		} else {
-			fmt.Fprintf(w, "cloudflare\tstate\tok\tzone=%s\tmode=tunnel\n", valueOrDash(state.ZoneName))
+			fmt.Fprintln(w, "cloudflare\tstate\tok\tmode=tunnel")
 		}
 	}
 
@@ -283,9 +285,6 @@ func doctorCloudflare(w io.Writer, allApps []AppConfig, selectedApps []AppConfig
 }
 
 func doctorCloudflareClient(w io.Writer, state *CloudflareState) (*CloudflareClient, bool) {
-	if state.ZoneID == "" {
-		return nil, true
-	}
 	token := cloudflareTokenFromEnvOrState(state)
 	if token == "" {
 		return nil, true
@@ -485,7 +484,7 @@ func doctorCheckout(w io.Writer, app AppConfig) bool {
 
 func doctorHealthcheck(w io.Writer, app AppConfig) bool {
 	if app.Healthcheck == "" {
-		fmt.Fprintf(w, "%s\thealthcheck\tunknown\tno healthcheck configured\n", app.Name)
+		fmt.Fprintf(w, "%s\thealthcheck\tassumed\tno external healthcheck configured\n", app.Name)
 		return true
 	}
 	if err := checkURL(app.Healthcheck); err != nil {

@@ -71,16 +71,20 @@ Use an object only when an app needs overrides:
 apps:
   - repo: dvassallo/fullsend
     branch: master
-    healthcheck: https://fullsend.game/up
     hosts:
       - fullsend.game
       - fullsend.assetstacks.com
 ```
 
-By convention, a repo needs a `Dockerfile`, but it does not need a Kamal config.
-If the repo tracks `config/deploy.yml`, Single Server uses it as-is. Otherwise,
-Single Server writes a temporary `config/deploy.yml` for the deploy and removes it
-after Kamal exits.
+By convention, a repo with a `Dockerfile` uses that Dockerfile as-is. If a repo
+does not have one, Single Server can generate a temporary Dockerfile during
+deploy from explicit runtime settings such as `runtime`, `install`, `build`,
+`start`, `static_dir`, and `app_port`. It does not infer package-manager
+commands or ports.
+
+Repos do not need a Kamal config. If the repo tracks `config/deploy.yml`, Single
+Server uses it as-is. Otherwise, Single Server writes a temporary
+`config/deploy.yml` for the deploy and removes it after Kamal exits.
 
 Generated Kamal config defaults:
 
@@ -92,7 +96,7 @@ registry:           127.0.0.1:5555
 builder:            local Docker builder for the server architecture
 proxy app_port:     80
 proxy ssl:          false behind Cloudflare Tunnel
-proxy healthcheck:  /up
+proxy healthcheck:  / for normal apps, /up for generated static output
 timeouts:           deploy 10s, drain 1s
 ```
 
@@ -111,6 +115,12 @@ apps:
     healthcheck_path: /up
     healthcheck: https://userbase.com/up
 ```
+
+`healthcheck_path` controls Kamal's container readiness path. It defaults to `/`
+for normal app containers and `/up` for generated static containers. The
+`healthcheck` URL is optional external monitoring for Single Server's
+post-deploy/status checks; if it is absent, Single Server treats that external
+check as assumed healthy.
 
 ## Host secrets
 
@@ -168,6 +178,7 @@ singleserver cloudflare connect --zone example.com
 singleserver list
 singleserver status
 singleserver add https://github.com/owner/repo
+singleserver edit owner/repo --healthcheck-path /ready
 singleserver deploy dvassallo/fullsend
 singleserver render-deploy smallbets/userbase-homepage
 singleserver logs fullsend
@@ -192,13 +203,27 @@ records to the tunnel and routed through `cloudflared`, so the server IP stays
 hidden and Cloudflare handles public TLS, proxying, CDN, and DDoS protection.
 
 `singleserver add <github-url>` validates GitHub App access, checks the repo's
-default branch and `Dockerfile`, appends the normalized `owner/repo` to
+default branch and Dockerfile path, appends the normalized `owner/repo` to
 `/etc/singleserver/apps.yml`, validates the generated Kamal config, deploys the
-current branch tip, and runs `doctor` afterward. When Cloudflare is connected,
-the default app domain is a DNS-safe app label plus the
-connected zone, such as `my-app.example.com` or `singleserver-com.example.com`.
-Pass `--no-deploy` to configure the app and wait for the next push or manual
-deploy.
+current branch tip, and runs `doctor` afterward. In an interactive SSH session,
+`add` prompts for the missing pieces: generated runtime settings when a repo has
+no Dockerfile, the readiness path, optional external healthcheck URL, and whether
+to deploy immediately. It also prints the equivalent non-interactive command. In
+scripts or non-interactive shells, pass explicit generated-runtime options, such
+as `--runtime static --static-dir dist` for a static site or
+`--runtime node --start "npm start" --app-port 3000` for a web process. When Cloudflare is
+connected, the default app domain is a DNS-safe app label plus the connected
+zone, such as `my-app.example.com` or
+`singleserver-com.example.com`. Pass `--no-deploy` to configure the app and wait
+for the next push or manual deploy.
+
+`singleserver edit <app|owner/repo|github-url>` changes app config after an app
+has been added. With no flags in an interactive SSH session, it prompts with the
+current settings and prints the equivalent non-interactive command. In scripts,
+pass the setting flags directly: `--dockerfile` to use the repo Dockerfile,
+`--runtime static|node|bun` plus generated Dockerfile options, `--app-port`,
+`--healthcheck-path`, `--healthcheck`, or `--no-healthcheck`. Config changes
+deploy immediately by default; pass `--no-deploy` to stage the change.
 
 `singleserver deploy <owner/repo|app> [ref]` runs the same deploy path as a push webhook. If `ref` is omitted, Single Server deploys the configured branch or the repository default branch.
 
@@ -233,14 +258,43 @@ repo checkout and persistent storage by default. Pass `--delete-repo --yes` or
 ## Adding An App
 
 1. Install the Single Server GitHub App on the repository owner, if it is not already installed.
-2. Make sure the repository contains a `Dockerfile`.
-3. Add it from the server:
+2. Add it from the server:
 
 ```sh
 singleserver add https://github.com/owner/repo
 ```
 
+In an interactive SSH session, Single Server asks for anything it cannot infer
+safely and then prints the equivalent command. In non-interactive usage, provide
+the build contract explicitly when the repo does not have a Dockerfile:
+
+```sh
+singleserver add https://github.com/owner/static-site --runtime static --static-dir dist
+singleserver add https://github.com/owner/node-site --runtime node --install "npm ci" --build "npm run build" --static-dir dist
+singleserver add https://github.com/owner/node-app --runtime node --install "npm ci" --start "npm start" --app-port 3000
+```
+
 Future pushes to the configured branch deploy automatically.
+
+## Editing An App
+
+Run `edit` without flags when you want Single Server to walk through the current
+settings:
+
+```sh
+singleserver edit my-app
+```
+
+For scripted changes, pass the same answers as flags:
+
+```sh
+singleserver edit https://github.com/owner/repo --healthcheck-path /ready
+singleserver edit my-app --dockerfile --no-healthcheck
+singleserver edit my-app --runtime static --static-dir public
+singleserver edit my-app --runtime node --install "npm ci" --start "npm start" --app-port 3000
+```
+
+`edit` deploys after writing `apps.yml` unless `--no-deploy` is passed.
 
 ## Logs
 

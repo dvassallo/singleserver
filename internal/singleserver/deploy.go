@@ -106,6 +106,10 @@ func (m *DeployManager) runKamal(req DeployRequest, token string) (DeployTiming,
 	if err != nil {
 		return DeployTiming{}, err
 	}
+	generatedDockerfile, err := GeneratedDockerfile(req.App)
+	if err != nil {
+		return DeployTiming{}, err
+	}
 
 	script := `
 set -euo pipefail
@@ -129,11 +133,23 @@ app_name="$SINGLESERVER_APP_NAME"
 env_file="$SINGLESERVER_ENV_FILE"
 remote_url="https://x-access-token:${SINGLESERVER_GITHUB_TOKEN}@github.com/${repo}.git"
 generated_deploy_file=""
+generated_dockerfile_file=""
+generated_dockerignore_file=""
+dockerignore_backup_file=""
 
 cleanup() {
   if [ -n "$generated_deploy_file" ]; then
     rm -f "$generated_deploy_file"
     rmdir config 2>/dev/null || true
+  fi
+  if [ -n "$generated_dockerfile_file" ]; then
+    rm -f "$generated_dockerfile_file"
+  fi
+  if [ -n "$dockerignore_backup_file" ]; then
+    cp "$dockerignore_backup_file" .dockerignore
+    rm -f "$dockerignore_backup_file"
+  elif [ -n "$generated_dockerignore_file" ]; then
+    rm -f "$generated_dockerignore_file"
   fi
 }
 trap cleanup EXIT
@@ -153,6 +169,34 @@ git remote set-url origin "https://github.com/${repo}.git"
 ignore_checkout_path "/.docker/"
 
 git_done_ms=$(now_ms)
+
+if [ -f Dockerfile ]; then
+  dockerfile_source=repo
+elif [ -n "$SINGLESERVER_GENERATED_DOCKERFILE" ]; then
+  ignore_checkout_path "/Dockerfile"
+  generated_dockerfile_file=Dockerfile
+  printf '%s' "$SINGLESERVER_GENERATED_DOCKERFILE" > "$generated_dockerfile_file"
+  dockerfile_source="$SINGLESERVER_GENERATED_DOCKERFILE_SOURCE"
+  if [ -f .dockerignore ]; then
+    dockerignore_backup_file="$(mktemp)"
+    cp .dockerignore "$dockerignore_backup_file"
+  else
+    ignore_checkout_path "/.dockerignore"
+    generated_dockerignore_file=.dockerignore
+    : > .dockerignore
+  fi
+  cat >> .dockerignore <<'EOF'
+
+# Single Server generated deploy files
+.kamal
+.git
+.singleserver-generated
+EOF
+else
+  echo "dockerfile=missing" >&2
+  exit 1
+fi
+echo "dockerfile=${dockerfile_source}"
 
 if git ls-files --error-unmatch config/deploy.yml >/dev/null 2>&1; then
   deploy_config_source=repo
@@ -196,6 +240,8 @@ echo "timing command=${kamal_command} config=${deploy_config_source} git_ms=$((g
 		"SINGLESERVER_SHA="+req.SHA,
 		"SINGLESERVER_GITHUB_TOKEN="+token,
 		"SINGLESERVER_GENERATED_DEPLOY_YML="+string(generatedDeployYAML),
+		"SINGLESERVER_GENERATED_DOCKERFILE="+generatedDockerfile.Dockerfile,
+		"SINGLESERVER_GENERATED_DOCKERFILE_SOURCE="+generatedDockerfile.Source,
 		"SINGLESERVER_ENV_FILE="+appEnvPath(req.App.Name),
 	)
 

@@ -135,17 +135,6 @@ prompt_yes() {
   [ "$answer" = "y" ] || [ "$answer" = "yes" ]
 }
 
-prompt_line() {
-  prompt="$1"
-  if ! has_tty; then
-    printf ""
-    return 0
-  fi
-  printf "%s" "$prompt" > /dev/tty
-  IFS= read -r value < /dev/tty || value=""
-  printf "%s" "$value"
-}
-
 prompt_secret() {
   prompt="$1"
   if ! has_tty; then
@@ -167,6 +156,19 @@ prompt_secret() {
 
 has_public_url() {
   grep -Eq "^SINGLESERVER_PUBLIC_URL=.*https://.*\\.ts\\.net" /etc/singleserver/singleserver.env 2>/dev/null
+}
+
+github_connected() {
+  [ -f /etc/singleserver/github-app.json ] && [ -f /etc/singleserver/github-app.private-key.pem ]
+}
+
+wait_for_github_setup() {
+  if ! has_tty; then
+    return 1
+  fi
+  printf "After GitHub says the app is installed, press Enter to continue. " > /dev/tty
+  IFS= read -r _ < /dev/tty || true
+  github_connected
 }
 
 tailscale_running() {
@@ -210,19 +212,10 @@ if [ -n "${CLOUDFLARE_API_TOKEN:-}" ] || [ -n "${CF_API_TOKEN:-}" ] || [ -f /etc
 elif prompt_yes "Connect Cloudflare now? This needs an API token that can manage DNS and tunnels. [Y/n]" "Y"; then
   cf_token="$(prompt_secret "Cloudflare API token: ")"
   if [ -n "$cf_token" ]; then
-    cf_zone="$(prompt_line "Cloudflare zone/domain, like example.com (blank to auto-detect): ")"
-    if [ -n "$cf_zone" ]; then
-      if CLOUDFLARE_API_TOKEN="$cf_token" /usr/local/bin/singleserver cloudflare connect --zone "$cf_zone"; then
-        :
-      else
-        echo "cloudflare pending: run singleserver cloudflare connect --zone $cf_zone"
-      fi
+    if CLOUDFLARE_API_TOKEN="$cf_token" /usr/local/bin/singleserver cloudflare connect; then
+      :
     else
-      if CLOUDFLARE_API_TOKEN="$cf_token" /usr/local/bin/singleserver cloudflare connect; then
-        :
-      else
-        echo "cloudflare pending: run singleserver cloudflare connect"
-      fi
+      echo "cloudflare pending: run singleserver cloudflare connect"
     fi
   else
     echo "cloudflare pending: set CLOUDFLARE_API_TOKEN, then run singleserver cloudflare connect"
@@ -231,11 +224,16 @@ else
   echo "cloudflare pending: set CLOUDFLARE_API_TOKEN, then run singleserver cloudflare connect"
 fi
 
-if [ -f /etc/singleserver/github-app.json ] && [ -f /etc/singleserver/github-app.private-key.pem ]; then
+if github_connected; then
   echo "github ok"
 elif grep -q "^SINGLESERVER_PUBLIC_URL=" /etc/singleserver/singleserver.env 2>/dev/null; then
   if /usr/local/bin/singleserver github connect; then
     echo "github pending: open the setup URL above and install the GitHub App"
+    if wait_for_github_setup; then
+      echo "github ok"
+    else
+      echo "github pending: run singleserver github connect"
+    fi
   else
     echo "github pending: run singleserver github connect"
   fi
@@ -246,4 +244,8 @@ fi
 /usr/local/bin/singleserver doctor || true
 
 echo
-echo "Next: run singleserver add https://github.com/you/my-app"
+if github_connected; then
+  echo "Next: run singleserver add https://github.com/you/my-app"
+else
+  echo "Next: finish GitHub setup with singleserver github connect, then run singleserver add https://github.com/you/my-app"
+fi

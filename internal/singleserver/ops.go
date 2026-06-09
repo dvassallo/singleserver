@@ -378,18 +378,10 @@ func updateDomain(appName string, host string, add bool, w io.Writer) (*AppConfi
 		if !containsFold(app.Hosts, host) {
 			app.Hosts = append(app.Hosts, host)
 		}
-		if app.Healthcheck == "" {
-			app.Healthcheck = "https://" + host + app.HealthcheckPath
-		}
 	} else {
-		removedHealthcheck := "https://" + host + app.HealthcheckPath
 		app.Hosts = removeFold(app.Hosts, host)
-		if strings.EqualFold(app.Healthcheck, removedHealthcheck) {
-			if len(app.Hosts) > 0 {
-				app.Healthcheck = "https://" + app.Hosts[0] + app.HealthcheckPath
-			} else {
-				app.Healthcheck = ""
-			}
+		if healthcheckBelongsToHost(app.Healthcheck, host, app.HealthcheckPath) {
+			app.Healthcheck = ""
 		}
 	}
 	if err := config.Normalize(); err != nil {
@@ -412,6 +404,24 @@ func updateDomain(appName string, host string, add bool, w io.Writer) (*AppConfi
 		fmt.Fprintf(w, "%s\tdomain\tok\tremoved %s\n", app.Name, host)
 	}
 	return app, nil
+}
+
+func healthcheckBelongsToHost(healthcheck, host, path string) bool {
+	if strings.TrimSpace(healthcheck) == "" {
+		return false
+	}
+	for _, candidatePath := range []string{path, "/up"} {
+		if candidatePath == "" {
+			continue
+		}
+		if !strings.HasPrefix(candidatePath, "/") {
+			candidatePath = "/" + candidatePath
+		}
+		if strings.EqualFold(healthcheck, "https://"+host+candidatePath) {
+			return true
+		}
+	}
+	return false
 }
 
 func listDomains(args []string, w io.Writer) error {
@@ -459,7 +469,7 @@ func verifyDomains(args []string, w io.Writer) error {
 	}
 	var cloudflareClient *CloudflareClient
 	failed := false
-	if state.ZoneID != "" {
+	if state.TunnelID != "" {
 		if token := cloudflareTokenFromEnvOrState(state); token != "" {
 			client, err := newCloudflareClient(token)
 			if err != nil {
@@ -505,7 +515,11 @@ func verifyCloudflareDNSRecord(host string, state *CloudflareState, client *Clou
 		return "", errors.New("no Cloudflare DNS target configured; run `singleserver cloudflare connect`")
 	}
 	target := state.TunnelID + ".cfargotunnel.com"
-	records, err := client.dnsRecords(state.ZoneID, host, "CNAME")
+	zone, err := client.zoneForHostname(host)
+	if err != nil {
+		return target, err
+	}
+	records, err := client.dnsRecords(zone.ID, host, "CNAME")
 	if err != nil {
 		return target, err
 	}

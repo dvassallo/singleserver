@@ -1,6 +1,7 @@
 package singleserver
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"flag"
@@ -16,19 +17,53 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+var (
+	addPromptInput           io.Reader = os.Stdin
+	addPromptInteractiveFunc           = defaultAddPromptInteractive
+)
+
 type addOptions struct {
 	repo               string
 	name               string
 	branch             string
+	hosts              []string
 	healthcheck        string
 	healthcheckPath    string
+	runtime            string
+	installCommand     string
+	buildCommand       string
+	startCommand       string
+	staticDir          string
 	appPort            int
 	noDeploy           bool
+	hostsSet           bool
 	healthcheckPathSet bool
 	appPortSet         bool
 }
 
 const addUsage = "usage: singleserver add <github-url> [options]"
+
+type addPromptContext struct {
+	hasDockerfile bool
+	targetBranch  string
+}
+
+type stringListFlag []string
+
+func (f *stringListFlag) String() string {
+	if f == nil {
+		return ""
+	}
+	return strings.Join(*f, ",")
+}
+
+func (f *stringListFlag) Set(value string) error {
+	value = strings.TrimSpace(value)
+	if value != "" {
+		*f = append(*f, value)
+	}
+	return nil
+}
 
 type addAppEntry struct {
 	repo            string
@@ -38,6 +73,11 @@ type addAppEntry struct {
 	hosts           []string
 	healthcheck     string
 	healthcheckPath string
+	runtime         string
+	installCommand  string
+	buildCommand    string
+	startCommand    string
+	staticDir       string
 	appPort         int
 	appPortSet      bool
 	storage         *StorageConfig
@@ -64,21 +104,10 @@ func cliAdd(args []string, w io.Writer, logger *log.Logger) error {
 		return fmt.Errorf("%s is already configured", opts.repo)
 	}
 
-	app, entry, err := opts.app()
-	if err != nil {
-		return err
-	}
-	if err := applyDefaultAppDomain(&app, &entry); err != nil {
-		return err
-	}
-	if existing, exists := config.AppByName(app.Name); exists {
-		return fmt.Errorf("app name %s is already used by %s; rerun with --name <unique-name>", app.Name, existing.Repo)
-	}
-	if _, err := GeneratedDeployYAML(app); err != nil {
-		return err
-	}
-
 	github := NewGitHubClient(envDefault("SINGLESERVER_STATE_DIR", "/etc/singleserver"))
+	if err := ensureGitHubSetupReady(github); err != nil {
+		return err
+	}
 	installationID, err := github.RepositoryInstallationID(opts.repo)
 	if err != nil {
 		return err
@@ -99,8 +128,41 @@ func cliAdd(args []string, w io.Writer, logger *log.Logger) error {
 	if err != nil {
 		return err
 	}
+	if hasDockerfile && strings.TrimSpace(opts.runtime) != "" {
+		return fmt.Errorf("%s already has a Dockerfile on %s; remove --runtime or delete the repo Dockerfile", opts.repo, targetBranch)
+	}
+
+	if addPromptInteractiveFunc() {
+		opts, err = promptAddOptions(opts, addPromptInput, w, addPromptContext{
+			hasDockerfile: hasDockerfile,
+			targetBranch:  targetBranch,
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	app, entry, err := opts.app()
+	if err != nil {
+		return err
+	}
+	if existing, exists := config.AppByName(app.Name); exists {
+		return fmt.Errorf("app name %s is already used by %s; rerun with --name <unique-name>", app.Name, existing.Repo)
+	}
+	if _, err := GeneratedDeployYAML(app); err != nil {
+		return err
+	}
+	generatedDockerfile, err := GeneratedDockerfile(app)
+	if err != nil {
+		return err
+	}
+
+	dockerfileSource := fmt.Sprintf("Dockerfile on %s", targetBranch)
 	if !hasDockerfile {
-		return fmt.Errorf("%s does not have a Dockerfile on %s", opts.repo, targetBranch)
+		if !app.UsesGeneratedDockerfile() {
+			return fmt.Errorf("%s does not have a Dockerfile on %s; rerun with --runtime static|node|bun to generate one", opts.repo, targetBranch)
+		}
+		dockerfileSource = generatedDockerfile.Source
 	}
 
 	body, err := readConfigForAppend(configPath)
@@ -114,7 +176,7 @@ func cliAdd(args []string, w io.Writer, logger *log.Logger) error {
 
 	fmt.Fprintf(w, "%s\tgithub_installation\tok\tid=%d\n", app.Name, installationID)
 	fmt.Fprintf(w, "%s\tdefault_branch\tok\t%s\n", app.Name, defaultBranch)
-	fmt.Fprintf(w, "%s\tdockerfile\tok\tDockerfile on %s\n", app.Name, targetBranch)
+	fmt.Fprintf(w, "%s\tdockerfile\tok\t%s\n", app.Name, dockerfileSource)
 	fmt.Fprintf(w, "%s\tdeploy_config\tok\tgenerated from conventions\n", app.Name)
 
 	syncedHosts := []string{}
@@ -148,14 +210,30 @@ func cliAdd(args []string, w io.Writer, logger *log.Logger) error {
 	return nil
 }
 
+func ensureGitHubSetupReady(github *GitHubClient) error {
+	if _, err := github.LoadSecrets(); err != nil {
+		return errors.New("GitHub is not connected yet. Run `singleserver github connect`, open the setup URL, create/install the GitHub App, then rerun this command.")
+	}
+	if _, err := github.loadPrivateKey(); err != nil {
+		return errors.New("GitHub App setup is incomplete. Run `singleserver github connect`, open the setup URL, create/install the GitHub App, then rerun this command.")
+	}
+	return nil
+}
+
 func parseAddArgs(args []string, w io.Writer) (addOptions, error) {
 	var opts addOptions
 	fs := flag.NewFlagSet("add", flag.ContinueOnError)
 	fs.SetOutput(w)
 	fs.StringVar(&opts.name, "name", "", "app name override")
 	fs.StringVar(&opts.branch, "branch", "", "branch override")
+	fs.Var((*stringListFlag)(&opts.hosts), "domain", "app domain")
 	fs.StringVar(&opts.healthcheck, "healthcheck", "", "external healthcheck URL")
 	fs.StringVar(&opts.healthcheckPath, "healthcheck-path", "", "container healthcheck path for generated Kamal config")
+	fs.StringVar(&opts.runtime, "runtime", "", "generated Dockerfile runtime: static, node, or bun")
+	fs.StringVar(&opts.installCommand, "install", "", "install command for generated Node/Bun Dockerfile")
+	fs.StringVar(&opts.buildCommand, "build", "", "build command for generated Node/Bun Dockerfile")
+	fs.StringVar(&opts.startCommand, "start", "", "start command for generated Node/Bun Dockerfile")
+	fs.StringVar(&opts.staticDir, "static-dir", "", "static output directory for generated Dockerfile")
 	fs.BoolVar(&opts.noDeploy, "no-deploy", false, "configure without deploying immediately")
 
 	appPort := fs.Int("app-port", 0, "container app port for generated Kamal config")
@@ -165,6 +243,8 @@ func parseAddArgs(args []string, w io.Writer) (addOptions, error) {
 	opts.appPort = *appPort
 	fs.Visit(func(f *flag.Flag) {
 		switch f.Name {
+		case "domain":
+			opts.hostsSet = true
 		case "healthcheck-path":
 			opts.healthcheckPathSet = true
 		case "app-port":
@@ -181,6 +261,268 @@ func parseAddArgs(args []string, w io.Writer) (addOptions, error) {
 	}
 	opts.repo = repo
 	return opts, nil
+}
+
+func defaultAddPromptInteractive() bool {
+	stat, err := os.Stdin.Stat()
+	return err == nil && stat.Mode()&os.ModeCharDevice != 0
+}
+
+type addPrompter struct {
+	reader *bufio.Reader
+	w      io.Writer
+}
+
+func promptAddOptions(opts addOptions, input io.Reader, w io.Writer, ctx addPromptContext) (addOptions, error) {
+	p := addPrompter{reader: bufio.NewReader(input), w: w}
+	fmt.Fprintf(w, "Interactive setup for %s on %s.\n", opts.repo, ctx.targetBranch)
+	if ctx.hasDockerfile {
+		fmt.Fprintln(w, "Dockerfile found. Single Server will use it as-is.")
+	} else {
+		fmt.Fprintln(w, "No Dockerfile found. Single Server can generate one from explicit runtime settings.")
+		runtime := strings.ToLower(strings.TrimSpace(opts.runtime))
+		if runtime == "" {
+			var err error
+			runtime, err = p.askChoice("Runtime", []string{"static", "node", "bun"})
+			if err != nil {
+				return addOptions{}, err
+			}
+			opts.runtime = runtime
+		} else {
+			opts.runtime = runtime
+		}
+		if err := promptGeneratedDockerfileOptions(&opts, p); err != nil {
+			return addOptions{}, err
+		}
+	}
+
+	if len(opts.hosts) == 0 {
+		value, err := p.askOptional("App domain (optional)")
+		if err != nil {
+			return addOptions{}, err
+		}
+		if value != "" {
+			opts.hosts = []string{value}
+			opts.hostsSet = true
+		}
+	}
+	if !opts.healthcheckPathSet {
+		defaultPath := promptReadinessDefault(opts)
+		value, err := p.askDefault("Readiness path", defaultPath)
+		if err != nil {
+			return addOptions{}, err
+		}
+		if value != defaultPath {
+			opts.healthcheckPath = value
+			opts.healthcheckPathSet = true
+		}
+	}
+	if strings.TrimSpace(opts.healthcheck) == "" {
+		value, err := p.askOptional("External healthcheck URL (optional)")
+		if err != nil {
+			return addOptions{}, err
+		}
+		opts.healthcheck = value
+	}
+	if !opts.noDeploy {
+		deploy, err := p.askYesNo("Deploy now?", true)
+		if err != nil {
+			return addOptions{}, err
+		}
+		if !deploy {
+			opts.noDeploy = true
+		}
+	}
+
+	fmt.Fprintf(w, "Equivalent command:\n  %s\n", addEquivalentCommand(opts))
+	return opts, nil
+}
+
+func promptGeneratedDockerfileOptions(opts *addOptions, p addPrompter) error {
+	switch strings.ToLower(strings.TrimSpace(opts.runtime)) {
+	case "static":
+		if strings.TrimSpace(opts.staticDir) == "" {
+			value, err := p.askDefault("Static directory", ".")
+			if err != nil {
+				return err
+			}
+			opts.staticDir = value
+		}
+	case "node", "bun":
+		if strings.TrimSpace(opts.installCommand) == "" {
+			value, err := p.askOptional("Install command (optional)")
+			if err != nil {
+				return err
+			}
+			opts.installCommand = value
+		}
+		if strings.TrimSpace(opts.buildCommand) == "" {
+			value, err := p.askOptional("Build command (optional)")
+			if err != nil {
+				return err
+			}
+			opts.buildCommand = value
+		}
+		if strings.TrimSpace(opts.staticDir) == "" && strings.TrimSpace(opts.startCommand) == "" {
+			value, err := p.askOptional("Static output directory (blank for web process)")
+			if err != nil {
+				return err
+			}
+			opts.staticDir = value
+		}
+		if strings.TrimSpace(opts.staticDir) == "" {
+			if strings.TrimSpace(opts.startCommand) == "" {
+				value, err := p.askRequired("Start command")
+				if err != nil {
+					return err
+				}
+				opts.startCommand = value
+			}
+			if !opts.appPortSet {
+				value, err := p.askPort("App port")
+				if err != nil {
+					return err
+				}
+				opts.appPort = value
+				opts.appPortSet = true
+			}
+		}
+	}
+	return nil
+}
+
+func promptReadinessDefault(opts addOptions) string {
+	if strings.EqualFold(opts.runtime, "static") || strings.TrimSpace(opts.staticDir) != "" {
+		return "/up"
+	}
+	return "/"
+}
+
+func (p addPrompter) askChoice(label string, values []string) (string, error) {
+	allowed := map[string]bool{}
+	for _, value := range values {
+		allowed[value] = true
+	}
+	for {
+		value, err := p.ask(label+" ("+strings.Join(values, "/")+")", "")
+		if err != nil {
+			return "", err
+		}
+		value = strings.ToLower(strings.TrimSpace(value))
+		if allowed[value] {
+			return value, nil
+		}
+		fmt.Fprintf(p.w, "Enter one of: %s\n", strings.Join(values, ", "))
+	}
+}
+
+func (p addPrompter) askDefault(label, defaultValue string) (string, error) {
+	value, err := p.ask(label, defaultValue)
+	if err != nil {
+		return "", err
+	}
+	if value == "" {
+		return defaultValue, nil
+	}
+	return value, nil
+}
+
+func (p addPrompter) askOptional(label string) (string, error) {
+	return p.ask(label, "")
+}
+
+func (p addPrompter) askRequired(label string) (string, error) {
+	for {
+		value, err := p.ask(label, "")
+		if err != nil {
+			return "", err
+		}
+		if value != "" {
+			return value, nil
+		}
+		fmt.Fprintln(p.w, "This value is required.")
+	}
+}
+
+func (p addPrompter) askPort(label string) (int, error) {
+	for {
+		value, err := p.askRequired(label)
+		if err != nil {
+			return 0, err
+		}
+		port, parseErr := strconv.Atoi(value)
+		if parseErr == nil && port >= 1 && port <= 65535 {
+			return port, nil
+		}
+		fmt.Fprintln(p.w, "Enter a port from 1 to 65535.")
+	}
+}
+
+func (p addPrompter) askYesNo(label string, defaultYes bool) (bool, error) {
+	defaultValue := "y"
+	if !defaultYes {
+		defaultValue = "n"
+	}
+	for {
+		value, err := p.askDefault(label, defaultValue)
+		if err != nil {
+			return false, err
+		}
+		switch strings.ToLower(value) {
+		case "y", "yes":
+			return true, nil
+		case "n", "no":
+			return false, nil
+		default:
+			fmt.Fprintln(p.w, "Enter y or n.")
+		}
+	}
+}
+
+func (p addPrompter) ask(label, defaultValue string) (string, error) {
+	if defaultValue != "" {
+		fmt.Fprintf(p.w, "%s [%s]: ", label, defaultValue)
+	} else {
+		fmt.Fprintf(p.w, "%s: ", label)
+	}
+	line, err := p.reader.ReadString('\n')
+	if err != nil && len(line) == 0 {
+		return "", err
+	}
+	return strings.TrimSpace(line), nil
+}
+
+func addEquivalentCommand(opts addOptions) string {
+	parts := []string{"singleserver", "add", shellQuote("https://github.com/" + opts.repo)}
+	appendFlagValue := func(name, value string) {
+		if strings.TrimSpace(value) != "" {
+			parts = append(parts, name, shellQuote(value))
+		}
+	}
+
+	appendFlagValue("--name", opts.name)
+	appendFlagValue("--branch", opts.branch)
+	for _, host := range opts.hosts {
+		appendFlagValue("--domain", host)
+	}
+	appendFlagValue("--runtime", opts.runtime)
+	appendFlagValue("--install", opts.installCommand)
+	appendFlagValue("--build", opts.buildCommand)
+	appendFlagValue("--start", opts.startCommand)
+	if shouldWriteStaticDir(opts.runtime, opts.staticDir) {
+		appendFlagValue("--static-dir", opts.staticDir)
+	}
+	if opts.appPortSet {
+		appendFlagValue("--app-port", strconv.Itoa(opts.appPort))
+	}
+	if opts.healthcheckPathSet {
+		appendFlagValue("--healthcheck-path", opts.healthcheckPath)
+	}
+	appendFlagValue("--healthcheck", opts.healthcheck)
+	if opts.noDeploy {
+		parts = append(parts, "--no-deploy")
+	}
+	return strings.Join(parts, " ")
 }
 
 func normalizeRepoArg(value string) (string, error) {
@@ -217,8 +559,15 @@ func (o addOptions) app() (AppConfig, addAppEntry, error) {
 		Repo:            o.repo,
 		Name:            o.name,
 		Branch:          o.branch,
+		Hosts:           o.hosts,
 		Healthcheck:     o.healthcheck,
 		HealthcheckPath: o.healthcheckPath,
+		Runtime:         o.runtime,
+		InstallCommand:  o.installCommand,
+		BuildCommand:    o.buildCommand,
+		StartCommand:    o.startCommand,
+		StaticDir:       o.staticDir,
+		AppPortSet:      o.appPortSet,
 	}
 	if o.appPortSet {
 		app.AppPort = o.appPort
@@ -226,15 +575,16 @@ func (o addOptions) app() (AppConfig, addAppEntry, error) {
 	if err := app.Normalize(); err != nil {
 		return AppConfig{}, addAppEntry{}, err
 	}
-	if app.Healthcheck == "" && len(app.Hosts) > 0 {
-		app.Healthcheck = "https://" + app.Hosts[0] + app.HealthcheckPath
-	}
-
 	entry := addAppEntry{
 		repo:            app.Repo,
 		hosts:           app.Hosts,
 		healthcheck:     app.Healthcheck,
 		healthcheckPath: "",
+		runtime:         app.Runtime,
+		installCommand:  app.InstallCommand,
+		buildCommand:    app.BuildCommand,
+		startCommand:    app.StartCommand,
+		staticDir:       app.StaticDir,
 		appPort:         app.AppPort,
 		appPortSet:      o.appPortSet,
 	}
@@ -248,26 +598,6 @@ func (o addOptions) app() (AppConfig, addAppEntry, error) {
 		entry.healthcheckPath = app.HealthcheckPath
 	}
 	return app, entry, nil
-}
-
-func applyDefaultAppDomain(app *AppConfig, entry *addAppEntry) error {
-	if len(app.Hosts) > 0 {
-		return nil
-	}
-	host, ok, err := defaultAppDomain(app.Name)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return nil
-	}
-	app.Hosts = []string{host}
-	if app.Healthcheck == "" {
-		app.Healthcheck = "https://" + host + app.HealthcheckPath
-	}
-	entry.hosts = app.Hosts
-	entry.healthcheck = app.Healthcheck
-	return nil
 }
 
 func readConfigForAppend(path string) ([]byte, error) {
@@ -359,6 +689,21 @@ func (e addAppEntry) yamlNode() *yaml.Node {
 	if e.healthcheckPath != "" {
 		appendScalarPair(node, "healthcheck_path", e.healthcheckPath)
 	}
+	if e.runtime != "" {
+		appendScalarPair(node, "runtime", e.runtime)
+	}
+	if e.installCommand != "" {
+		appendScalarPair(node, "install", e.installCommand)
+	}
+	if e.buildCommand != "" {
+		appendScalarPair(node, "build", e.buildCommand)
+	}
+	if e.startCommand != "" {
+		appendScalarPair(node, "start", e.startCommand)
+	}
+	if shouldWriteStaticDir(e.runtime, e.staticDir) {
+		appendScalarPair(node, "static_dir", e.staticDir)
+	}
 	if e.appPortSet {
 		appendScalarPair(node, "app_port", strconv.Itoa(e.appPort))
 	}
@@ -382,8 +727,17 @@ func (e addAppEntry) isScalar() bool {
 		len(e.hosts) == 0 &&
 		e.healthcheck == "" &&
 		e.healthcheckPath == "" &&
+		e.runtime == "" &&
+		e.installCommand == "" &&
+		e.buildCommand == "" &&
+		e.startCommand == "" &&
+		!shouldWriteStaticDir(e.runtime, e.staticDir) &&
 		!e.appPortSet &&
 		e.storage == nil
+}
+
+func shouldWriteStaticDir(runtime, staticDir string) bool {
+	return staticDir != "" && !(runtime == "static" && staticDir == ".")
 }
 
 func findMapValue(node *yaml.Node, key string) *yaml.Node {
@@ -441,7 +795,7 @@ func addFlagTakesValue(arg string) bool {
 		name = before
 	}
 	switch name {
-	case "name", "branch", "healthcheck", "healthcheck-path", "app-port":
+	case "name", "branch", "domain", "healthcheck", "healthcheck-path", "app-port", "runtime", "install", "build", "start", "static-dir":
 		return true
 	default:
 		return false

@@ -113,7 +113,7 @@ func TestGeneratedDeployYAMLOmitsEmptyProxyHosts(t *testing.T) {
 		t.Fatalf("unexpected default app_port: %v", proxy["app_port"])
 	}
 	healthcheck := proxy["healthcheck"].(map[string]any)
-	if healthcheck["path"] != "/up" {
+	if healthcheck["path"] != "/" {
 		t.Fatalf("unexpected default healthcheck path: %v", healthcheck["path"])
 	}
 }

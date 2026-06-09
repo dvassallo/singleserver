@@ -42,7 +42,7 @@ func TestDomainsAndStorageCommandsUpdateConfig(t *testing.T) {
 	if len(app.Hosts) != 1 || app.Hosts[0] != "play.nobrainer.host" {
 		t.Fatalf("unexpected hosts: %#v", app.Hosts)
 	}
-	if app.Healthcheck != "https://play.nobrainer.host/up" {
+	if app.Healthcheck != "" {
 		t.Fatalf("unexpected healthcheck: %s", app.Healthcheck)
 	}
 	if app.Storage == nil || app.Storage.Path != storagePath || app.Storage.Mount != "/data" {

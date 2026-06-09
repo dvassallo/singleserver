@@ -24,8 +24,6 @@ const cloudflareAPI = "https://api.cloudflare.com/client/v4"
 type CloudflareState struct {
 	APIToken        string `json:"api_token"`
 	AccountID       string `json:"account_id"`
-	ZoneID          string `json:"zone_id"`
-	ZoneName        string `json:"zone_name"`
 	TunnelID        string `json:"tunnel_id"`
 	TunnelName      string `json:"tunnel_name"`
 	TunnelSecret    string `json:"tunnel_secret"`
@@ -136,6 +134,42 @@ func (c *CloudflareClient) zones(name string) ([]cloudflareZone, error) {
 		return nil, err
 	}
 	return out.Result, nil
+}
+
+func (c *CloudflareClient) zoneForHostname(hostname string) (*cloudflareZone, error) {
+	hostname = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(hostname)), ".")
+	if hostname == "" {
+		return nil, errors.New("hostname is required")
+	}
+	zones, err := c.zones("")
+	if err != nil {
+		return nil, err
+	}
+	return zoneForHostnameFromList(hostname, zones)
+}
+
+func zoneForHostnameFromList(hostname string, zones []cloudflareZone) (*cloudflareZone, error) {
+	hostname = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(hostname)), ".")
+	if hostname == "" {
+		return nil, errors.New("hostname is required")
+	}
+	var best *cloudflareZone
+	for i := range zones {
+		zoneName := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(zones[i].Name)), ".")
+		if zoneName == "" {
+			continue
+		}
+		if hostname != zoneName && !strings.HasSuffix(hostname, "."+zoneName) {
+			continue
+		}
+		if best == nil || len(zoneName) > len(best.Name) {
+			best = &zones[i]
+		}
+	}
+	if best == nil {
+		return nil, fmt.Errorf("Cloudflare token cannot access a zone for %s", hostname)
+	}
+	return best, nil
 }
 
 func (c *CloudflareClient) findTunnel(accountID string, name string) (*cloudflareTunnel, error) {
@@ -438,8 +472,12 @@ func pruneStaleCloudflareRoutes(client *CloudflareClient, state *CloudflareState
 	expected := expectedCloudflaredHosts(config.Apps)
 	routes := cloudflaredRoutes(cloudflaredConfig)
 	for _, host := range staleCloudflaredHosts(routes, expected) {
-		if state.ZoneID != "" && client != nil {
-			if err := client.deleteCNAMEToTarget(state.ZoneID, host, state.TunnelID+".cfargotunnel.com"); err != nil {
+		if state.TunnelID != "" && client != nil {
+			zone, err := client.zoneForHostname(host)
+			if err != nil {
+				return err
+			}
+			if err := client.deleteCNAMEToTarget(zone.ID, host, state.TunnelID+".cfargotunnel.com"); err != nil {
 				return err
 			}
 		}
@@ -476,21 +514,6 @@ func writeCloudflaredCredentials(path string, state *CloudflareState) error {
 		return err
 	}
 	return writeFileAtomic(path, append(body, '\n'))
-}
-
-func defaultAppDomain(appName string) (string, bool, error) {
-	state, err := loadCloudflareState()
-	if err != nil {
-		return "", false, err
-	}
-	if state.ZoneName == "" || state.ZoneID == "" {
-		return "", false, nil
-	}
-	label := dnsLabelFromAppName(appName)
-	if label == "" {
-		return "", false, fmt.Errorf("could not infer DNS label from app name %q", appName)
-	}
-	return label + "." + state.ZoneName, true, nil
 }
 
 func dnsLabelFromAppName(appName string) string {
@@ -534,7 +557,7 @@ func syncCloudflareAppDomain(hostname string, add bool, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if state.ZoneID == "" {
+	if state.TunnelID == "" {
 		fmt.Fprintf(w, "cloudflare\tskipped\tconnect Cloudflare first with `singleserver cloudflare connect`\n")
 		return nil
 	}
@@ -591,10 +614,18 @@ func cloudflareDomainOps(state *CloudflareState, client *CloudflareClient) (clou
 		target: target,
 		mode:   "tunnel",
 		upsertRecord: func(hostname string) error {
-			return client.upsertCNAME(state.ZoneID, hostname, target)
+			zone, err := client.zoneForHostname(hostname)
+			if err != nil {
+				return err
+			}
+			return client.upsertCNAME(zone.ID, hostname, target)
 		},
 		deleteRecord: func(hostname string) error {
-			return client.deleteCNAMEToTarget(state.ZoneID, hostname, target)
+			zone, err := client.zoneForHostname(hostname)
+			if err != nil {
+				return err
+			}
+			return client.deleteCNAMEToTarget(zone.ID, hostname, target)
 		},
 		ensureRoute: func(hostname string) error {
 			return ensureCloudflaredRoute(state.ConfigFile, state.TunnelID, state.CredentialsFile, hostname, "http://127.0.0.1:80")

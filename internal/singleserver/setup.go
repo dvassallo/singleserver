@@ -48,19 +48,20 @@ func cliGitHubConnect(args []string, w io.Writer) error {
 		return err
 	}
 	fmt.Fprintf(w, "github\tconnect\t%s/setup/github-app?token=%s\n", publicURL, token)
+	fmt.Fprintln(w, "Open the setup URL, create/install the GitHub App, then rerun your command.")
 	return nil
 }
 
 func cliCloudflareConnect(args []string, w io.Writer) error {
 	fs := flag.NewFlagSet("cloudflare connect", flag.ContinueOnError)
 	fs.SetOutput(w)
-	zoneName := fs.String("zone", defaultCloudflareZone(), "Cloudflare zone name")
+	accountID := fs.String("account", "", "Cloudflare account id")
 	tunnelName := fs.String("tunnel", "", "Cloudflare tunnel name")
 	if err := fs.Parse(normalizeFlagArgs(args, cloudflareFlagTakesValue)); err != nil {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: singleserver cloudflare connect [--zone example.com] [--tunnel <name>]")
+		return errors.New("usage: singleserver cloudflare connect [--account <id>] [--tunnel <name>]")
 	}
 	if err := ensureBaseFiles(); err != nil {
 		return err
@@ -82,14 +83,12 @@ func cliCloudflareConnect(args []string, w io.Writer) error {
 		return err
 	}
 
-	zone, err := selectCloudflareZone(client, *zoneName)
+	selectedAccountID, err := selectCloudflareAccount(client, *accountID)
 	if err != nil {
 		return err
 	}
 	state.APIToken = token
-	state.AccountID = zone.Account.ID
-	state.ZoneID = zone.ID
-	state.ZoneName = zone.Name
+	state.AccountID = selectedAccountID
 	applyCloudflareTunnelName(state, *tunnelName, tunnelNameSet)
 	state.HookHost = ""
 	if state.CredentialsFile == "" {
@@ -232,21 +231,38 @@ func ensureBaseFiles() error {
 	return writeServiceEnv(env)
 }
 
-func selectCloudflareZone(client *CloudflareClient, name string) (*cloudflareZone, error) {
-	zones, err := client.zones(name)
+func selectCloudflareAccount(client *CloudflareClient, accountID string) (string, error) {
+	accountID = strings.TrimSpace(accountID)
+	if accountID != "" {
+		return accountID, nil
+	}
+	zones, err := client.zones("")
 	if err != nil {
-		return nil, err
+		return "", err
 	}
+	return accountIDFromZones(zones)
+}
+
+func accountIDFromZones(zones []cloudflareZone) (string, error) {
 	if len(zones) == 0 {
-		if strings.TrimSpace(name) == "" {
-			return nil, errors.New("Cloudflare token cannot access any zones")
+		return "", errors.New("Cloudflare token cannot access any zones")
+	}
+	accounts := map[string]bool{}
+	for _, zone := range zones {
+		if strings.TrimSpace(zone.Account.ID) != "" {
+			accounts[zone.Account.ID] = true
 		}
-		return nil, fmt.Errorf("Cloudflare token cannot access zone %s", name)
 	}
-	if len(zones) > 1 && strings.TrimSpace(name) == "" {
-		return nil, errors.New("Cloudflare token can access multiple zones; run singleserver cloudflare connect --zone <domain>")
+	if len(accounts) == 0 {
+		return "", errors.New("Cloudflare token did not expose an account id")
 	}
-	return &zones[0], nil
+	if len(accounts) > 1 {
+		return "", errors.New("Cloudflare token can access multiple accounts; run singleserver cloudflare connect --account <id>")
+	}
+	for id := range accounts {
+		return id, nil
+	}
+	return "", errors.New("Cloudflare account selection failed")
 }
 
 func loadServiceEnv() (map[string]string, error) {
@@ -322,16 +338,9 @@ func cloudflareFlagTakesValue(arg string) bool {
 	if before, _, ok := strings.Cut(name, "="); ok {
 		name = before
 	}
-	return name == "zone" || name == "tunnel"
+	return name == "account" || name == "tunnel"
 }
 
 func githubFlagTakesValue(arg string) bool {
 	return false
-}
-
-func defaultCloudflareZone() string {
-	if value := strings.TrimSpace(os.Getenv("SINGLESERVER_CLOUDFLARE_ZONE")); value != "" {
-		return value
-	}
-	return strings.TrimSpace(os.Getenv("CLOUDFLARE_ZONE"))
 }

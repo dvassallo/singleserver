@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"regexp"
 	"strings"
 
@@ -27,7 +28,13 @@ type AppConfig struct {
 	Healthcheck     string         `yaml:"healthcheck"`
 	Hosts           []string       `yaml:"hosts"`
 	AppPort         int            `yaml:"app_port"`
+	AppPortSet      bool           `yaml:"-"`
 	HealthcheckPath string         `yaml:"healthcheck_path"`
+	Runtime         string         `yaml:"runtime,omitempty"`
+	InstallCommand  string         `yaml:"install,omitempty"`
+	BuildCommand    string         `yaml:"build,omitempty"`
+	StartCommand    string         `yaml:"start,omitempty"`
+	StaticDir       string         `yaml:"static_dir,omitempty"`
 	Storage         *StorageConfig `yaml:"storage,omitempty"`
 	SecretEnvKeys   []string       `yaml:"-"`
 }
@@ -48,6 +55,7 @@ func (a *AppConfig) UnmarshalYAML(value *yaml.Node) error {
 			return err
 		}
 		*a = AppConfig(raw)
+		a.AppPortSet = mappingHasKey(value, "app_port")
 	default:
 		return fmt.Errorf("app entry must be a repo string or map")
 	}
@@ -75,6 +83,11 @@ func (a *AppConfig) Normalize() error {
 		a.RepoDir = "/srv/repos/" + a.Name
 	}
 	a.Healthcheck = strings.TrimSpace(a.Healthcheck)
+	a.Runtime = strings.ToLower(strings.TrimSpace(a.Runtime))
+	a.InstallCommand = strings.TrimSpace(a.InstallCommand)
+	a.BuildCommand = strings.TrimSpace(a.BuildCommand)
+	a.StartCommand = strings.TrimSpace(a.StartCommand)
+	a.StaticDir = strings.TrimSpace(a.StaticDir)
 	if a.AppPort == 0 {
 		a.AppPort = 80
 	}
@@ -103,10 +116,13 @@ func (a *AppConfig) Normalize() error {
 
 	a.HealthcheckPath = strings.TrimSpace(a.HealthcheckPath)
 	if a.HealthcheckPath == "" {
-		a.HealthcheckPath = "/up"
+		a.HealthcheckPath = defaultHealthcheckPath(*a)
 	}
 	if !strings.HasPrefix(a.HealthcheckPath, "/") {
 		a.HealthcheckPath = "/" + a.HealthcheckPath
+	}
+	if err := a.normalizeGeneratedDockerfileConfig(); err != nil {
+		return err
 	}
 	if a.Storage != nil {
 		a.Storage.Path = strings.TrimSpace(a.Storage.Path)
@@ -125,6 +141,128 @@ func (a *AppConfig) Normalize() error {
 		}
 	}
 	return nil
+}
+
+func defaultHealthcheckPath(app AppConfig) string {
+	if app.Runtime == "static" || strings.TrimSpace(app.StaticDir) != "" {
+		return "/up"
+	}
+	return "/"
+}
+
+func (a *AppConfig) normalizeGeneratedDockerfileConfig() error {
+	if a.Runtime == "" {
+		if a.InstallCommand != "" {
+			return fmt.Errorf("install requires runtime for %s", a.Repo)
+		}
+		if a.BuildCommand != "" {
+			return fmt.Errorf("build requires runtime for %s", a.Repo)
+		}
+		if a.StartCommand != "" {
+			return fmt.Errorf("start requires runtime for %s", a.Repo)
+		}
+		if a.StaticDir != "" {
+			return fmt.Errorf("static_dir requires runtime for %s", a.Repo)
+		}
+		return nil
+	}
+
+	switch a.Runtime {
+	case "static", "node", "bun":
+	default:
+		return fmt.Errorf("invalid runtime for %s: %q", a.Repo, a.Runtime)
+	}
+
+	if err := validateGeneratedCommand("install", a.InstallCommand, a.Repo); err != nil {
+		return err
+	}
+	if err := validateGeneratedCommand("build", a.BuildCommand, a.Repo); err != nil {
+		return err
+	}
+	if err := validateGeneratedCommand("start", a.StartCommand, a.Repo); err != nil {
+		return err
+	}
+
+	if a.Runtime == "static" && a.StaticDir == "" {
+		a.StaticDir = "."
+	}
+	if a.StaticDir != "" {
+		normalized, err := normalizeStaticDir(a.StaticDir)
+		if err != nil {
+			return fmt.Errorf("invalid static_dir for %s: %w", a.Repo, err)
+		}
+		a.StaticDir = normalized
+	}
+
+	staticOutput := a.Runtime == "static" || a.StaticDir != ""
+	if staticOutput {
+		if a.StartCommand != "" {
+			return fmt.Errorf("start is not used when %s builds static files for %s", a.Runtime, a.Repo)
+		}
+		if a.AppPort != 80 {
+			return fmt.Errorf("static output for %s must use app_port 80", a.Repo)
+		}
+	}
+
+	if a.Runtime == "static" {
+		if a.InstallCommand != "" {
+			return fmt.Errorf("install is not used with runtime static for %s", a.Repo)
+		}
+		if a.BuildCommand != "" {
+			return fmt.Errorf("build is not used with runtime static for %s", a.Repo)
+		}
+		return nil
+	}
+
+	if !staticOutput {
+		if a.StartCommand == "" {
+			return fmt.Errorf("runtime %s requires start for %s", a.Runtime, a.Repo)
+		}
+		if !a.AppPortSet {
+			return fmt.Errorf("runtime %s requires app_port for %s", a.Runtime, a.Repo)
+		}
+	}
+	return nil
+}
+
+func validateGeneratedCommand(name, command, repo string) error {
+	if command == "" {
+		return nil
+	}
+	if strings.ContainsAny(command, "\x00\r\n") {
+		return fmt.Errorf("%s for %s must be a single shell command", name, repo)
+	}
+	return nil
+}
+
+func normalizeStaticDir(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", errors.New("cannot be empty")
+	}
+	if strings.HasPrefix(value, "/") {
+		return "", fmt.Errorf("must be relative: %q", value)
+	}
+	cleaned := path.Clean(value)
+	if cleaned == "." {
+		return ".", nil
+	}
+	if cleaned == ".." || strings.HasPrefix(cleaned, "../") || strings.Contains(cleaned, "/../") {
+		return "", fmt.Errorf("must stay inside the repository: %q", value)
+	}
+	return cleaned, nil
+}
+
+func mappingHasKey(node *yaml.Node, key string) bool {
+	if node == nil || node.Kind != yaml.MappingNode {
+		return false
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == key {
+			return true
+		}
+	}
+	return false
 }
 
 func LoadConfig(path string) (*Config, error) {

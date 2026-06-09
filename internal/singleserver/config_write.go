@@ -54,8 +54,13 @@ func appConfigEntry(app AppConfig) addAppEntry {
 		hosts:           app.Hosts,
 		healthcheck:     app.Healthcheck,
 		healthcheckPath: "",
+		runtime:         app.Runtime,
+		installCommand:  app.InstallCommand,
+		buildCommand:    app.BuildCommand,
+		startCommand:    app.StartCommand,
+		staticDir:       app.StaticDir,
 		appPort:         app.AppPort,
-		appPortSet:      app.AppPort != 0 && app.AppPort != 80,
+		appPortSet:      app.AppPortSet || (app.AppPort != 0 && app.AppPort != 80),
 		storage:         app.Storage,
 	}
 	repoName := ""
@@ -71,7 +76,7 @@ func appConfigEntry(app AppConfig) addAppEntry {
 	if app.RepoDir != "" && app.RepoDir != "/srv/repos/"+app.Name {
 		entry.repoDir = app.RepoDir
 	}
-	if app.HealthcheckPath != "" && app.HealthcheckPath != "/up" {
+	if app.HealthcheckPath != "" && app.HealthcheckPath != defaultHealthcheckPath(app) {
 		entry.healthcheckPath = app.HealthcheckPath
 	}
 	return entry

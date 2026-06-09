@@ -203,3 +203,101 @@ func TestNormalizeStorageDefaults(t *testing.T) {
 		t.Fatalf("unexpected storage mount: %s", app.Storage.Mount)
 	}
 }
+
+func TestNormalizeDefaultsReadinessToRootForRepoDockerfiles(t *testing.T) {
+	app := AppConfig{Repo: "dvassallo/fullsend"}
+	if err := app.Normalize(); err != nil {
+		t.Fatal(err)
+	}
+	if app.HealthcheckPath != "/" {
+		t.Fatalf("unexpected healthcheck path: %s", app.HealthcheckPath)
+	}
+}
+
+func TestNormalizeStaticRuntimeDefaults(t *testing.T) {
+	app := AppConfig{
+		Repo:    "smallbets/homepage",
+		Runtime: "static",
+	}
+	if err := app.Normalize(); err != nil {
+		t.Fatal(err)
+	}
+	if app.StaticDir != "." {
+		t.Fatalf("unexpected static dir: %s", app.StaticDir)
+	}
+	if app.HealthcheckPath != "/up" {
+		t.Fatalf("unexpected healthcheck path: %s", app.HealthcheckPath)
+	}
+	if app.AppPort != 80 {
+		t.Fatalf("unexpected app port: %d", app.AppPort)
+	}
+}
+
+func TestNormalizeNodeDynamicRequiresStartAndAppPort(t *testing.T) {
+	app := AppConfig{
+		Repo:    "smallbets/api",
+		Runtime: "node",
+	}
+	if err := app.Normalize(); err == nil || !strings.Contains(err.Error(), "requires start") {
+		t.Fatalf("expected start error, got %v", err)
+	}
+
+	app.StartCommand = "npm start"
+	if err := app.Normalize(); err == nil || !strings.Contains(err.Error(), "requires app_port") {
+		t.Fatalf("expected app_port error, got %v", err)
+	}
+
+	app.AppPort = 3000
+	app.AppPortSet = true
+	if err := app.Normalize(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNormalizeNodeStaticBuildDoesNotNeedStart(t *testing.T) {
+	app := AppConfig{
+		Repo:           "smallbets/homepage",
+		Runtime:        "node",
+		InstallCommand: "npm ci",
+		BuildCommand:   "npm run build",
+		StaticDir:      "dist",
+	}
+	if err := app.Normalize(); err != nil {
+		t.Fatal(err)
+	}
+	if app.AppPort != 80 {
+		t.Fatalf("unexpected app port: %d", app.AppPort)
+	}
+}
+
+func TestNormalizeRejectsUnsafeStaticDir(t *testing.T) {
+	app := AppConfig{
+		Repo:      "smallbets/homepage",
+		Runtime:   "static",
+		StaticDir: "../dist",
+	}
+	if err := app.Normalize(); err == nil {
+		t.Fatal("expected unsafe static_dir error")
+	}
+}
+
+func TestLoadConfigTracksExplicitAppPortForGeneratedRuntime(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "apps.yml")
+	body := []byte(`apps:
+  - repo: smallbets/api
+    runtime: node
+    start: npm start
+    app_port: 3000
+`)
+	if err := os.WriteFile(path, body, 0600); err != nil {
+		t.Fatal(err)
+	}
+	config, err := LoadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !config.Apps[0].AppPortSet {
+		t.Fatal("expected explicit app_port to be tracked")
+	}
+}

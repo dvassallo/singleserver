@@ -17,7 +17,7 @@ func TestDisplayAppDefaults(t *testing.T) {
 	if got := displayHosts(app); got != "-" {
 		t.Fatalf("unexpected hosts display: %q", got)
 	}
-	if got := displayHealthcheck(app); got != "-" {
+	if got := displayHealthcheck(app); got != "assumed" {
 		t.Fatalf("unexpected healthcheck display: %q", got)
 	}
 }

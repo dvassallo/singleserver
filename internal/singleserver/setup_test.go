@@ -33,6 +33,9 @@ func TestGitHubConnectPrintsSetupURL(t *testing.T) {
 	if !strings.Contains(out.String(), "/setup/github-app?token=") {
 		t.Fatalf("setup URL not printed: %s", out.String())
 	}
+	if !strings.Contains(out.String(), "create/install the GitHub App") {
+		t.Fatalf("setup instructions not printed: %s", out.String())
+	}
 }
 
 func TestTailscaleConnectStoresHostname(t *testing.T) {
@@ -209,6 +212,37 @@ func TestCloudflareTunnelNameFromHostname(t *testing.T) {
 		if got := cloudflareTunnelNameFromHostname(test.hostname); got != test.want {
 			t.Fatalf("cloudflareTunnelNameFromHostname(%q) = %q, want %q", test.hostname, got, test.want)
 		}
+	}
+}
+
+func TestAccountIDFromZonesUsesSingleAccessibleAccount(t *testing.T) {
+	zones := []cloudflareZone{
+		{ID: "zone-a", Name: "example.com"},
+		{ID: "zone-b", Name: "example.net"},
+	}
+	zones[0].Account.ID = "account"
+	zones[1].Account.ID = "account"
+
+	got, err := accountIDFromZones(zones)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "account" {
+		t.Fatalf("unexpected account id: %s", got)
+	}
+}
+
+func TestAccountIDFromZonesRejectsMultipleAccounts(t *testing.T) {
+	zones := []cloudflareZone{
+		{ID: "zone-a", Name: "example.com"},
+		{ID: "zone-b", Name: "example.net"},
+	}
+	zones[0].Account.ID = "account-a"
+	zones[1].Account.ID = "account-b"
+
+	_, err := accountIDFromZones(zones)
+	if err == nil || !strings.Contains(err.Error(), "multiple accounts") {
+		t.Fatalf("expected multiple account error, got %v", err)
 	}
 }
 

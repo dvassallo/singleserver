@@ -503,15 +503,15 @@ singleserver add https://github.com/you/my-app-3</pre>
             </div>
             <div class="how-item">
                 <strong>What Docker does.</strong>
-                <p>Docker isolates the apps from each other. Each repo's Dockerfile describes how to build the app image, and each app runs in its own container with its own process, env vars, and storage mounts. Single Server builds images on the same server and sends them through the local registry, avoiding an external CI queue and registry round trip.</p>
+                <p>Docker isolates the apps from each other. A repo can bring its own Dockerfile, or Single Server can generate one from explicit runtime settings for static, Node, and Bun apps. Each app runs in its own container with its own process, env vars, and storage mounts. Single Server builds images on the same server and sends them through the local registry, avoiding an external CI queue and registry round trip.</p>
             </div>
             <div class="how-item">
                 <strong>What Kamal does.</strong>
-                <p>Kamal handles the zero-downtime deploy. Single Server generates the deploy config and calls Kamal. Kamal starts the replacement container, runs the healthcheck, and moves traffic only after the new version is ready. Kamal's proxy receives HTTP from cloudflared and routes each request to the right app container.</p>
+                <p>Kamal handles the zero-downtime deploy. Single Server generates the deploy config and calls Kamal. Kamal starts the replacement container, checks the readiness path, and moves traffic only after the new version is ready. Kamal's proxy receives HTTP from cloudflared and routes each request to the right app container.</p>
             </div>
             <div class="how-item">
                 <strong>What your app needs to do.</strong>
-                <p>Your app needs code, a Dockerfile, one HTTP port, and a health endpoint. If it needs config, it should read env vars. If it needs persistent files or SQLite data, it should write them to mounted storage. Single Server supplies the deploy plumbing around it, including domains, TLS at the edge, generated Kamal config, server-side env vars, persistent storage, logs, and backups.</p>
+                <p>Your app needs code and one HTTP port. A dedicated health endpoint is optional. If it needs config, it should read env vars. If it needs persistent files or SQLite data, it should write them to mounted storage. Single Server supplies the deploy plumbing around it, including domains, TLS at the edge, generated Kamal config, server-side env vars, persistent storage, logs, and backups.</p>
             </div>
         </div>
     </section>
@@ -521,7 +521,7 @@ singleserver add https://github.com/you/my-app-3</pre>
         <div class="feature-grid">
             <div class="feature">
                 <strong>Fast deploys</strong>
-                <p>No Actions queue, no per-repo runner hop. Build on the server, swap containers, healthcheck, and set commit status.</p>
+                <p>No Actions queue, no per-repo runner hop. Build on the server, swap containers, check readiness, and set commit status.</p>
             </div>
             <div class="feature">
                 <strong>App domains</strong>
