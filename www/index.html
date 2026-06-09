@@ -154,8 +154,7 @@
             min-width: 0;
         }
 
-        section > p,
-        .feature-desc {
+        section > p {
             font-size: 1.2rem;
             line-height: 1.6;
             color: #222;
@@ -475,7 +474,7 @@ singleserver add https://github.com/you/my-app-3</pre>
             </div>
             <div class="how-item">
                 <strong>Add repos from the host.</strong>
-                <p>singleserver add checks that the GitHub App can read the repo, confirms there is a Dockerfile, infers the app name and default domain, writes the app to /etc/singleserver/apps.yml, and configures Cloudflare DNS and tunnel routes for the app.</p>
+                <p>singleserver add checks that the GitHub App can read the repo, infers the app name and default domain, writes the app to /etc/singleserver/apps.yml, and configures Cloudflare DNS and tunnel routes for the app.</p>
             </div>
             <div class="how-item">
                 <strong>Build and deploy locally.</strong>
@@ -514,29 +513,6 @@ singleserver add https://github.com/you/my-app-3</pre>
             <div class="feature">
                 <strong>Monitor from the host</strong>
                 <p>Use Tailscale SSH, status, logs, and doctor commands from the same server where deploys run.</p>
-            </div>
-        </div>
-    </section>
-
-    <section>
-        <h2 id="contract"><span>The app contract</span></h2>
-        <p class="feature-desc">Your apps need a Dockerfile, one web port, and a health endpoint. Static sites, Node/Bun apps, and SQLite-backed apps all fit.</p>
-
-        <div class="flow-box">
-            <div class="flow-row">
-                <span class="pill">Dockerfile</span>
-                <span class="connector">&rarr;</span>
-                <span class="result">Your repo defines how it builds</span>
-            </div>
-            <div class="flow-row">
-                <span class="pill">port 80</span>
-                <span class="connector">&rarr;</span>
-                <span class="result">Default app port, override when needed</span>
-            </div>
-            <div class="flow-row">
-                <span class="pill">/up</span>
-                <span class="connector">&rarr;</span>
-                <span class="result">Default healthcheck path</span>
             </div>
         </div>
     </section>
