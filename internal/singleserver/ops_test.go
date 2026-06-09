@@ -762,6 +762,11 @@ func TestRemoveDeleteStorageWithConfirmation(t *testing.T) {
 `), 0600); err != nil {
 		t.Fatal(err)
 	}
+	originalStop := stopAppContainersFunc
+	t.Cleanup(func() { stopAppContainersFunc = originalStop })
+	stopAppContainersFunc = func(appName string) error {
+		return nil
+	}
 
 	var out bytes.Buffer
 	if err := cliRemove([]string{"fullsend", "--delete-storage", "--delete-repo", "--yes"}, &out); err != nil {
