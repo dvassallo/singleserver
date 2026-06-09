@@ -9,7 +9,7 @@ fi
 export DEBIAN_FRONTEND=noninteractive
 
 apt-get update
-apt-get install -y ca-certificates curl git ruby-full docker.io docker-buildx openssh-server sqlite3
+apt-get install -y ca-certificates curl git build-essential ruby-full ruby-dev docker.io docker-buildx openssh-server sqlite3
 
 if ! command -v kamal >/dev/null 2>&1; then
   gem install kamal --no-document
