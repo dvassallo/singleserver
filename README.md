@@ -31,7 +31,9 @@ curl -fsSL https://singleserver.com/install.sh | sh
 ```
 
 The installer downloads the hosted Linux binary and installs Docker, Kamal,
-Tailscale, and cloudflared.
+Tailscale, and cloudflared. It also runs first-run setup: Tailscale connection,
+Cloudflare Tunnel setup when credentials are available, GitHub App setup URL
+printing when a public hook URL exists, and `singleserver doctor`.
 
 ## Minimal config
 
@@ -157,7 +159,6 @@ Install the daemon binary as both `/usr/local/bin/singleserverd` and `/usr/local
 
 ```sh
 ssh root@203.0.113.10
-singleserver init
 singleserver tailscale connect
 singleserver cloudflare connect --zone example.com
 singleserver list
@@ -175,7 +176,7 @@ singleserver remove fullsend --delete-repo --delete-storage --yes
 
 `singleserver tailscale connect` enables Tailscale SSH when possible. It can
 use `TS_AUTHKEY` or `TAILSCALE_AUTHKEY` for unattended server joins, or run
-`tailscale up --ssh` manually and rerun init.
+`tailscale up --ssh` manually and then run `singleserver tailscale connect`.
 
 `singleserver cloudflare connect --zone <domain>` connects Cloudflare Tunnel
 and DNS for app domains. It stores the zone,

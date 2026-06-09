@@ -32,8 +32,6 @@ func RunCLI(args []string, logger *log.Logger) error {
 	case "version", "--version":
 		printVersion(os.Stdout)
 		return nil
-	case "init":
-		return cliInit(args[1:], os.Stdout)
 	case "github":
 		if len(args) >= 2 && args[1] == "connect" {
 			return cliGitHubConnect(args[2:], os.Stdout)
@@ -87,7 +85,6 @@ func printUsage(w io.Writer) {
 
 Usage:
   singleserver version
-  singleserver init
   singleserver tailscale connect [--auth-key <key>] [--hostname <name>]
   singleserver github connect
   singleserver cloudflare connect [--zone example.com] [--tunnel singleserver] [--hook-host hooks.example.com]
@@ -108,7 +105,6 @@ Usage:
 
 Commands:
   version        Print the installed Single Server version.
-  init           Create base server state, connect providers when configured, and print GitHub setup URL.
   tailscale      Connect Tailscale SSH for private server access.
   github         Repair or print the GitHub App setup URL.
   cloudflare     Connect Cloudflare Tunnel and DNS for public app ingress.

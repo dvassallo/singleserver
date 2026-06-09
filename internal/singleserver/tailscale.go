@@ -49,7 +49,7 @@ func cliTailscaleConnect(args []string, w io.Writer) error {
 	status, err := currentTailscaleStatus()
 	if err != nil || !tailscaleRunning(status) {
 		if strings.TrimSpace(*authKey) == "" {
-			fmt.Fprintln(w, "tailscale\tlogin\tpending\trun `tailscale up --ssh` on this server, then rerun `singleserver init`")
+			fmt.Fprintln(w, "tailscale\tlogin\tpending\trun `tailscale up --ssh` on this server, then run `singleserver tailscale connect`")
 			return nil
 		}
 		upArgs := []string{"up", "--ssh", "--auth-key=" + strings.TrimSpace(*authKey)}
@@ -65,7 +65,7 @@ func cliTailscaleConnect(args []string, w io.Writer) error {
 		}
 	}
 	if !tailscaleRunning(status) {
-		fmt.Fprintln(w, "tailscale\tlogin\tpending\trun `tailscale up --ssh` on this server, then rerun `singleserver init`")
+		fmt.Fprintln(w, "tailscale\tlogin\tpending\trun `tailscale up --ssh` on this server, then run `singleserver tailscale connect`")
 		return nil
 	}
 	fmt.Fprintf(w, "tailscale\tstatus\tok\t%s\n", tailscaleStatusName(status))

@@ -13,73 +13,6 @@ import (
 	"time"
 )
 
-func cliInit(args []string, w io.Writer) error {
-	fs := flag.NewFlagSet("init", flag.ContinueOnError)
-	fs.SetOutput(w)
-	zoneName := fs.String("cloudflare-zone", defaultCloudflareZone(), "Cloudflare zone to connect when a Cloudflare token is available")
-	zoneAlias := fs.String("zone", "", "deprecated alias for --cloudflare-zone")
-	if err := fs.Parse(normalizeFlagArgs(args, initFlagTakesValue)); err != nil {
-		return err
-	}
-	if fs.NArg() != 0 {
-		return errors.New("usage: singleserver init")
-	}
-
-	if err := ensureBaseFiles(); err != nil {
-		return err
-	}
-	if strings.TrimSpace(*zoneName) == "" && strings.TrimSpace(*zoneAlias) != "" {
-		*zoneName = strings.TrimSpace(*zoneAlias)
-	}
-	fmt.Fprintf(w, "init\tfiles\tok\t%s\n", envDefault("SINGLESERVER_STATE_DIR", "/etc/singleserver"))
-
-	if err := commandRunFunc(10*time.Second, "systemctl", "daemon-reload"); err != nil {
-		return err
-	}
-	if err := commandRunFunc(10*time.Second, "systemctl", "restart", "singleserver.service"); err != nil {
-		return err
-	}
-
-	if err := cliTailscaleConnect(nil, w); err != nil {
-		fmt.Fprintf(w, "tailscale\tpending\t%s\n", err)
-	}
-
-	cloudflareOK := false
-	state, _ := loadCloudflareState()
-	if cloudflareTokenFromEnvOrState(state) != "" {
-		cloudflareArgs := []string{}
-		if strings.TrimSpace(*zoneName) != "" {
-			cloudflareArgs = append(cloudflareArgs, "--zone", *zoneName)
-		}
-		if err := cliCloudflareConnect(cloudflareArgs, w); err != nil {
-			fmt.Fprintf(w, "cloudflare\tpending\t%s\n", err)
-		} else {
-			cloudflareOK = true
-		}
-	} else {
-		fmt.Fprintln(w, "cloudflare\tpending\tset CLOUDFLARE_API_TOKEN and run `singleserver init`")
-	}
-
-	if err := commandRunFunc(10*time.Second, "systemctl", "daemon-reload"); err != nil {
-		return err
-	}
-	if err := commandRunFunc(10*time.Second, "systemctl", "restart", "singleserver.service"); err != nil {
-		return err
-	}
-	env, err := loadServiceEnv()
-	if err != nil {
-		return err
-	}
-	if !cloudflareOK || strings.TrimSpace(env["SINGLESERVER_PUBLIC_URL"]) == "" {
-		fmt.Fprintln(w, "github\tconnect\tpending\tconnect Cloudflare first, then rerun `singleserver init`")
-		return cliDoctor(nil, w)
-	}
-	if err := cliGitHubConnect(nil, w); err != nil {
-		return err
-	}
-	return cliDoctor(nil, w)
-}
-
 func cliGitHubConnect(args []string, w io.Writer) error {
 	fs := flag.NewFlagSet("github connect", flag.ContinueOnError)
 	fs.SetOutput(w)
@@ -129,6 +62,9 @@ func cliCloudflareConnect(args []string, w io.Writer) error {
 	}
 	if fs.NArg() != 0 {
 		return errors.New("usage: singleserver cloudflare connect [--zone example.com] [--tunnel singleserver] [--hook-host hooks.example.com]")
+	}
+	if err := ensureBaseFiles(); err != nil {
+		return err
 	}
 	tunnelNameSet := false
 	fs.Visit(func(f *flag.Flag) {
@@ -386,14 +322,6 @@ func randomHex(bytesLen int) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(buf), nil
-}
-
-func initFlagTakesValue(arg string) bool {
-	name := strings.TrimLeft(arg, "-")
-	if before, _, ok := strings.Cut(name, "="); ok {
-		name = before
-	}
-	return name == "cloudflare-zone" || name == "zone"
 }
 
 func cloudflareFlagTakesValue(arg string) bool {

@@ -13,12 +13,11 @@ there, and run every `singleserver` command from that one machine.
 ## The Ideal Outcome
 
 A user should be able to provision a new server and deploy their first app with
-one SSH session and one guided init:
+one SSH session:
 
 ```sh
 ssh root@203.0.113.10
 curl -fsSL https://singleserver.com/install.sh | sh
-singleserver init
 singleserver add https://github.com/you/my-app
 ```
 
@@ -41,9 +40,9 @@ Single Server has a few moving parts:
   Single Server daemon. This is where every `singleserver` command runs.
 - **Tailscale:** the private admin network. Operators can reach the host with
   Tailscale SSH without managing workstation SSH keys.
-- **GitHub App:** the event source and deploy credential provider, connected by
-  `singleserver init`. Push webhooks trigger deploys; installation tokens fetch
-  code and set commit statuses.
+- **GitHub App:** the event source and deploy credential provider. Push
+  webhooks trigger deploys; installation tokens fetch code and set commit
+  statuses.
 - **`apps.yml`:** the allowlist. Only repositories in this file can deploy, even
   if the GitHub App is installed broadly.
 - **App containers:** every project runs in its own Docker container behind the
@@ -100,35 +99,21 @@ The installer should:
 - Create `/etc/singleserver`
 - Create `/etc/singleserver/apps.yml`
 - Create `/etc/singleserver/singleserver.env`
+- Connect or repair Tailscale
+- Connect Cloudflare Tunnel and DNS when a token is available
+- Print the GitHub App setup URL once a public hook URL exists
 - Run `singleserver doctor`
 
-The command should be safe to rerun.
-
-### 3. Initialize The Host
-
-Ideal command:
-
-```sh
-singleserver init
-```
-
-This should configure the host environment, Tailscale, Cloudflare Tunnel, and
-the GitHub App connection. Tailscale handles private server access. Cloudflare
-handles public setup/webhook traffic and app domains when a Cloudflare token is
-available.
+The command should be safe to rerun. If a provider is missing credentials or
+needs browser approval, the installer should print the specific repair command
+and continue to diagnostics.
 
 The host itself should not need a user-facing domain. If the implementation
-needs a stable webhook or control URL, `init` should use a small Cloudflare
-hostname such as `hooks.example.com`. App domains should be selected or inferred
-when apps are added.
+needs a stable webhook or control URL, the installer should use a small
+Cloudflare hostname such as `hooks.example.com`. App domains should be selected
+or inferred when apps are added.
 
-`init` should end by running:
-
-```sh
-singleserver doctor
-```
-
-### 4. Repair Provider Connections
+### 3. Repair Provider Connections
 
 Provider repair commands should exist, but they should not be part of the normal
 first-run path:
@@ -424,7 +409,6 @@ This is the complete happy path we should optimize for:
 ```sh
 ssh root@203.0.113.10
 curl -fsSL https://singleserver.com/install.sh | sh
-singleserver init
 singleserver add https://github.com/you/homepage
 ```
 
@@ -451,8 +435,7 @@ Status key:
 | Generated Kamal config | Built | Repos do not need `config/deploy.yml` unless they want custom behavior. |
 | `singleserver add` | Built | Adds apps, validates GitHub access, checks `Dockerfile`, deploys by default, supports `--no-deploy`, infers default domains from Cloudflare, and configures DNS records and tunnel routes. |
 | `singleserver doctor` | Built | Checks daemon, config, Docker, local deploy user/SSH, local registry, disk, Tailscale, Cloudflare Tunnel routes, Cloudflare DNS targets, resolver DNS, GitHub App access, checkouts, deploy config, last deploy, and healthchecks. |
-| Installer script | Built | `https://singleserver.com/install.sh` installs Docker, Kamal, Tailscale, cloudflared, the hosted Single Server binary, the systemd service, local registry, and base config. |
-| `singleserver init` | Built | Creates base host state, connects Tailscale, connects Cloudflare Tunnel and DNS when a token is present, restarts the daemon, prints the GitHub App setup URL once a public URL exists, runs `doctor`, and reports setup as pending until required browser approvals are completed. |
+| Installer script | Built | `https://singleserver.com/install.sh` installs Docker, Kamal, Tailscale, cloudflared, the hosted Single Server binary, the systemd service, local registry, base config, first-run provider setup, and `doctor`. |
 | `singleserver github connect` | Built | Repair command that prints the GitHub App setup URL for the public/installable Single Server GitHub App. |
 | `singleserver tailscale connect` | Built | Repair command that connects Tailscale SSH for private server access. |
 | DNS provider integration | Built | Cloudflare DNS is first-class for app domains. |

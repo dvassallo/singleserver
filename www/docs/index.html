@@ -492,18 +492,9 @@
                 </div>
             </div>
             <div>
-                <p class="step-title">Install the Single Server CLI.</p>
+                <p class="step-title">Install and set up Single Server.</p>
                 <div class="code-wrapper">
                     <pre class="code-block">curl -fsSL https://singleserver.com/install.sh | sh</pre>
-                    <button class="copy-btn" aria-label="Copy to clipboard">
-                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
-                    </button>
-                </div>
-            </div>
-            <div>
-                <p class="step-title">Initialize your server.</p>
-                <div class="code-wrapper">
-                    <pre class="code-block">singleserver init</pre>
                     <button class="copy-btn" aria-label="Copy to clipboard">
                         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
                     </button>
@@ -555,15 +546,7 @@
                 <div class="command-heading">
                     <span class="command-name">Install</span>
                     <code class="command-usage">curl -fsSL https://singleserver.com/install.sh | sh</code>
-                    <p class="command-description">Installs Docker, Kamal, Tailscale, cloudflared, the hosted <code>singleserver</code> Linux binary, the <code>singleserver.service</code> daemon, and base config files. The installer is safe to rerun.</p>
-                </div>
-            </div>
-
-            <div class="command-entry">
-                <div class="command-heading">
-                    <span class="command-name">Initialize your server</span>
-                    <code class="command-usage">singleserver init</code>
-                    <p class="command-description">Runs first-time setup for the server. It creates the base directories and config files, connects or repairs Tailscale, connects Cloudflare Tunnel and DNS when a token is available, restarts the daemon, prints the GitHub App setup URL once a public URL exists, and runs diagnostics. GitHub setup is reported as pending until the required provider approvals are completed.</p>
+                    <p class="command-description">Installs Docker, Kamal, Tailscale, cloudflared, the hosted <code>singleserver</code> Linux binary, the <code>singleserver.service</code> daemon, and base config files. Then it runs first-run setup: connects or repairs Tailscale, connects Cloudflare Tunnel and DNS when credentials are available, prints the GitHub App setup URL once a public hook URL exists, and runs diagnostics. The installer is safe to rerun.</p>
                 </div>
             </div>
 
@@ -984,8 +967,8 @@ CMD ["bun", "start"]</pre>
     <section id="roadmap">
         <h2><a href="#roadmap">Build Order</a></h2>
         <ul class="settings-list">
-            <li><strong>Blank server setup</strong><span><code>install.sh</code> and <code>singleserver init</code> should make a new Linux server ready in one guided flow.</span></li>
-            <li><strong>GitHub, Tailscale, and Cloudflare connection</strong><span><code>init</code> should wrap provider setup. <code>github connect</code>, <code>tailscale connect</code>, and <code>cloudflare connect</code> should exist as repair commands, with Cloudflare Tunnel as the default public ingress.</span></li>
+            <li><strong>Blank server setup</strong><span><code>install.sh</code> should make a new Linux server ready in one guided flow.</span></li>
+            <li><strong>GitHub, Tailscale, and Cloudflare connection</strong><span>The installer should wrap provider setup. <code>github connect</code>, <code>tailscale connect</code>, and <code>cloudflare connect</code> should exist as repair commands, with Cloudflare Tunnel as the default public ingress.</span></li>
             <li><strong>App onboarding</strong><span><code>singleserver add https://github.com/owner/repo</code> should infer sensible defaults, configure routing, deploy immediately, and show the live URL.</span></li>
             <li><strong>Domains</strong><span><code>singleserver domains</code> should add, remove, list, and verify app domains through Cloudflare DNS and tunnel routes.</span></li>
             <li><strong>Observability</strong><span><code>status</code>, <code>doctor</code>, and <code>logs</code> should make deploy state, runtime logs, DNS, proxy, disk, Docker, and healthchecks obvious.</span></li>

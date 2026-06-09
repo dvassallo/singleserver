@@ -59,6 +59,9 @@ func TestUsageMentionsVersionCommand(t *testing.T) {
 	if !strings.Contains(got, "version        Print the installed Single Server version.") {
 		t.Fatalf("expected version command description, got:\n%s", got)
 	}
+	if strings.Contains(got, "singleserver init") || strings.Contains(got, "init           ") {
+		t.Fatalf("did not expect init command in usage, got:\n%s", got)
+	}
 }
 
 func TestListShowsFirstAppHintWhenEmpty(t *testing.T) {

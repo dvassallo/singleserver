@@ -114,4 +114,37 @@ systemctl enable --now singleserver.service
 
 echo
 echo "Single Server installed."
-echo "Next: run singleserver init"
+echo "Starting first-run setup."
+
+if /usr/local/bin/singleserver tailscale connect; then
+  :
+else
+  echo "tailscale pending: run singleserver tailscale connect"
+fi
+
+if [ -n "${CLOUDFLARE_API_TOKEN:-}" ] || [ -n "${CF_API_TOKEN:-}" ] || [ -f /etc/singleserver/cloudflare.json ]; then
+  if /usr/local/bin/singleserver cloudflare connect; then
+    :
+  else
+    echo "cloudflare pending: run singleserver cloudflare connect"
+  fi
+else
+  echo "cloudflare pending: set CLOUDFLARE_API_TOKEN, then run singleserver cloudflare connect"
+fi
+
+if [ -f /etc/singleserver/github-app.json ] && [ -f /etc/singleserver/github-app.private-key.pem ]; then
+  echo "github ok"
+elif grep -q "^SINGLESERVER_PUBLIC_URL=" /etc/singleserver/singleserver.env 2>/dev/null; then
+  if /usr/local/bin/singleserver github connect; then
+    :
+  else
+    echo "github pending: run singleserver github connect"
+  fi
+else
+  echo "github pending: connect Cloudflare first, then run singleserver github connect"
+fi
+
+/usr/local/bin/singleserver doctor || true
+
+echo
+echo "Next: run singleserver add https://github.com/you/my-app"
