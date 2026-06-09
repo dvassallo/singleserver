@@ -131,31 +131,27 @@
         h2 {
             font-size: 1.8rem;
             margin: 40px 0 20px;
-            display: inline-block;
             line-height: 1.2;
-        }
-
-        h2 a {
-            color: inherit;
-            text-decoration: none;
-            border-bottom: 4px solid var(--primary);
             display: inline-flex;
             align-items: center;
-            gap: 8px;
-            transition: border-color 0.2s;
+            gap: 10px;
+            border-bottom: 4px solid var(--primary);
+            max-width: 100%;
         }
 
-        h2 a::after {
-            content: "\2192";
-            font-size: 0.8em;
-            color: #999;
-            transition: color 0.2s, transform 0.2s;
+        h2::before {
+            content: "";
+            width: 14px;
+            height: 14px;
+            flex: 0 0 auto;
+            background: var(--tertiary);
+            border: 2px solid #000;
+            box-shadow: 2px 2px 0 #000;
+            transform: rotate(-3deg);
         }
 
-        h2 a:hover { border-color: var(--secondary); }
-        h2 a:hover::after {
-            color: var(--secondary);
-            transform: translateX(3px);
+        h2 span {
+            min-width: 0;
         }
 
         section > p,
@@ -406,10 +402,10 @@
     </header>
 
     <section>
-        <h2><a href="#commands">Get going</a></h2>
+        <h2 id="commands"><span>Get going</span></h2>
         <p>Every command runs on your server.</p>
 
-        <div class="commands-list" id="commands">
+        <div class="commands-list">
             <div class="command-item">
                 <p class="step-desc">SSH to your Linux server:</p>
                 <div class="code-wrapper">
@@ -445,10 +441,10 @@ singleserver add https://github.com/you/my-app-3</pre>
     </section>
 
     <section>
-        <h2><a href="#flow">What happens next</a></h2>
+        <h2 id="flow"><span>What happens next</span></h2>
         <p>Whenever you push to GitHub, your server fetches the commit, builds it locally, and uses Kamal to roll it out with zero downtime. Each app runs isolated in its own Docker container.</p>
 
-        <div class="flow-box" id="flow">
+        <div class="flow-box">
             <div class="flow-row">
                 <span class="pill">git push</span>
                 <span class="connector">&rarr;</span>
@@ -468,8 +464,8 @@ singleserver add https://github.com/you/my-app-3</pre>
     </section>
 
     <section>
-        <h2><a href="#how">How it works</a></h2>
-        <div class="how-list" id="how">
+        <h2 id="how"><span>How it works</span></h2>
+        <div class="how-list">
             <div class="how-item">
                 <strong>Install once on your server.</strong>
                 <p>The installer prepares the machine with Docker, Kamal, Tailscale, cloudflared, a local Docker registry, a deploy user, and the Single Server daemon. The daemon runs under systemd, listens locally, and keeps its state in <code>/etc/singleserver</code>.</p>
@@ -494,8 +490,8 @@ singleserver add https://github.com/you/my-app-3</pre>
     </section>
 
     <section>
-        <h2><a href="#features">What you get</a></h2>
-        <div class="feature-grid" id="features">
+        <h2 id="features"><span>What you get</span></h2>
+        <div class="feature-grid">
             <div class="feature">
                 <strong>Fast deploys</strong>
                 <p>No Actions queue, no per-repo runner hop. Build on the server, swap containers, healthcheck, and set commit status.</p>
@@ -524,10 +520,10 @@ singleserver add https://github.com/you/my-app-3</pre>
     </section>
 
     <section>
-        <h2><a href="#contract">The app contract</a></h2>
+        <h2 id="contract"><span>The app contract</span></h2>
         <p class="feature-desc">Your apps need a Dockerfile, one web port, and a health endpoint. Static sites, Node/Bun apps, and SQLite-backed apps all fit.</p>
 
-        <div class="flow-box" id="contract">
+        <div class="flow-box">
             <div class="flow-row">
                 <span class="pill">Dockerfile</span>
                 <span class="connector">&rarr;</span>
