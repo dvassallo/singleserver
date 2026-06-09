@@ -42,8 +42,8 @@ func cliEnv(args []string, w io.Writer) error {
 		if err := writeAppEnv(app.Name, values); err != nil {
 			return err
 		}
-		fmt.Fprintf(w, "%s\tenv\tok\tset %s\n", app.Name, key)
-		fmt.Fprintf(w, "%s\tnext\tdeploy with `singleserver deploy %s`\n", app.Name, app.Repo)
+		writeCheck(w, app.Name, "env", "ok", key, "set")
+		writeCheck(w, app.Name, "next", "pending", "deploy with `singleserver deploy "+app.Repo+"`")
 	case "list":
 		if len(args) != 2 {
 			return errors.New("usage: singleserver env list <app>")
@@ -71,8 +71,8 @@ func cliEnv(args []string, w io.Writer) error {
 		if err := writeAppEnv(app.Name, values); err != nil {
 			return err
 		}
-		fmt.Fprintf(w, "%s\tenv\tok\tunset %s\n", app.Name, key)
-		fmt.Fprintf(w, "%s\tnext\tdeploy with `singleserver deploy %s`\n", app.Name, app.Repo)
+		writeCheck(w, app.Name, "env", "ok", key, "unset")
+		writeCheck(w, app.Name, "next", "pending", "deploy with `singleserver deploy "+app.Repo+"`")
 	default:
 		return fmt.Errorf("unknown env command %q", command)
 	}
@@ -150,17 +150,17 @@ func cliStorageEnable(args []string, w io.Writer, logger *log.Logger) error {
 		}
 		return err
 	}
-	fmt.Fprintf(w, "%s\tstorage\tok\t%s:%s\n", app.Name, storagePath, storageMount)
+	writeCheck(w, app.Name, "storage", "ok", storagePath, "mount="+storageMount)
 
 	app, err = configuredApp(appName)
 	if err != nil {
 		return err
 	}
 	if *noDeploy {
-		fmt.Fprintf(w, "%s\tnext\tdeploy with `singleserver deploy %s`\n", app.Name, app.Repo)
+		writeCheck(w, app.Name, "next", "pending", "deploy with `singleserver deploy "+app.Repo+"`")
 		return nil
 	}
-	fmt.Fprintf(w, "%s\tdeploy\tstart\tapplying storage change\n", app.Name)
+	writeCheck(w, app.Name, "deploy", "start", "applying storage change")
 	if err := cliDeploy([]string{app.Repo}, w, logger); err != nil {
 		return err
 	}
@@ -183,7 +183,7 @@ func cliBackup(args []string, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "%s\tbackup\tok\t%s\tfiles=%d\tsqlite=%d\n", app.Name, result.Path, result.Files, result.SQLiteFiles)
+	writeCheck(w, app.Name, "backup", "ok", result.Path, fmt.Sprintf("files=%d", result.Files), fmt.Sprintf("sqlite=%d", result.SQLiteFiles))
 	return nil
 }
 
@@ -268,28 +268,28 @@ func cliRemove(args []string, w io.Writer) error {
 		}
 		return err
 	}
-	fmt.Fprintf(w, "%s\tconfig\tok\tremoved from %s\n", app.Name, configPath)
+	writeCheck(w, app.Name, "config", "ok", configPath, "removed")
 	if err := stopAppContainersFunc(app.Name); err != nil {
-		fmt.Fprintf(w, "%s\tcontainers\tfailed\t%s\n", app.Name, err)
+		writeCheck(w, app.Name, "containers", "failed", err.Error())
 		return err
 	} else {
-		fmt.Fprintf(w, "%s\tcontainers\tok\tstopped matching containers\n", app.Name)
+		writeCheck(w, app.Name, "containers", "ok", "stopped matching containers")
 	}
 	if *deleteStorage && app.Storage != nil {
 		if err := os.RemoveAll(app.Storage.Path); err != nil {
 			return err
 		}
-		fmt.Fprintf(w, "%s\tstorage\tok\tdeleted %s\n", app.Name, app.Storage.Path)
+		writeCheck(w, app.Name, "storage", "ok", app.Storage.Path, "deleted")
 	} else if app.Storage != nil {
-		fmt.Fprintf(w, "%s\tstorage\tkept\t%s\n", app.Name, app.Storage.Path)
+		writeCheck(w, app.Name, "storage", "kept", app.Storage.Path)
 	}
 	if *deleteRepo {
 		if err := os.RemoveAll(app.RepoDir); err != nil {
 			return err
 		}
-		fmt.Fprintf(w, "%s\trepo\tok\tdeleted %s\n", app.Name, app.RepoDir)
+		writeCheck(w, app.Name, "repo", "ok", app.RepoDir, "deleted")
 	} else {
-		fmt.Fprintf(w, "%s\trepo\tkept\t%s\n", app.Name, app.RepoDir)
+		writeCheck(w, app.Name, "repo", "kept", app.RepoDir)
 	}
 	return nil
 }
@@ -338,10 +338,10 @@ func cliDomainChange(args []string, add bool, w io.Writer, logger *log.Logger) e
 		return err
 	}
 	if *noDeploy {
-		fmt.Fprintf(w, "%s\tnext\tdeploy with `singleserver deploy %s`\n", app.Name, app.Repo)
+		writeCheck(w, app.Name, "next", "pending", "deploy with `singleserver deploy "+app.Repo+"`")
 		return nil
 	}
-	fmt.Fprintf(w, "%s\tdeploy\tstart\tapplying domain change\n", app.Name)
+	writeCheck(w, app.Name, "deploy", "start", "applying domain change")
 	if err := cliDeploy([]string{app.Repo}, w, logger); err != nil {
 		return err
 	}
@@ -399,9 +399,9 @@ func updateDomain(appName string, host string, add bool, w io.Writer) (*AppConfi
 		return nil, err
 	}
 	if add {
-		fmt.Fprintf(w, "%s\tdomain\tok\tadded %s\n", app.Name, host)
+		writeCheck(w, app.Name, "domain", "ok", host, "added")
 	} else {
-		fmt.Fprintf(w, "%s\tdomain\tok\tremoved %s\n", app.Name, host)
+		writeCheck(w, app.Name, "domain", "ok", host, "removed")
 	}
 	return app, nil
 }
@@ -473,31 +473,31 @@ func verifyDomains(args []string, w io.Writer) error {
 		if token := cloudflareTokenFromEnvOrState(state); token != "" {
 			client, err := newCloudflareClient(token)
 			if err != nil {
-				fmt.Fprintf(w, "cloudflare\tdns_api\tfailed\t%s\n", err)
+				writeCheck(w, "cloudflare", "dns_api", "failed", err.Error())
 				failed = true
 			} else {
 				cloudflareClient = client
 			}
 		}
 	} else if appsHaveHosts(apps) {
-		fmt.Fprintln(w, "cloudflare\tskipped\tconnect Cloudflare with `singleserver cloudflare connect` to verify DNS and tunnel routes")
+		writeCheck(w, "cloudflare", "setup", "skipped", "-", "connect Cloudflare with `singleserver cloudflare connect` to verify DNS and tunnel routes")
 	}
 
 	for _, app := range apps {
 		for _, host := range app.Hosts {
 			if err := commandRunFunc(5*time.Second, "getent", "hosts", host); err != nil {
-				fmt.Fprintf(w, "%s\tdns\tfailed\t%s\t%s\n", app.Name, host, err)
+				writeCheck(w, app.Name, "dns", "failed", host, err.Error())
 				failed = true
 			} else {
-				fmt.Fprintf(w, "%s\tdns\tok\t%s\n", app.Name, host)
+				writeCheck(w, app.Name, "dns", "ok", host)
 			}
 			if cloudflareClient != nil {
 				target, err := verifyCloudflareDNSRecordFunc(host, state, cloudflareClient)
 				if err != nil {
-					fmt.Fprintf(w, "%s\tcloudflare_dns\tfailed\t%s\t%s\n", app.Name, host, err)
+					writeCheck(w, app.Name, "cloudflare_dns", "failed", host, err.Error())
 					failed = true
 				} else {
-					fmt.Fprintf(w, "%s\tcloudflare_dns\tok\t%s -> %s\n", app.Name, host, target)
+					writeCheck(w, app.Name, "cloudflare_dns", "ok", host, "target="+target)
 				}
 			}
 		}
@@ -545,7 +545,7 @@ func cliUpgrade(w io.Writer) error {
 	if err := commandRunFunc(15*time.Second, "systemctl", "restart", "singleserver.service"); err != nil {
 		return err
 	}
-	fmt.Fprintln(w, "upgrade\tok\tinstaller completed")
+	writeCheck(w, "upgrade", "installer", "ok", "completed")
 	return cliDoctor(nil, w)
 }
 

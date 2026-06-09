@@ -30,7 +30,7 @@ func TestDomainsAndStorageCommandsUpdateConfig(t *testing.T) {
 	if err := cliStorage([]string{"enable", "fullsend", "--path", storagePath, "--mount", "/data", "--no-deploy"}, &out, logger); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "fullsend\tnext\tdeploy with `singleserver deploy dvassallo/fullsend`") {
+	if !strings.Contains(out.String(), "fullsend\tnext\tpending\tdeploy with `singleserver deploy dvassallo/fullsend`") {
 		t.Fatalf("expected staged deploy message, got:\n%s", out.String())
 	}
 
@@ -323,7 +323,7 @@ func TestDomainsVerifyChecksCloudflareDNSRecord(t *testing.T) {
 	if err := cliDomains([]string{"verify", "fullsend"}, &out, log.New(io.Discard, "", 0)); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "fullsend\tcloudflare_dns\tok\tlocalhost -> tunnel.cfargotunnel.com") {
+	if !strings.Contains(out.String(), "fullsend\tcloudflare_dns\tok\tlocalhost\ttarget=tunnel.cfargotunnel.com") {
 		t.Fatalf("expected Cloudflare DNS ok output, got:\n%s", out.String())
 	}
 }
@@ -449,7 +449,7 @@ func TestEnvCommandWritesServerSideEnv(t *testing.T) {
 	if err := cliEnv([]string{"set", "fullsend", "DATABASE_URL=sqlite:///storage/app.db"}, &out); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "fullsend\tnext\tdeploy with `singleserver deploy dvassallo/fullsend`") {
+	if !strings.Contains(out.String(), "fullsend\tnext\tpending\tdeploy with `singleserver deploy dvassallo/fullsend`") {
 		t.Fatalf("expected next deploy message, got:\n%s", out.String())
 	}
 	values, err := loadAppEnv("fullsend")

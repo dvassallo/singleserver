@@ -484,7 +484,7 @@ func pruneStaleCloudflareRoutes(client *CloudflareClient, state *CloudflareState
 		if err := removeCloudflaredRoute(state.ConfigFile, host); err != nil {
 			return err
 		}
-		fmt.Fprintf(w, "cloudflare\troute\tok\tremoved stale %s\n", host)
+		writeCheck(w, "cloudflare", "route", "ok", host, "removed stale")
 	}
 	return nil
 }
@@ -558,7 +558,7 @@ func syncCloudflareAppDomain(hostname string, add bool, w io.Writer) error {
 		return err
 	}
 	if state.TunnelID == "" {
-		fmt.Fprintf(w, "cloudflare\tskipped\tconnect Cloudflare first with `singleserver cloudflare connect`\n")
+		writeCheck(w, "cloudflare", "setup", "skipped", "-", "connect Cloudflare first with `singleserver cloudflare connect`")
 		return nil
 	}
 	client, err := newCloudflareClient(cloudflareTokenFromEnvOrState(state))
@@ -586,7 +586,7 @@ func syncCloudflareAppDomainWithOps(hostname string, add bool, w io.Writer, stat
 			_ = ops.removeRoute(hostname)
 			return err
 		}
-		fmt.Fprintf(w, "cloudflare\tdomain\tok\t%s -> %s\n", hostname, ops.target)
+		writeCheck(w, "cloudflare", "domain", "ok", hostname, "target="+ops.target)
 	} else {
 		if err := ops.removeRoute(hostname); err != nil {
 			return err
@@ -600,7 +600,7 @@ func syncCloudflareAppDomainWithOps(hostname string, add bool, w io.Writer, stat
 			_ = ops.upsertRecord(hostname)
 			return err
 		}
-		fmt.Fprintf(w, "cloudflare\tdomain\tok\tremoved %s\n", hostname)
+		writeCheck(w, "cloudflare", "domain", "ok", hostname, "removed")
 	}
 	return nil
 }

@@ -47,7 +47,7 @@ func cliGitHubConnect(args []string, w io.Writer) error {
 	if err := commandRunFunc(10*time.Second, "systemctl", "restart", "singleserver.service"); err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "github\tconnect\t%s/setup/github-app?token=%s\n", publicURL, token)
+	writeCheck(w, "github", "connect", "ok", publicURL+"/setup/github-app?token="+token)
 	fmt.Fprintln(w, "Open the setup URL, create/install the GitHub App, then rerun your command.")
 	return nil
 }
@@ -111,7 +111,7 @@ func cliCloudflareConnect(args []string, w io.Writer) error {
 			if state.TunnelSecret == "" {
 				return fmt.Errorf("Cloudflare tunnel %s already exists but its tunnel secret is unavailable; rerun with --tunnel <new-name> or copy the original /etc/singleserver/cloudflare.json", state.TunnelName)
 			}
-			fmt.Fprintf(w, "cloudflare\ttunnel\tok\t%s\treused %s\n", state.TunnelID, state.TunnelName)
+			writeCheck(w, "cloudflare", "tunnel", "ok", state.TunnelID, "reused "+state.TunnelName)
 		} else {
 			if state.TunnelSecret == "" {
 				state.TunnelSecret, err = randomTunnelSecret()
@@ -124,10 +124,10 @@ func cliCloudflareConnect(args []string, w io.Writer) error {
 				return err
 			}
 			state.TunnelID = tunnel.ID
-			fmt.Fprintf(w, "cloudflare\ttunnel\tok\t%s\tcreated %s\n", state.TunnelID, state.TunnelName)
+			writeCheck(w, "cloudflare", "tunnel", "ok", state.TunnelID, "created "+state.TunnelName)
 		}
 	} else {
-		fmt.Fprintf(w, "cloudflare\ttunnel\tok\t%s\n", state.TunnelID)
+		writeCheck(w, "cloudflare", "tunnel", "ok", state.TunnelID)
 	}
 
 	if err := writeCloudflaredCredentials(state.CredentialsFile, state); err != nil {
@@ -151,7 +151,7 @@ func cliCloudflareConnect(args []string, w io.Writer) error {
 	if err := commandRunFunc(10*time.Second, "systemctl", "enable", "--now", "cloudflared-singleserver.service"); err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "cloudflare\tingress\tok\tapps -> %s.cfargotunnel.com\n", state.TunnelID)
+	writeCheck(w, "cloudflare", "ingress", "ok", "apps", "target="+state.TunnelID+".cfargotunnel.com")
 	return nil
 }
 

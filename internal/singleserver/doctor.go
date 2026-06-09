@@ -35,14 +35,14 @@ func cliDoctor(args []string, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "config\tok\t%s\tapps=%d\tselected=%d\n", configPath, len(config.Apps), len(apps))
+	writeCheck(w, "config", "apps", "ok", configPath, fmt.Sprintf("apps=%d", len(config.Apps)), fmt.Sprintf("selected=%d", len(apps)))
 
 	journal, journalErr := recentSingleServerJournal()
 	if journalErr != nil {
-		fmt.Fprintf(w, "journal\tfailed\t%s\n", journalErr)
+		writeCheck(w, "journal", "status", "failed", journalErr.Error())
 		failed = true
 	} else {
-		fmt.Fprintln(w, "journal\tok")
+		writeCheck(w, "journal", "status", "ok", "-")
 	}
 
 	if !doctorDocker(w) {
@@ -66,7 +66,7 @@ func cliDoctor(args []string, w io.Writer) error {
 		failed = true
 	}
 	for _, app := range apps {
-		fmt.Fprintf(w, "app\t%s\t%s\n", app.Name, app.Repo)
+		writeCheck(w, app.Name, "app", "ok", app.Repo)
 		if !doctorGitHubInstallation(w, github, app) {
 			failed = true
 		}
@@ -77,7 +77,7 @@ func cliDoctor(args []string, w io.Writer) error {
 			failed = true
 		}
 		status, detail := lastDeployStatusFromJournal(app.Name, journal)
-		fmt.Fprintf(w, "%s\tlast_deploy\t%s\t%s\n", app.Name, status, detail)
+		writeCheck(w, app.Name, "last_deploy", status, detail)
 		if status == "failed" {
 			failed = true
 		}
@@ -96,20 +96,20 @@ func doctorDocker(w io.Writer) bool {
 	failed := false
 	version, err := commandOutputFunc(5*time.Second, "docker", "info", "--format", "{{.ServerVersion}}")
 	if err != nil {
-		fmt.Fprintf(w, "docker\tfailed\t%s\n", err)
+		writeCheck(w, "docker", "server", "failed", err.Error())
 		return false
 	}
 	if _, err := commandOutputFunc(5*time.Second, "docker", "ps", "--format", "{{.Names}}"); err != nil {
-		fmt.Fprintf(w, "docker\tfailed\t%s\n", err)
+		writeCheck(w, "docker", "containers", "failed", err.Error())
 		return false
 	}
-	fmt.Fprintf(w, "docker\tok\tserver=%s\n", version)
+	writeCheck(w, "docker", "server", "ok", version)
 	buildxVersion, err := commandOutputFunc(5*time.Second, "docker", "buildx", "version")
 	if err != nil {
-		fmt.Fprintf(w, "docker\tbuildx\tfailed\tinstall docker-buildx\n")
+		writeCheck(w, "docker", "buildx", "failed", "install docker-buildx")
 		failed = true
 	} else {
-		fmt.Fprintf(w, "docker\tbuildx\tok\t%s\n", compactWhitespace(buildxVersion))
+		writeCheck(w, "docker", "buildx", "ok", compactWhitespace(buildxVersion))
 	}
 	return !failed
 }
@@ -117,47 +117,47 @@ func doctorDocker(w io.Writer) bool {
 func doctorDeployInfrastructure(w io.Writer) bool {
 	failed := false
 	if err := commandRunFunc(3*time.Second, "id", "deploy"); err != nil {
-		fmt.Fprintf(w, "deploy\tuser\tfailed\t%s\n", err)
+		writeCheck(w, "deploy", "user", "failed", err.Error())
 		failed = true
 	} else {
-		fmt.Fprintln(w, "deploy\tuser\tok\tdeploy")
+		writeCheck(w, "deploy", "user", "ok", "deploy")
 	}
 
 	groups, err := commandOutputFunc(3*time.Second, "id", "-nG", "deploy")
 	if err != nil {
-		fmt.Fprintf(w, "deploy\tdocker_group\tfailed\t%s\n", err)
+		writeCheck(w, "deploy", "docker_group", "failed", err.Error())
 		failed = true
 	} else if !hasWord(groups, "docker") {
-		fmt.Fprintf(w, "deploy\tdocker_group\tfailed\tdeploy groups=%s\n", compactWhitespace(groups))
+		writeCheck(w, "deploy", "docker_group", "failed", "deploy", "groups="+compactWhitespace(groups))
 		failed = true
 	} else {
-		fmt.Fprintf(w, "deploy\tdocker_group\tok\tgroups=%s\n", compactWhitespace(groups))
+		writeCheck(w, "deploy", "docker_group", "ok", "deploy", "groups="+compactWhitespace(groups))
 	}
 
 	keyPath := "/root/.ssh/id_ed25519"
 	if stat, err := os.Stat(keyPath); err != nil {
-		fmt.Fprintf(w, "deploy\tssh_key\tfailed\t%s\n", err)
+		writeCheck(w, "deploy", "ssh_key", "failed", err.Error())
 		failed = true
 	} else if stat.IsDir() {
-		fmt.Fprintf(w, "deploy\tssh_key\tfailed\t%s is a directory\n", keyPath)
+		writeCheck(w, "deploy", "ssh_key", "failed", keyPath, "is a directory")
 		failed = true
 	} else {
-		fmt.Fprintf(w, "deploy\tssh_key\tok\t%s\n", keyPath)
+		writeCheck(w, "deploy", "ssh_key", "ok", keyPath)
 	}
 
 	if err := commandRunFunc(5*time.Second, "ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "ConnectTimeout=3", "deploy@127.0.0.1", "true"); err != nil {
-		fmt.Fprintf(w, "deploy\tssh\tfailed\t%s\n", err)
+		writeCheck(w, "deploy", "ssh", "failed", err.Error())
 		failed = true
 	} else {
-		fmt.Fprintln(w, "deploy\tssh\tok\tdeploy@127.0.0.1")
+		writeCheck(w, "deploy", "ssh", "ok", "deploy@127.0.0.1")
 	}
 
 	status, err := registryHealthStatus()
 	if err != nil {
-		fmt.Fprintf(w, "registry\tfailed\t%s\n", err)
+		writeCheck(w, "registry", "status", "failed", err.Error())
 		failed = true
 	} else {
-		fmt.Fprintf(w, "registry\tok\t%s\n", status)
+		writeCheck(w, "registry", "status", "ok", status)
 	}
 	return !failed
 }
@@ -169,7 +169,7 @@ func doctorDisk(w io.Writer) bool {
 	}
 	var stat syscall.Statfs_t
 	if err := syscall.Statfs(path, &stat); err != nil {
-		fmt.Fprintf(w, "disk\tfailed\t%s\t%s\n", path, err)
+		writeCheck(w, "disk", "space", "failed", path, err.Error())
 		return false
 	}
 	total := uint64(stat.Blocks) * uint64(stat.Bsize)
@@ -179,17 +179,17 @@ func doctorDisk(w io.Writer) bool {
 		availablePercent = float64(available) * 100 / float64(total)
 	}
 	if available < 1<<30 || availablePercent < 5 {
-		fmt.Fprintf(w, "disk\tfailed\t%s\tavailable=%s\tavailable_percent=%.1f\n", path, formatBytesGB(available), availablePercent)
+		writeCheck(w, "disk", "space", "failed", path, "available="+formatBytesGB(available), fmt.Sprintf("available_percent=%.1f", availablePercent))
 		return false
 	}
-	fmt.Fprintf(w, "disk\tok\t%s\tavailable=%s\tavailable_percent=%.1f\n", path, formatBytesGB(available), availablePercent)
+	writeCheck(w, "disk", "space", "ok", path, "available="+formatBytesGB(available), fmt.Sprintf("available_percent=%.1f", availablePercent))
 	return true
 }
 
 func doctorCloudflare(w io.Writer, allApps []AppConfig, selectedApps []AppConfig) bool {
 	state, err := loadCloudflareState()
 	if err != nil {
-		fmt.Fprintf(w, "cloudflare\tfailed\t%s\n", err)
+		writeCheck(w, "cloudflare", "state", "failed", err.Error())
 		return false
 	}
 
@@ -198,16 +198,16 @@ func doctorCloudflare(w io.Writer, allApps []AppConfig, selectedApps []AppConfig
 	cloudflareConfigured := state.TunnelID != "" || token != ""
 	if !cloudflareConfigured {
 		if appsHaveHosts(selectedApps) {
-			fmt.Fprintln(w, "cloudflare\tskipped\tconnect Cloudflare with `singleserver cloudflare connect` to verify DNS and tunnel routes")
+			writeCheck(w, "cloudflare", "setup", "skipped", "-", "connect Cloudflare with `singleserver cloudflare connect` to verify DNS and tunnel routes")
 		} else {
-			fmt.Fprintln(w, "cloudflare\tskipped\tno DNS provider configured")
+			writeCheck(w, "cloudflare", "setup", "skipped", "-", "no DNS provider configured")
 		}
 	} else {
 		if state.TunnelID == "" {
-			fmt.Fprintln(w, "cloudflare\tstate\tfailed\tmissing tunnel; run `singleserver cloudflare connect`")
+			writeCheck(w, "cloudflare", "state", "failed", "-", "missing tunnel; run `singleserver cloudflare connect`")
 			failed = true
 		} else {
-			fmt.Fprintln(w, "cloudflare\tstate\tok\tmode=tunnel")
+			writeCheck(w, "cloudflare", "state", "ok", "mode=tunnel")
 		}
 	}
 
@@ -219,32 +219,32 @@ func doctorCloudflare(w io.Writer, allApps []AppConfig, selectedApps []AppConfig
 			"config":      state.ConfigFile,
 		} {
 			if path == "" {
-				fmt.Fprintf(w, "cloudflare\t%s\tfailed\tmissing path\n", label)
+				writeCheck(w, "cloudflare", label, "failed", "missing path")
 				failed = true
 				continue
 			}
 			if _, err := os.Stat(path); err != nil {
-				fmt.Fprintf(w, "cloudflare\t%s\tfailed\t%s\n", label, err)
+				writeCheck(w, "cloudflare", label, "failed", err.Error())
 				failed = true
 				continue
 			}
-			fmt.Fprintf(w, "cloudflare\t%s\tok\t%s\n", label, path)
+			writeCheck(w, "cloudflare", label, "ok", path)
 		}
 
 		if err := commandRunFunc(5*time.Second, "systemctl", "is-active", "--quiet", "cloudflared-singleserver.service"); err != nil {
-			fmt.Fprintf(w, "cloudflare\tservice\tfailed\t%s\n", err)
+			writeCheck(w, "cloudflare", "service", "failed", err.Error())
 			failed = true
 		} else {
-			fmt.Fprintln(w, "cloudflare\tservice\tok\tcloudflared-singleserver.service")
+			writeCheck(w, "cloudflare", "service", "ok", "cloudflared-singleserver.service")
 		}
 
 		config, err := readCloudflaredConfig(state.ConfigFile)
 		if err != nil {
-			fmt.Fprintf(w, "cloudflare\troutes\tfailed\t%s\n", err)
+			writeCheck(w, "cloudflare", "routes", "failed", err.Error())
 			failed = true
 		} else {
 			routes = cloudflaredRoutes(config)
-			fmt.Fprintf(w, "cloudflare\troutes\tok\tcount=%d\n", len(routes))
+			writeCheck(w, "cloudflare", "routes", "ok", fmt.Sprintf("count=%d", len(routes)))
 		}
 	}
 
@@ -256,7 +256,7 @@ func doctorCloudflare(w io.Writer, allApps []AppConfig, selectedApps []AppConfig
 	if tunnelMode {
 		expectedHosts := expectedCloudflaredHosts(allApps)
 		for _, host := range staleCloudflaredHosts(routes, expectedHosts) {
-			fmt.Fprintf(w, "cloudflare\tstale_route\tfailed\t%s -> %s not in apps.yml\n", host, routes[host])
+			writeCheck(w, "cloudflare", "stale_route", "failed", host, "service="+routes[host], "not in apps.yml")
 			failed = true
 		}
 	}
@@ -273,10 +273,10 @@ func doctorCloudflare(w io.Writer, allApps []AppConfig, selectedApps []AppConfig
 				continue
 			}
 			if service := routes[strings.ToLower(host)]; service == "" {
-				fmt.Fprintf(w, "%s\ttunnel_route\tfailed\t%s missing from %s\n", app.Name, host, state.ConfigFile)
+				writeCheck(w, app.Name, "tunnel_route", "failed", host, "missing from "+state.ConfigFile)
 				failed = true
 			} else {
-				fmt.Fprintf(w, "%s\ttunnel_route\tok\t%s -> %s\n", app.Name, host, service)
+				writeCheck(w, app.Name, "tunnel_route", "ok", host, "service="+service)
 			}
 		}
 	}
@@ -291,7 +291,7 @@ func doctorCloudflareClient(w io.Writer, state *CloudflareState) (*CloudflareCli
 	}
 	client, err := newCloudflareClient(token)
 	if err != nil {
-		fmt.Fprintf(w, "cloudflare\tdns_api\tfailed\t%s\n", err)
+		writeCheck(w, "cloudflare", "dns_api", "failed", err.Error())
 		return nil, false
 	}
 	return client, true
@@ -300,10 +300,10 @@ func doctorCloudflareClient(w io.Writer, state *CloudflareState) (*CloudflareCli
 func doctorCloudflareDNSRecord(w io.Writer, scope string, check string, host string, state *CloudflareState, client *CloudflareClient) bool {
 	target, err := verifyCloudflareDNSRecordFunc(host, state, client)
 	if err != nil {
-		fmt.Fprintf(w, "%s\t%s\tfailed\t%s\t%s\n", scope, check, host, err)
+		writeCheck(w, scope, check, "failed", host, err.Error())
 		return false
 	}
-	fmt.Fprintf(w, "%s\t%s\tok\t%s -> %s\n", scope, check, host, target)
+	writeCheck(w, scope, check, "ok", host, "target="+target)
 	return true
 }
 
@@ -318,7 +318,7 @@ func doctorGitHubSetup(w io.Writer, github *GitHubClient, appCount int, expected
 		if appCount > 0 {
 			status = "failed"
 		}
-		fmt.Fprintf(w, "github\tsetup\t%s\trun `singleserver github connect`\t%s\n", status, err)
+		writeCheck(w, "github", "setup", status, "run `singleserver github connect`", err.Error())
 		return appCount == 0
 	}
 	if _, err := github.loadPrivateKey(); err != nil {
@@ -326,22 +326,22 @@ func doctorGitHubSetup(w io.Writer, github *GitHubClient, appCount int, expected
 		if appCount > 0 {
 			status = "failed"
 		}
-		fmt.Fprintf(w, "github\tsetup\t%s\tprivate key unavailable\t%s\n", status, err)
+		writeCheck(w, "github", "setup", status, "private key unavailable", err.Error())
 		return appCount == 0
 	}
-	fmt.Fprintf(w, "github\tsetup\tok\tapp_id=%d\tslug=%s\n", secrets.AppID, valueOrDash(secrets.Slug))
+	writeCheck(w, "github", "setup", "ok", fmt.Sprintf("app_id=%d", secrets.AppID), "slug="+valueOrDash(secrets.Slug))
 	if expectedWebhookURL != "" {
 		config, err := githubHookConfigFunc(github)
 		if err != nil {
-			fmt.Fprintf(w, "github\twebhook\tfailed\t%s\n", err)
+			writeCheck(w, "github", "webhook", "failed", err.Error())
 			return false
 		}
 		actualWebhookURL := strings.TrimRight(config.URL, "/")
 		if actualWebhookURL != expectedWebhookURL {
-			fmt.Fprintf(w, "github\twebhook\tfailed\texpected=%s\tactual=%s\n", expectedWebhookURL, valueOrDash(actualWebhookURL))
+			writeCheck(w, "github", "webhook", "failed", expectedWebhookURL, "actual="+valueOrDash(actualWebhookURL))
 			return false
 		}
-		fmt.Fprintf(w, "github\twebhook\tok\t%s\n", expectedWebhookURL)
+		writeCheck(w, "github", "webhook", "ok", expectedWebhookURL)
 	}
 	return true
 }
@@ -385,7 +385,7 @@ func doctorDaemon(w io.Writer) bool {
 	for {
 		status, err := daemonHealthStatus(port)
 		if err == nil {
-			fmt.Fprintf(w, "daemon\tok\t%s\n", status)
+			writeCheck(w, "daemon", "status", "ok", status)
 			return true
 		}
 		lastErr = err
@@ -396,9 +396,9 @@ func doctorDaemon(w io.Writer) bool {
 		time.Sleep(200 * time.Millisecond)
 	}
 	if lastStatus != "" {
-		fmt.Fprintf(w, "daemon\tfailed\t%s\n", lastStatus)
+		writeCheck(w, "daemon", "status", "failed", lastStatus)
 	} else {
-		fmt.Fprintf(w, "daemon\tfailed\t%s\n", lastErr)
+		writeCheck(w, "daemon", "status", "failed", lastErr.Error())
 	}
 	return false
 }
@@ -425,73 +425,73 @@ func daemonHealthStatus(port string) (string, error) {
 func doctorGitHubInstallation(w io.Writer, github *GitHubClient, app AppConfig) bool {
 	installationID, err := github.RepositoryInstallationID(app.Repo)
 	if err != nil {
-		fmt.Fprintf(w, "%s\tgithub_installation\tfailed\t%s\n", app.Name, err)
+		writeCheck(w, app.Name, "github_installation", "failed", err.Error())
 		return false
 	}
-	fmt.Fprintf(w, "%s\tgithub_installation\tok\tid=%d\n", app.Name, installationID)
+	writeCheck(w, app.Name, "github_installation", "ok", fmt.Sprintf("id=%d", installationID))
 	return true
 }
 
 func doctorDeployConfig(w io.Writer, app AppConfig) bool {
 	renderApp, err := appWithServerSecrets(app)
 	if err != nil {
-		fmt.Fprintf(w, "%s\tdeploy_config\tfailed\t%s\n", app.Name, err)
+		writeCheck(w, app.Name, "deploy_config", "failed", err.Error())
 		return false
 	}
 	if _, err := GeneratedDeployYAML(renderApp); err != nil {
-		fmt.Fprintf(w, "%s\tdeploy_config\tfailed\t%s\n", app.Name, err)
+		writeCheck(w, app.Name, "deploy_config", "failed", err.Error())
 		return false
 	}
 
 	if _, err := os.Stat(filepath.Join(app.RepoDir, ".git")); err == nil {
 		if err := gitRun(app.RepoDir, "ls-files", "--error-unmatch", "config/deploy.yml"); err == nil {
-			fmt.Fprintf(w, "%s\tdeploy_config\tok\trepo config/deploy.yml\n", app.Name)
+			writeCheck(w, app.Name, "deploy_config", "ok", "repo config/deploy.yml")
 			return true
 		}
 	}
-	fmt.Fprintf(w, "%s\tdeploy_config\tok\tgenerated from conventions\n", app.Name)
+	writeCheck(w, app.Name, "deploy_config", "ok", "generated from conventions")
 	return true
 }
 
 func doctorCheckout(w io.Writer, app AppConfig) bool {
 	if _, err := os.Stat(filepath.Join(app.RepoDir, ".git")); err != nil {
-		fmt.Fprintf(w, "%s\tcheckout\tfailed\tmissing %s\n", app.Name, app.RepoDir)
+		writeCheck(w, app.Name, "checkout", "failed", app.RepoDir, "missing")
 		return false
 	}
 
 	branch, err := gitOutput(app.RepoDir, "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
-		fmt.Fprintf(w, "%s\tcheckout\tfailed\t%s\n", app.Name, err)
+		writeCheck(w, app.Name, "checkout", "failed", err.Error())
 		return false
 	}
 	sha, err := gitOutput(app.RepoDir, "rev-parse", "--short", "HEAD")
 	if err != nil {
-		fmt.Fprintf(w, "%s\tcheckout\tfailed\t%s\n", app.Name, err)
+		writeCheck(w, app.Name, "checkout", "failed", err.Error())
 		return false
 	}
 	status, err := gitOutput(app.RepoDir, "status", "--short")
 	if err != nil {
-		fmt.Fprintf(w, "%s\tcheckout\tfailed\t%s\n", app.Name, err)
+		writeCheck(w, app.Name, "checkout", "failed", err.Error())
 		return false
 	}
 	if status != "" {
-		fmt.Fprintf(w, "%s\tcheckout\tfailed\t%s branch=%s sha=%s dirty=%q\n", app.Name, app.RepoDir, branch, sha, compactWhitespace(status))
+		writeCheck(w, app.Name, "checkout", "failed", app.RepoDir, "branch="+branch, "sha="+sha, fmt.Sprintf("dirty=%q", compactWhitespace(status)))
 		return false
 	}
-	fmt.Fprintf(w, "%s\tcheckout\tok\t%s branch=%s sha=%s clean\n", app.Name, app.RepoDir, branch, sha)
+	writeCheck(w, app.Name, "checkout", "ok", app.RepoDir, "branch="+branch, "sha="+sha, "clean")
 	return true
 }
 
 func doctorHealthcheck(w io.Writer, app AppConfig) bool {
 	if app.Healthcheck == "" {
-		fmt.Fprintf(w, "%s\thealthcheck\tassumed\tno external healthcheck configured\n", app.Name)
+		writeCheck(w, app.Name, "healthcheck", "assumed", "-", "no external healthcheck configured")
 		return true
 	}
 	if err := checkURL(app.Healthcheck); err != nil {
-		fmt.Fprintf(w, "%s\thealthcheck\tfailed\t%s\n", app.Name, err)
+		writeCheck(w, app.Name, "healthcheck", "failed", app.Healthcheck, err.Error())
 		return false
 	}
-	fmt.Fprintf(w, "%s\thealthcheck\tok\t%s\n", app.Name, app.Healthcheck)
+	writeCheck(w, app.Name, "healthcheck", "ok", app.Healthcheck)
 	return true
 }
 
@@ -525,10 +525,10 @@ func hasWord(value string, word string) bool {
 
 func doctorHostResolves(w io.Writer, scope string, check string, host string) bool {
 	if err := commandRunFunc(5*time.Second, "getent", "hosts", host); err != nil {
-		fmt.Fprintf(w, "%s\t%s\tfailed\t%s\t%s\n", scope, check, host, err)
+		writeCheck(w, scope, check, "failed", host, err.Error())
 		return false
 	}
-	fmt.Fprintf(w, "%s\t%s\tok\t%s\n", scope, check, host)
+	writeCheck(w, scope, check, "ok", host)
 	return true
 }
 

@@ -196,7 +196,7 @@ func TestSyncCloudflareAddTunnelDomain(t *testing.T) {
 	if !reflect.DeepEqual(calls, want) {
 		t.Fatalf("calls = %#v, want %#v", calls, want)
 	}
-	if !strings.Contains(out.String(), "cloudflare\tdomain\tok\tapp.example.com -> tunnel.cfargotunnel.com") {
+	if !strings.Contains(out.String(), "cloudflare\tdomain\tok\tapp.example.com\ttarget=tunnel.cfargotunnel.com") {
 		t.Fatalf("unexpected output: %s", out.String())
 	}
 }

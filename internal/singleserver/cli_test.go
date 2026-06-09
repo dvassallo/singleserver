@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"text/tabwriter"
 )
 
 func TestDisplayAppDefaults(t *testing.T) {
@@ -78,7 +79,7 @@ func TestListShowsFirstAppHintWhenEmpty(t *testing.T) {
 	}
 
 	got := out.String()
-	if !strings.Contains(got, "apps\t0") {
+	if !strings.Contains(got, "apps\tcount\tok\t0") {
 		t.Fatalf("expected app count, got:\n%s", got)
 	}
 	if !strings.Contains(got, "singleserver add https://github.com/owner/repo") {
@@ -101,14 +102,35 @@ func TestStatusShowsConfigAndFirstAppHintWhenEmpty(t *testing.T) {
 	}
 
 	got := out.String()
-	if !strings.Contains(got, "config\tok\t"+configPath+"\tapps=0") {
+	if !strings.Contains(got, "config\tapps\tok\t"+configPath+"\tapps=0") {
 		t.Fatalf("expected config summary, got:\n%s", got)
 	}
-	if !strings.Contains(got, "apps\t0") {
+	if !strings.Contains(got, "apps\tcount\tok\t0") {
 		t.Fatalf("expected app count, got:\n%s", got)
 	}
 	if !strings.Contains(got, "singleserver add https://github.com/owner/repo") {
 		t.Fatalf("expected add hint, got:\n%s", got)
+	}
+}
+
+func TestTabWriterAlignsCheckRows(t *testing.T) {
+	var out bytes.Buffer
+	w := tabwriter.NewWriter(&out, 0, 0, 2, ' ', 0)
+	writeCheck(w, "sillyface-games", "deploy", "ok", "12668ms", "ref=main", "sha=26e1a21d7082")
+	writeCheck(w, "daemon", "status", "ok", "200 OK")
+	if err := w.Flush(); err != nil {
+		t.Fatal(err)
+	}
+
+	got := out.String()
+	if strings.Contains(got, "\t") {
+		t.Fatalf("expected tabwriter to expand tabs, got %q", got)
+	}
+	if !strings.Contains(got, "sillyface-games  deploy") {
+		t.Fatalf("expected first row aligned, got:\n%s", got)
+	}
+	if !strings.Contains(got, "daemon           status") {
+		t.Fatalf("expected second row aligned, got:\n%s", got)
 	}
 }
 

@@ -296,23 +296,23 @@ func restoreStorageBackup(appName string, storagePath string, backupPath string,
 	}
 	restoreDirMoved = true
 
-	fmt.Fprintf(w, "%s\trestore\tok\t%s\n", appName, backupPath)
+	writeCheck(w, appName, "restore", "ok", backupPath)
 	if previousPath != "" {
-		fmt.Fprintf(w, "%s\trestore\tprevious\t%s\n", appName, previousPath)
+		writeCheck(w, appName, "restore", "previous", previousPath)
 	}
 	if noRestart {
-		fmt.Fprintf(w, "%s\trestart\tskipped\t--no-restart\n", appName)
+		writeCheck(w, appName, "restart", "skipped", "--no-restart")
 		return nil
 	}
 	if len(stopped) == 0 {
-		fmt.Fprintf(w, "%s\trestart\tskipped\tno running containers\n", appName)
+		writeCheck(w, appName, "restart", "skipped", "-", "no running containers")
 		return nil
 	}
 	if err := startContainers(stopped); err != nil {
 		return err
 	}
 	restartStoppedOnError = false
-	fmt.Fprintf(w, "%s\trestart\tok\t%s\n", appName, strings.Join(stopped, ","))
+	writeCheck(w, appName, "restart", "ok", strings.Join(stopped, ","))
 	return nil
 }
 

@@ -140,7 +140,7 @@ func TestDoctorGitHubSetupFailsWhenWebhookTargetsDifferentServer(t *testing.T) {
 	if ok {
 		t.Fatal("expected webhook mismatch to fail GitHub setup")
 	}
-	if !strings.Contains(out.String(), "github\twebhook\tfailed\texpected=https://new.example.com/github/webhook\tactual=https://old.example.com/github/webhook") {
+	if !strings.Contains(out.String(), "github\twebhook\tfailed\thttps://new.example.com/github/webhook\tactual=https://old.example.com/github/webhook") {
 		t.Fatalf("expected webhook mismatch output, got %q", out.String())
 	}
 }
@@ -330,7 +330,7 @@ func TestDoctorCloudflareChecksCNAMERecords(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected Cloudflare doctor to pass, got:\n%s", out.String())
 	}
-	if !strings.Contains(out.String(), "app\tcloudflare_dns\tok\tapp.example.com -> tunnel.cfargotunnel.com") {
+	if !strings.Contains(out.String(), "app\tcloudflare_dns\tok\tapp.example.com\ttarget=tunnel.cfargotunnel.com") {
 		t.Fatalf("expected app Cloudflare DNS ok output, got:\n%s", out.String())
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"os"
 	"runtime/debug"
 	"strings"
+	"text/tabwriter"
 	"time"
 )
 
@@ -25,61 +26,92 @@ func RunCLI(args []string, logger *log.Logger) error {
 		return Run(logger)
 	}
 
+	out := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	err := runCLI(args, logger, out)
+	if flushErr := out.Flush(); err == nil && flushErr != nil {
+		err = flushErr
+	}
+	return err
+}
+
+func runCLI(args []string, logger *log.Logger, stdout io.Writer) error {
+
 	switch args[0] {
 	case "help", "-h", "--help":
-		printUsage(os.Stdout)
+		printUsage(stdout)
 		return nil
 	case "version", "--version":
-		printVersion(os.Stdout)
+		printVersion(stdout)
 		return nil
 	case "github":
 		if len(args) >= 2 && args[1] == "connect" {
-			return cliGitHubConnect(args[2:], os.Stdout)
+			return cliGitHubConnect(args[2:], stdout)
 		}
 		return errors.New("usage: singleserver github connect")
 	case "tailscale":
 		if len(args) >= 2 && args[1] == "connect" {
-			return cliTailscaleConnect(args[2:], os.Stdout)
+			return cliTailscaleConnect(args[2:], stdout)
 		}
 		return errors.New("usage: singleserver tailscale connect")
 	case "cloudflare":
 		if len(args) >= 2 && args[1] == "connect" {
-			return cliCloudflareConnect(args[2:], os.Stdout)
+			return cliCloudflareConnect(args[2:], stdout)
 		}
 		return errors.New("usage: singleserver cloudflare connect")
 	case "list":
-		return cliList(os.Stdout)
+		return cliList(stdout)
 	case "status":
-		return cliStatus(os.Stdout)
+		return cliStatus(stdout)
 	case "add":
-		return cliAdd(args[1:], os.Stdout, logger)
+		return cliAdd(args[1:], stdout, logger)
 	case "edit":
-		return cliEdit(args[1:], os.Stdout, logger)
+		return cliEdit(args[1:], stdout, logger)
 	case "deploy":
-		return cliDeploy(args[1:], os.Stdout, logger)
+		return cliDeploy(args[1:], stdout, logger)
 	case "render-deploy":
-		return cliRenderDeploy(args[1:], os.Stdout)
+		return cliRenderDeploy(args[1:], stdout)
 	case "doctor":
-		return cliDoctor(args[1:], os.Stdout)
+		return cliDoctor(args[1:], stdout)
 	case "logs":
-		return cliLogs(args[1:], os.Stdout)
+		return cliLogs(args[1:], stdout)
 	case "remove":
-		return cliRemove(args[1:], os.Stdout)
+		return cliRemove(args[1:], stdout)
 	case "domains":
-		return cliDomains(args[1:], os.Stdout, logger)
+		return cliDomains(args[1:], stdout, logger)
 	case "env":
-		return cliEnv(args[1:], os.Stdout)
+		return cliEnv(args[1:], stdout)
 	case "storage":
-		return cliStorage(args[1:], os.Stdout, logger)
+		return cliStorage(args[1:], stdout, logger)
 	case "backup":
-		return cliBackup(args[1:], os.Stdout)
+		return cliBackup(args[1:], stdout)
 	case "restore":
-		return cliRestore(args[1:], os.Stdout)
+		return cliRestore(args[1:], stdout)
 	case "upgrade":
-		return cliUpgrade(os.Stdout)
+		return cliUpgrade(stdout)
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}
+}
+
+func writeCheck(w io.Writer, scope string, check string, status string, value string, details ...string) {
+	value = valueOrDash(value)
+	detail := strings.Join(nonEmptyStrings(details...), " ")
+	if detail == "" {
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", scope, check, status, value)
+		return
+	}
+	fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", scope, check, status, value, detail)
+}
+
+func nonEmptyStrings(values ...string) []string {
+	nonEmpty := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			nonEmpty = append(nonEmpty, value)
+		}
+	}
+	return nonEmpty
 }
 
 func printUsage(w io.Writer) {
@@ -190,10 +222,10 @@ func cliStatus(w io.Writer) error {
 	port := envDefault("SINGLESERVER_PORT", "8787")
 	res, err := http.Get("http://127.0.0.1:" + port + "/health")
 	if err != nil {
-		fmt.Fprintf(w, "daemon\tfailed\t%s\n", err)
+		writeCheck(w, "daemon", "status", "failed", err.Error())
 	} else {
 		_ = res.Body.Close()
-		fmt.Fprintf(w, "daemon\t%s\n", res.Status)
+		writeCheck(w, "daemon", "status", "ok", res.Status)
 	}
 
 	configPath := envDefault("SINGLESERVER_CONFIG", "/etc/singleserver/apps.yml")
@@ -201,7 +233,7 @@ func cliStatus(w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "config\tok\t%s\tapps=%d\n", configPath, len(config.Apps))
+	writeCheck(w, "config", "apps", "ok", configPath, fmt.Sprintf("apps=%d", len(config.Apps)))
 	if len(config.Apps) == 0 {
 		printNoApps(w)
 		return nil
@@ -231,7 +263,7 @@ func cliStatus(w io.Writer) error {
 }
 
 func printNoApps(w io.Writer) {
-	fmt.Fprintln(w, "apps\t0\tadd your first app with `singleserver add https://github.com/owner/repo`")
+	writeCheck(w, "apps", "count", "ok", "0", "add your first app with `singleserver add https://github.com/owner/repo`")
 }
 
 func appSummaryStatus(app AppConfig, containers map[string]string, containerErr error, journal string) string {
@@ -341,14 +373,14 @@ func cliDeploy(args []string, w io.Writer, logger *log.Logger) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "%s\tdeploy\tok\t%dms\tref=%s\tsha=%s\n", app.Name, timing.TotalMS, ref, shortSHA(sha))
+	writeCheck(w, app.Name, "deploy", "ok", fmt.Sprintf("%dms", timing.TotalMS), fmt.Sprintf("ref=%s", ref), fmt.Sprintf("sha=%s", shortSHA(sha)))
 	if app.Healthcheck != "" {
-		fmt.Fprintf(w, "%s\thealthcheck\tok\t%s\n", app.Name, app.Healthcheck)
+		writeCheck(w, app.Name, "healthcheck", "ok", app.Healthcheck)
 	} else {
-		fmt.Fprintf(w, "%s\thealthcheck\tassumed\tno external healthcheck configured\n", app.Name)
+		writeCheck(w, app.Name, "healthcheck", "assumed", "-", "no external healthcheck configured")
 	}
 	if liveURL := appLiveURL(*app); liveURL != "" {
-		fmt.Fprintf(w, "%s\tlive\tok\t%s\n", app.Name, liveURL)
+		writeCheck(w, app.Name, "live", "ok", liveURL)
 	}
 	return nil
 }

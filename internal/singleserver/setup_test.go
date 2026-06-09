@@ -107,7 +107,7 @@ func TestTailscaleConnectStoresHostname(t *testing.T) {
 	if !strings.Contains(out.String(), "tailscale\tfunnel\tstarting\t127.0.0.1:8787") {
 		t.Fatalf("funnel starting output missing:\n%s", out.String())
 	}
-	if !strings.Contains(out.String(), "tailscale\tfunnel\tok\thttps://assetstacks.example.ts.net -> 127.0.0.1:8787") {
+	if !strings.Contains(out.String(), "tailscale\tfunnel\tok\thttps://assetstacks.example.ts.net\ttarget=127.0.0.1:8787") {
 		t.Fatalf("funnel output missing:\n%s", out.String())
 	}
 }

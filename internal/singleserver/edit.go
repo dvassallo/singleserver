@@ -100,13 +100,13 @@ func cliEdit(args []string, w io.Writer, logger *log.Logger) error {
 	if err := writeConfigFunc(configPath, config); err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "%s\tconfig\tok\tupdated %s\n", app.Name, configPath)
+	writeCheck(w, app.Name, "config", "ok", configPath, "updated")
 
 	if opts.noDeploy {
-		fmt.Fprintf(w, "%s\tnext\tdeploy with `singleserver deploy %s`\n", app.Name, app.Repo)
+		writeCheck(w, app.Name, "next", "pending", "deploy with `singleserver deploy "+app.Repo+"`")
 		return nil
 	}
-	fmt.Fprintf(w, "%s\tdeploy\tstart\tapplying config change\n", app.Name)
+	writeCheck(w, app.Name, "deploy", "start", "applying config change")
 	if err := cliDeploy([]string{app.Repo}, w, logger); err != nil {
 		return err
 	}

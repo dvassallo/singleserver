@@ -51,7 +51,7 @@ func cliTailscaleConnect(args []string, w io.Writer) error {
 	status, err := currentTailscaleStatus()
 	if err != nil || !tailscaleRunning(status) {
 		if strings.TrimSpace(*authKey) == "" {
-			fmt.Fprintln(w, "tailscale\tlogin\tpending\trun `tailscale up --ssh` on this server, then run `singleserver tailscale connect`")
+			writeCheck(w, "tailscale", "login", "pending", "run `tailscale up --ssh` on this server, then run `singleserver tailscale connect`")
 			return nil
 		}
 		upArgs := []string{"up", "--ssh", "--auth-key=" + strings.TrimSpace(*authKey)}
@@ -67,21 +67,21 @@ func cliTailscaleConnect(args []string, w io.Writer) error {
 		}
 	}
 	if !tailscaleRunning(status) {
-		fmt.Fprintln(w, "tailscale\tlogin\tpending\trun `tailscale up --ssh` on this server, then run `singleserver tailscale connect`")
+		writeCheck(w, "tailscale", "login", "pending", "run `tailscale up --ssh` on this server, then run `singleserver tailscale connect`")
 		return nil
 	}
-	fmt.Fprintf(w, "tailscale\tstatus\tok\t%s\n", tailscaleStatusName(status))
+	writeCheck(w, "tailscale", "status", "ok", tailscaleStatusName(status))
 
 	if err := commandRunFunc(15*time.Second, "tailscale", "set", "--ssh"); err != nil {
-		fmt.Fprintf(w, "tailscale\tssh\tpending\t%s\n", err)
+		writeCheck(w, "tailscale", "ssh", "pending", err.Error())
 	} else {
-		fmt.Fprintln(w, "tailscale\tssh\tok")
+		writeCheck(w, "tailscale", "ssh", "ok", "-")
 	}
 
 	port := envDefault("SINGLESERVER_PORT", "8787")
-	fmt.Fprintf(w, "tailscale\tfunnel\tstarting\t127.0.0.1:%s\n", port)
+	writeCheck(w, "tailscale", "funnel", "starting", "127.0.0.1:"+port)
 	if err := commandRunToWriterFunc(w, 45*time.Second, "tailscale", "funnel", "--bg", "--yes", port); err != nil {
-		fmt.Fprintf(w, "tailscale\tfunnel\tpending\t%s\n", err)
+		writeCheck(w, "tailscale", "funnel", "pending", err.Error())
 		return writeTailscaleStateFromStatus(status, "")
 	}
 	status, err = currentTailscaleStatus()
@@ -90,7 +90,7 @@ func cliTailscaleConnect(args []string, w io.Writer) error {
 	}
 	funnelURL := tailscaleFunnelURL(status)
 	if funnelURL == "" {
-		fmt.Fprintln(w, "tailscale\tfunnel\tpending\tcould not determine Funnel URL from tailscale status")
+		writeCheck(w, "tailscale", "funnel", "pending", "-", "could not determine Funnel URL from tailscale status")
 		return writeTailscaleStateFromStatus(status, "")
 	}
 	if err := writeTailscaleStateFromStatus(status, funnelURL); err != nil {
@@ -107,7 +107,7 @@ func cliTailscaleConnect(args []string, w io.Writer) error {
 	if err := commandRunFunc(10*time.Second, "systemctl", "restart", "singleserver.service"); err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "tailscale\tfunnel\tok\t%s -> 127.0.0.1:%s\n", funnelURL, port)
+	writeCheck(w, "tailscale", "funnel", "ok", funnelURL, "target=127.0.0.1:"+port)
 	return nil
 }
 
@@ -204,7 +204,7 @@ func doctorTailscale(w io.Writer, appCount int) bool {
 		if appCount > 0 {
 			status = "failed"
 		}
-		fmt.Fprintf(w, "tailscale\tsetup\t%s\tinstall Tailscale\t%s\n", status, err)
+		writeCheck(w, "tailscale", "setup", status, "install Tailscale", err.Error())
 		return appCount == 0
 	}
 	status, err := currentTailscaleStatus()
@@ -214,13 +214,13 @@ func doctorTailscale(w io.Writer, appCount int) bool {
 			state = "failed"
 		}
 		if err != nil {
-			fmt.Fprintf(w, "tailscale\tsetup\t%s\trun `tailscale up --ssh`\t%s\n", state, err)
+			writeCheck(w, "tailscale", "setup", state, "run `tailscale up --ssh`", err.Error())
 		} else {
-			fmt.Fprintf(w, "tailscale\tsetup\t%s\trun `tailscale up --ssh`\n", state)
+			writeCheck(w, "tailscale", "setup", state, "run `tailscale up --ssh`")
 		}
 		return appCount == 0
 	}
-	fmt.Fprintf(w, "tailscale\tstatus\tok\t%s\n", tailscaleStatusName(status))
+	writeCheck(w, "tailscale", "status", "ok", tailscaleStatusName(status))
 
 	env, _ := loadServiceEnv()
 	publicURL := strings.TrimRight(env["SINGLESERVER_PUBLIC_URL"], "/")
@@ -233,12 +233,12 @@ func doctorTailscale(w io.Writer, appCount int) bool {
 		if appCount > 0 {
 			status = "failed"
 		}
-		fmt.Fprintf(w, "tailscale\tfunnel\t%s\trun `singleserver tailscale connect`\n", status)
+		writeCheck(w, "tailscale", "funnel", status, "run `singleserver tailscale connect`")
 		return appCount == 0
 	}
 	parsed, err := url.Parse(publicURL)
 	if err != nil || parsed.Scheme != "https" || !strings.HasSuffix(parsed.Hostname(), ".ts.net") {
-		fmt.Fprintf(w, "tailscale\tfunnel\tfailed\texpected Tailscale Funnel URL, got %s\n", publicURL)
+		writeCheck(w, "tailscale", "funnel", "failed", publicURL, "expected Tailscale Funnel URL")
 		return false
 	}
 	if err := commandRunFunc(5*time.Second, "tailscale", "funnel", "status", "--json"); err != nil {
@@ -246,9 +246,9 @@ func doctorTailscale(w io.Writer, appCount int) bool {
 		if appCount > 0 {
 			status = "failed"
 		}
-		fmt.Fprintf(w, "tailscale\tfunnel\t%s\t%s\n", status, err)
+		writeCheck(w, "tailscale", "funnel", status, err.Error())
 		return appCount == 0
 	}
-	fmt.Fprintf(w, "tailscale\tfunnel\tok\t%s\n", publicURL)
+	writeCheck(w, "tailscale", "funnel", "ok", publicURL)
 	return true
 }

@@ -174,10 +174,10 @@ func cliAdd(args []string, w io.Writer, logger *log.Logger) error {
 		return err
 	}
 
-	fmt.Fprintf(w, "%s\tgithub_installation\tok\tid=%d\n", app.Name, installationID)
-	fmt.Fprintf(w, "%s\tdefault_branch\tok\t%s\n", app.Name, defaultBranch)
-	fmt.Fprintf(w, "%s\tdockerfile\tok\t%s\n", app.Name, dockerfileSource)
-	fmt.Fprintf(w, "%s\tdeploy_config\tok\tgenerated from conventions\n", app.Name)
+	writeCheck(w, app.Name, "github_installation", "ok", fmt.Sprintf("id=%d", installationID))
+	writeCheck(w, app.Name, "default_branch", "ok", defaultBranch)
+	writeCheck(w, app.Name, "dockerfile", "ok", dockerfileSource)
+	writeCheck(w, app.Name, "deploy_config", "ok", "generated from conventions")
 
 	syncedHosts := []string{}
 	for _, host := range app.Hosts {
@@ -196,17 +196,17 @@ func cliAdd(args []string, w io.Writer, logger *log.Logger) error {
 		}
 		return err
 	}
-	fmt.Fprintf(w, "%s\tconfig\tok\tadded to %s\n", app.Name, configPath)
+	writeCheck(w, app.Name, "config", "ok", configPath, "added")
 
 	if !opts.noDeploy {
-		fmt.Fprintf(w, "%s\tdeploy\tstart\t%s\n", app.Name, targetBranch)
+		writeCheck(w, app.Name, "deploy", "start", targetBranch)
 		if err := cliDeploy([]string{opts.repo, targetBranch}, w, logger); err != nil {
 			return err
 		}
 		return cliDoctor(nil, w)
 	}
 
-	fmt.Fprintf(w, "%s\tnext\tdeploy with `singleserver deploy %s` or push to %s\n", app.Name, opts.repo, targetBranch)
+	writeCheck(w, app.Name, "next", "pending", "deploy with `singleserver deploy "+opts.repo+"`", "or push to "+targetBranch)
 	return nil
 }
 
