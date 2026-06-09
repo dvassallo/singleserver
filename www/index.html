@@ -487,31 +487,31 @@ singleserver add https://github.com/you/my-app-3</pre>
         <div class="how-list">
             <div class="how-item">
                 <strong>What Single Server does.</strong>
-                <p>Single Server is the coordinator. Its installer puts Docker, Kamal, cloudflared, Tailscale, a local registry, a deploy user, and the daemon on your host. The daemon keeps the app registry in apps.yml, stores provider config under /etc/singleserver, checks out pushed commits, renders Kamal config from conventions, starts deploys, records logs, and gives you one CLI for status, domains, env vars, storage, backups, and diagnostics.</p>
+                <p>Single Server installs Docker, Kamal, cloudflared, Tailscale, a local registry, a deploy user, and a small daemon on your host. The daemon listens for GitHub webhooks, checks that the pushed repo is listed in apps.yml, fetches the pushed commit into a server-side checkout, generates Kamal config, starts the deploy, and records what happened. The CLI reads from that same server-side state for status, logs, domains, env vars, storage, backups, and diagnostics.</p>
             </div>
             <div class="how-item">
                 <strong>What Cloudflare does.</strong>
-                <p>Cloudflare is the public edge. Single Server creates proxied DNS records and Cloudflare Tunnel routes for the setup page, GitHub webhook endpoint, and every app domain. Cloudflare terminates TLS, hides the server IP, and forwards plain HTTP through cloudflared to Kamal's proxy, so apps do not need to know about certificates.</p>
+                <p>Single Server creates proxied DNS records for your app domains, so visitors reach Cloudflare instead of your server IP directly. It also creates a Cloudflare Tunnel and runs cloudflared on your server. The tunnel gives Cloudflare a route to the setup page, GitHub webhook endpoint, and app traffic. Cloudflare terminates TLS, hides the server IP, and forwards plain HTTP through the tunnel to Kamal's proxy, so apps do not need to know about certificates.</p>
             </div>
             <div class="how-item">
                 <strong>What GitHub does.</strong>
-                <p>GitHub is the event source and code source. A GitHub App sends signed push webhooks to your server, grants short-lived installation tokens so the daemon can fetch the exact commit, and receives pending, success, or failure commit statuses. Repos do not need deploy keys, GitHub Actions runners, or per-repo deploy secrets.</p>
+                <p>GitHub tells your server when code changes. During setup, Single Server creates or connects a GitHub App: a GitHub integration installed on the repos you want to deploy. The app sends signed push webhooks to your server, gives the daemon short-lived tokens to fetch the exact commit, and lets Single Server mark the commit as pending, successful, or failed. Repos do not need deploy keys, GitHub Actions runners, or per-repo deploy secrets.</p>
             </div>
             <div class="how-item">
                 <strong>What Tailscale does.</strong>
-                <p>Tailscale is the private admin path. It gives you Tailscale SSH to the host, so you can run singleserver commands and inspect the machine without exposing SSH to the public internet or managing workstation keys for every server.</p>
+                <p>Single Server installs Tailscale and enables Tailscale SSH. That gives you a private way to SSH into the host, run singleserver commands, and inspect the machine without exposing SSH to the public internet or copying SSH keys to every workstation.</p>
             </div>
             <div class="how-item">
                 <strong>What Docker does.</strong>
-                <p>Docker is the app boundary. Each repo's Dockerfile defines the image, and each app runs in its own container. Single Server builds images on the same server and hands them through the local registry, avoiding an external CI queue and registry round trip.</p>
+                <p>Docker isolates the apps from each other. Each repo's Dockerfile describes how to build the app image, and each app runs in its own container with its own process, env vars, and storage mounts. Single Server builds images on the same server and sends them through the local registry, avoiding an external CI queue and registry round trip.</p>
             </div>
             <div class="how-item">
                 <strong>What Kamal does.</strong>
-                <p>Kamal is the rollout engine. Single Server generates the deploy config, then uses Kamal to build, boot the replacement container, run the healthcheck, and move traffic only after the new version is ready. Kamal's proxy routes requests from cloudflared to the right app container.</p>
+                <p>Kamal handles the zero-downtime deploy. Single Server generates the deploy config and calls Kamal. Kamal starts the replacement container, runs the healthcheck, and moves traffic only after the new version is ready. Kamal's proxy receives HTTP from cloudflared and routes each request to the right app container.</p>
             </div>
             <div class="how-item">
-                <strong>What your app owns.</strong>
-                <p>Your app brings the normal app pieces: code, a Dockerfile, one web port, and a health endpoint. Single Server supplies the deploy plumbing around it, including domains, TLS at the edge, generated Kamal config, server-side env vars, persistent storage, logs, and backups.</p>
+                <strong>What your app needs to do.</strong>
+                <p>Your app needs code, a Dockerfile, one HTTP port, and a health endpoint. If it needs config, it should read env vars. If it needs persistent files or SQLite data, it should write them to mounted storage. Single Server supplies the deploy plumbing around it, including domains, TLS at the edge, generated Kamal config, server-side env vars, persistent storage, logs, and backups.</p>
             </div>
         </div>
     </section>
