@@ -331,8 +331,7 @@
             color: #222;
         }
 
-        .feature code,
-        .how-item code {
+        .feature code {
             font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
             background: var(--highlight);
             padding: 1px 4px;
@@ -468,7 +467,7 @@ singleserver add https://github.com/you/my-app-3</pre>
         <div class="how-list">
             <div class="how-item">
                 <strong>Install once on your server.</strong>
-                <p>The installer prepares the machine with Docker, Kamal, Tailscale, cloudflared, a local Docker registry, a deploy user, and the Single Server daemon. The daemon runs under systemd, listens locally, and keeps its state in <code>/etc/singleserver</code>.</p>
+                <p>The installer prepares the machine with Docker, Kamal, Tailscale, cloudflared, a local Docker registry, a deploy user, and the Single Server daemon. The daemon runs under systemd, listens locally, and keeps its state in /etc/singleserver.</p>
             </div>
             <div class="how-item">
                 <strong>Connect the outside world.</strong>
@@ -476,15 +475,15 @@ singleserver add https://github.com/you/my-app-3</pre>
             </div>
             <div class="how-item">
                 <strong>Add repos from the host.</strong>
-                <p><code>singleserver add</code> checks that the GitHub App can read the repo, confirms there is a <code>Dockerfile</code>, infers the app name and default domain, writes the app to <code>/etc/singleserver/apps.yml</code>, and configures Cloudflare DNS and tunnel routes for the app.</p>
+                <p>singleserver add checks that the GitHub App can read the repo, confirms there is a Dockerfile, infers the app name and default domain, writes the app to /etc/singleserver/apps.yml, and configures Cloudflare DNS and tunnel routes for the app.</p>
             </div>
             <div class="how-item">
                 <strong>Build and deploy locally.</strong>
-                <p>On each push, Single Server verifies the webhook, checks the repo against <code>apps.yml</code>, fetches the exact pushed commit, and asks Kamal to build the Docker image on the same server. Images go through the local registry, so deploys avoid an external CI queue and registry round trip.</p>
+                <p>On each push, Single Server verifies the webhook, checks the repo against apps.yml, fetches the exact pushed commit, and asks Kamal to build the Docker image on the same server. Images go through the local registry, so deploys avoid an external CI queue and registry round trip.</p>
             </div>
             <div class="how-item">
                 <strong>Swap traffic safely.</strong>
-                <p>Kamal starts the replacement container, waits for the healthcheck, and only then moves traffic to the new version. App logs, deploy logs, domains, server-side env vars, persistent storage, SQLite-friendly backups, and diagnostics stay available from the same <code>singleserver</code> CLI.</p>
+                <p>Kamal starts the replacement container, waits for the healthcheck, and only then moves traffic to the new version. App logs, deploy logs, domains, server-side env vars, persistent storage, SQLite-friendly backups, and diagnostics stay available from the same singleserver CLI.</p>
             </div>
         </div>
     </section>
