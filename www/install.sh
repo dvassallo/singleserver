@@ -363,7 +363,7 @@ tailscale_running() {
 }
 
 has_tailscale_authkey() {
-  [ -n "${TAILSCALE_AUTHKEY:-}" ] || [ -n "${TS_AUTHKEY:-}" ]
+  [ -n "${TAILSCALE_AUTHKEY:-}" ]
 }
 
 if has_public_url || tailscale_running || has_tailscale_authkey; then
@@ -390,7 +390,7 @@ if ! has_public_url; then
   echo "tailscale pending: run tailscale up --ssh, then run singleserver tailscale connect"
 fi
 
-if [ -n "${CLOUDFLARE_API_TOKEN:-}" ] || [ -n "${CF_API_TOKEN:-}" ] || [ -f /etc/singleserver/cloudflare.json ]; then
+if [ -n "${CLOUDFLARE_API_TOKEN:-}" ] || [ -f /etc/singleserver/cloudflare.json ]; then
   if /usr/local/bin/singleserver cloudflare connect; then
     :
   else

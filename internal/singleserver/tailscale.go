@@ -233,10 +233,7 @@ func tailscaleFlagTakesValue(arg string) bool {
 }
 
 func defaultTailscaleAuthKey() string {
-	if value := strings.TrimSpace(os.Getenv("TAILSCALE_AUTHKEY")); value != "" {
-		return value
-	}
-	return strings.TrimSpace(os.Getenv("TS_AUTHKEY"))
+	return strings.TrimSpace(os.Getenv("TAILSCALE_AUTHKEY"))
 }
 
 func doctorTailscale(w io.Writer, appCount int) bool {

@@ -113,9 +113,6 @@ func cloudflareTokenFromEnvOrState(state *CloudflareState) string {
 	if token := strings.TrimSpace(os.Getenv("CLOUDFLARE_API_TOKEN")); token != "" {
 		return token
 	}
-	if token := strings.TrimSpace(os.Getenv("CF_API_TOKEN")); token != "" {
-		return token
-	}
 	if state != nil {
 		return strings.TrimSpace(state.APIToken)
 	}
