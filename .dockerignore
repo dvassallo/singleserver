@@ -1,0 +1,10 @@
+.DS_Store
+*.log
+tmp/
+
+test/e2e-local-real/.env
+test/e2e-local-real/.env.*
+test/e2e-local-real/state/
+test/e2e-local-real/work/
+
+www/bin/
