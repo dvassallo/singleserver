@@ -6,6 +6,30 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
+os_id="unknown"
+os_pretty="unknown"
+if [ -r /etc/os-release ]; then
+  # shellcheck disable=SC1091
+  . /etc/os-release
+  os_id="${ID:-unknown}"
+  os_pretty="${PRETTY_NAME:-$os_id}"
+fi
+
+case "$os_id" in
+  debian|ubuntu) ;;
+  *)
+    cat >&2 <<EOF
+Single Server installer currently supports Ubuntu and Debian only.
+
+Detected OS: $os_pretty
+
+This installer uses apt, dpkg, systemd, and Debian package names. Please run it
+on a fresh Ubuntu or Debian server.
+EOF
+    exit 1
+    ;;
+esac
+
 export DEBIAN_FRONTEND=noninteractive
 
 apt-get update
