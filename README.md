@@ -1,11 +1,9 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="www/server-single-dark.svg">
-    <img src="www/server-single.svg" alt="single server" width="160">
+    <source media="(prefers-color-scheme: dark)" srcset="www/server-single-wordmark-dark.png">
+    <img src="www/server-single-wordmark.png" alt="single server" width="440">
   </picture>
 </p>
-
-<h1 align="center">single server</h1>
 
 <p><strong>Git push to production in &lt;5 seconds.</strong></p>
 
