@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Single Server - Git push to production in under 5 seconds</title>
-    <meta name="description" content="The easiest way to deploy multiple GitHub repos on a single server with Cloudflare, Tailscale, and Kamal.">
+    <meta name="description" content="Run every side project on one Linux box. Single Server wires up Cloudflare, Tailscale, Docker, Kamal, and GitHub once, and every git push deploys in seconds.">
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
@@ -146,7 +146,6 @@
             font-size: 1.25rem;
             line-height: 1.6;
             margin-top: 28px;
-            max-width: 710px;
         }
 
         section { margin-top: 22px; }
@@ -413,18 +412,18 @@
         <div
             class="tagline"
             data-slogan-rotator
-            data-slogans='["Git push to production in &lt;5 seconds.","Zero-downtime deploys.","Multiple apps on one server.","Automatic Docker containerization.","Zero-overhead go infrastructure."]'
+            data-slogans='["Git push to production in &lt;5 seconds.","Every side project. One server.","Zero-downtime deploys. Zero ceremony.","Set it up once. Forget it exists.","Your server is the platform.","Your whole portfolio on a $5 box.","More apps, same server.","Kamal deploys, no Kamal config.","New side project? One command.","Hobby apps, production manners."]'
         ><span class="tagline-text">Git push to production in &lt;5 seconds.</span></div>
-        <p class="lede">The easiest way to deploy multiple GitHub repos on a single server with Cloudflare, Tailscale, and Kamal. All you need is a single Linux server.</p>
+        <p class="lede">One Linux box can run every app you've ever shipped. Single Server wires up Cloudflare, Tailscale, Docker, Kamal, and GitHub. From there, every <strong>git push</strong> goes live in under 5 seconds. No build queue, no per-app bills, no pile of YAML.</p>
     </header>
 
     <section>
-        <h2 id="commands">Get going</h2>
-        <p>Every command runs on your server.</p>
+        <h2 id="commands">The entire setup</h2>
+        <p>Setup is three steps, all on your server. After that it mostly stays out of your way, and the occasional app change is one command on the same box.</p>
 
         <div class="commands-list">
             <div class="command-item">
-                <p class="step-desc">SSH to your Linux server:</p>
+                <p class="step-desc">SSH into any fresh Linux box:</p>
                 <div class="code-wrapper">
                     <code class="code-block">ssh root@&lt;server_ip&gt;</code>
                     <button class="copy-btn" aria-label="Copy to clipboard">
@@ -434,7 +433,7 @@
             </div>
 
             <div class="command-item">
-                <p class="step-desc">Set up your server:</p>
+                <p class="step-desc">Run the interactive installer. It sets up everything you would otherwise configure by hand:</p>
                 <div class="code-wrapper">
                     <code class="code-block">curl -fsSL <span>https://singleserver.com/install.sh</span> | sh</code>
                     <button class="copy-btn" aria-label="Copy to clipboard">
@@ -444,11 +443,11 @@
             </div>
 
             <div class="command-item">
-                <p class="step-desc">Add your apps:</p>
+                <p class="step-desc">Point it at your repos:</p>
                 <div class="code-wrapper">
-                    <pre class="code-block multiline">singleserver add https://github.com/you/my-app-1
-singleserver add https://github.com/you/my-app-2
-singleserver add https://github.com/you/my-app-3</pre>
+                    <pre class="code-block multiline">singleserver add https://github.com/you/your-app-1
+singleserver add https://github.com/you/your-app-2
+singleserver add https://github.com/you/your-app-3</pre>
                     <button class="copy-btn" aria-label="Copy to clipboard">
                         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
                     </button>
@@ -458,60 +457,64 @@ singleserver add https://github.com/you/my-app-3</pre>
     </section>
 
     <section>
-        <h2 id="flow">What happens next</h2>
-        <p>Whenever you push to GitHub, your server fetches the commit, builds it locally, and uses Kamal to roll it out with zero downtime. Each app runs isolated in its own Docker container.</p>
+        <h2 id="flow">Then, forever</h2>
+        <p>Push to GitHub like you always do. Your server hears about it, builds the commit, and swaps the new version in with zero downtime. No CI queue, no registry upload, no waiting.</p>
 
         <div class="flow-box">
             <div class="flow-row">
                 <span class="pill">git push</span>
                 <span class="connector">&rarr;</span>
-                <span class="result">GitHub reaches your server through Tailscale Funnel</span>
+                <span class="result">GitHub pings your server through Tailscale Funnel.</span>
             </div>
             <div class="flow-row">
                 <span class="pill">build</span>
                 <span class="connector">&rarr;</span>
-                <span class="result">Your server builds the image from that commit</span>
+                <span class="result">Your server builds the container image itself, from that exact commit.</span>
             </div>
             <div class="flow-row">
                 <span class="pill">live</span>
                 <span class="connector">&rarr;</span>
-                <span class="result">Kamal rolls it out with zero downtime</span>
+                <span class="result">Kamal flips traffic only when the new container is ready, so nobody sees a blip.</span>
             </div>
         </div>
     </section>
 
     <section>
         <h2 id="how">How it works</h2>
-        <p>Single Server is opinionated: your server is the platform. The outside services each get one clear job, while the deploy truth, app config, logs, storage, and day-to-day commands stay on the machine you control.</p>
+        <p>There's no magic in here. Single Server is boring, proven tools, the same ones you'd probably pick yourself, plus one small Go binary that ties them together.</p>
 
         <div class="how-list">
             <div class="how-item">
-                <strong>What Single Server does.</strong>
-                <p>Single Server installs Docker, Kamal, cloudflared, Tailscale, a local registry, a deploy user, and a small daemon on your host. The daemon listens on a local port. When GitHub sends a webhook, the daemon verifies it, checks the pushed repo and branch against the app list on your server, fetches that exact commit into a server-side checkout, generates the Kamal config, starts the deploy, and records the result. The CLI reads from the same server-side state for status, logs, domains, env vars, storage, backups, and diagnostics.</p>
+                <strong>A small daemon runs the deploys.</strong>
+                <p>The daemon is a webhook endpoint exposed to GitHub through Tailscale Funnel. When a push event arrives, it verifies the signature, checks that the repo is in your app list, fetches the pushed commit, builds a container image, runs the deploy through Kamal, and reports the result back to GitHub. All this happens in under 5 seconds.</p>
             </div>
             <div class="how-item">
-                <strong>What Cloudflare does.</strong>
-                <p>Single Server creates proxied DNS records for your app domains, so visitors reach Cloudflare instead of your server IP directly. It also creates a Cloudflare Tunnel and runs cloudflared on your server. The tunnel gives Cloudflare a route to app traffic only. Cloudflare terminates TLS, hides the server IP, keeps CDN and DDoS protections in front, and forwards plain HTTP through the tunnel to Kamal's proxy, so apps do not need to know about certificates.</p>
+                <strong>A CLI to manage your apps.</strong>
+                <p>The Go binary that runs the daemon doubles as the CLI you use over SSH. Add, edit, and remove apps. Trigger a deploy, or roll back to an earlier commit. Attach domains, set env vars, enable persistent storage, take and restore backups. Check status, tail logs, and run diagnostics when something looks off.</p>
             </div>
             <div class="how-item">
-                <strong>What GitHub does.</strong>
-                <p>GitHub tells your server when code changes. During setup, Single Server creates or connects a GitHub App: a GitHub integration installed on the repos you want to deploy. The app sends signed push webhooks to the Tailscale Funnel URL for your server, gives the daemon short-lived tokens to fetch the exact commit, and lets Single Server mark the commit as pending, successful, or failed. Repos do not need deploy keys, GitHub Actions runners, or per-repo deploy secrets.</p>
+                <strong>Cloudflare fronts your apps.</strong>
+                <p>You were likely going to put Cloudflare in front of your apps anyway. Single Server creates the proxied DNS records and a Cloudflare Tunnel for you, so visitors hit Cloudflare's edge for TLS, CDN, and DDoS protection, and traffic reaches your apps through the tunnel. Your server's IP stays hidden, and your apps never have to deal with certificates.</p>
             </div>
             <div class="how-item">
-                <strong>What Tailscale does.</strong>
-                <p>Single Server installs Tailscale, enables Tailscale SSH, and starts Tailscale Funnel for the daemon's local port. Tailscale SSH gives you a private way to SSH into the host, run singleserver commands, and inspect the machine without exposing SSH to the public internet or copying SSH keys to every workstation. Tailscale Funnel gives GitHub a public *.ts.net URL for the setup page and webhook endpoint without requiring a custom DNS record for the server itself.</p>
+                <strong>GitHub triggers deploys.</strong>
+                <p>GitHub tells your server when there's something new to deploy. During setup, Single Server creates a GitHub App for you. That's GitHub's own mechanism for giving Single Server limited, revocable access to your repos: you install it once on your account, and it covers every repo you deploy. The app sends signed push events, hands the daemon short-lived tokens to fetch the pushed commit, and marks each commit as pending, deployed, or failed. No deploy keys, no GitHub Actions secrets, no per-repo webhooks.</p>
             </div>
             <div class="how-item">
-                <strong>What Docker does.</strong>
-                <p>Docker isolates the apps from each other. A repo can bring its own Dockerfile, or Single Server can generate one from explicit runtime settings for static, Node, and Bun apps. Each app runs in its own container with its own process, env vars, and storage mounts. Single Server builds images on the same server and sends them through the local registry, avoiding an external CI queue and registry round trip.</p>
+                <strong>Tailscale keeps access private.</strong>
+                <p>Tailscale SSH gets you into the box without exposing SSH to the public internet or scattering keys across laptops. Tailscale Funnel gives GitHub a public URL to reach the daemon's webhook endpoint, so the server itself never needs a domain name or a DNS record.</p>
             </div>
             <div class="how-item">
-                <strong>What Kamal does.</strong>
-                <p>Kamal handles the zero-downtime deploy. Single Server generates the deploy config and calls Kamal. Kamal starts the replacement container, checks the readiness path, and moves traffic only after the new version is ready. Kamal's proxy receives HTTP from cloudflared and routes each request to the right app container.</p>
+                <strong>Docker keeps apps apart.</strong>
+                <p>Every app runs in its own container with its own process, env vars, and storage, so one project's dependency mess can't leak into another. Bring your own Dockerfile, or let Single Server generate one for static, Node, and Bun apps. Images build on the server and ship through a local registry, with no Docker Hub account and no upload wait.</p>
             </div>
             <div class="how-item">
-                <strong>What your app needs to do.</strong>
-                <p>Your app needs code and one HTTP port. A dedicated health endpoint is optional. If it needs config, it should read env vars. If it needs persistent files or SQLite data, it should write them to mounted storage. Single Server supplies the deploy plumbing around it, including domains, TLS at the edge, generated Kamal config, server-side env vars, persistent storage, logs, and backups.</p>
+                <strong>Kamal swaps versions without downtime.</strong>
+                <p>Kamal is the deploy tool 37signals built to run their own apps. It starts a container with the new release and flips traffic over once it's healthy. Single Server generates the deploy config Kamal needs, so you get zero-downtime deploys without ever writing the YAML. If your repo has its own Kamal config, it uses that instead.</p>
+            </div>
+            <div class="how-item">
+                <strong>Your app barely has to do anything.</strong>
+                <p>If your app serves HTTP on a port, Single Server can run it.</p>
             </div>
         </div>
     </section>
@@ -520,28 +523,44 @@ singleserver add https://github.com/you/my-app-3</pre>
         <h2 id="features">What you get</h2>
         <div class="feature-grid">
             <div class="feature">
-                <strong>Fast deploys</strong>
-                <p>No Actions queue, no per-repo runner hop. Build on the server, swap containers, check readiness, and set commit status.</p>
+                <strong>Deploys in under 5 seconds</strong>
+                <p>No CI queue, no cold start, no registry upload. Your server builds the container image and swaps it in with zero downtime.</p>
             </div>
             <div class="feature">
-                <strong>App domains</strong>
-                <p>Domains are inferred or added when you add apps. Cloudflare Tunnel hides your server IP, handles public TLS, and keeps CDN and proxy features on by default.</p>
+                <strong>No lock-in</strong>
+                <p>If you stop using Single Server tomorrow, your apps keep running on Docker, Kamal, Cloudflare, Tailscale, and GitHub.</p>
             </div>
             <div class="feature">
-                <strong>Tiny Go tool</strong>
-                <p>No Node runtime, no database, no per-repo runner. A small Go binary manages deploys from your server.</p>
+                <strong>A thin layer of glue</strong>
+                <p>Docker, Kamal, Tailscale, and Cloudflare do the heavy lifting. Single Server is the open-source glue that wires them together.</p>
             </div>
             <div class="feature">
-                <strong>Containers per app</strong>
-                <p>Every project runs in its own Docker container, but the host still stays simple and inspectable.</p>
+                <strong>Every app in its own box</strong>
+                <p>Containers isolate your projects, while the host stays a plain Linux machine you can SSH into and actually understand.</p>
             </div>
             <div class="feature">
-                <strong>Kamal without boilerplate</strong>
-                <p>Single Server generates deploy config from conventions, while Kamal handles the container rollout.</p>
+                <strong>Domains that just work</strong>
+                <p>Add a domain with one command, and DNS, TLS, CDN, and routing all happen. Your server's IP stays hidden behind Cloudflare.</p>
             </div>
             <div class="feature">
-                <strong>Monitor from the host</strong>
-                <p>Use Tailscale SSH, status, logs, and doctor commands from the same server where deploys run.</p>
+                <strong>Boring operations, on purpose</strong>
+                <p>Deploy, roll back, tail logs, set env vars, take backups, run diagnostics. One CLI, on the same machine where everything runs.</p>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <h2 id="try">Still skeptical?</h2>
+        <p>Fair enough. Tell Claude Code, Codex, Cursor, or your favorite AI agent to grab a throwaway VPS and try Single Server for you. And if you'd like it to work differently, it's a tiny open-source codebase, MIT licensed, that you can fork and make your own. Or just run it yourself:</p>
+
+        <div class="commands-list">
+            <div class="command-item">
+                <div class="code-wrapper">
+                    <code class="code-block">curl -fsSL <span>https://singleserver.com/install.sh</span> | sh</code>
+                    <button class="copy-btn" aria-label="Copy to clipboard">
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                    </button>
+                </div>
             </div>
         </div>
     </section>
