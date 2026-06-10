@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="www/server-single-wordmark-dark.png">
-    <img src="www/server-single-wordmark.png" alt="single server" width="440">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/dvassallo/singleserver/main/www/server-single-wordmark-dark.png">
+    <img src="https://raw.githubusercontent.com/dvassallo/singleserver/main/www/server-single-wordmark.png" alt="single server" width="484">
   </picture>
 </p>
 
