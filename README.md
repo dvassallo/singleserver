@@ -1,309 +1,94 @@
-# Single Server
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="www/server-single-dark.svg">
+    <img src="www/server-single.svg" alt="single server" width="160">
+  </picture>
+</p>
 
-Single Server is a tiny deploy daemon for running many small apps on one server.
+<h1 align="center">single server</h1>
 
-It receives GitHub App `push` webhooks through Tailscale Funnel, checks a central allowlist, fetches the exact pushed SHA, and runs Kamal on the host.
-Cloudflare Tunnel is the public ingress for app domains, with Tailscale used for private server access and the GitHub setup/webhook endpoint.
-All `singleserver` commands are run on that host over SSH.
+<p align="center"><strong>Git push to production in &lt;5 seconds.</strong></p>
 
-For the product docs, see [www/docs/index.html](www/docs/index.html).
-For the marketing homepage, see [www/index.html](www/index.html).
+<p align="center">One Linux box can run every app you've ever shipped. Single Server wires up Cloudflare, Tailscale, Docker, Kamal, and GitHub. From there, every <strong>git push</strong> goes live in under 5 seconds. No build queue, no per-app bills, no pile of YAML.</p>
 
-## Naming
+---
 
-The product name is **Single Server**. The repository and service slug are `singleserver`, matching `singleserver.com`.
+## The entire setup
 
-```text
-Product:     Single Server
-Repo:        dvassallo/singleserver
-Binary:      singleserver
-Daemon:      singleserver.service
-GitHub App:  Single Server <hostname>
+Setup is three steps, all on your server. After that it mostly stays out of your way, and the occasional app change is one command on the same box.
+
+SSH into any fresh Linux box:
+
+```sh
+ssh root@<server_ip>
 ```
 
-## Install
-
-Run this as root on a Linux server:
+Run the interactive installer. It sets up everything you would otherwise configure by hand:
 
 ```sh
 curl -fsSL https://singleserver.com/install.sh | sh
 ```
 
-The installer downloads the hosted Linux binary and installs Docker, Kamal,
-Tailscale, and cloudflared. It also runs first-run setup: Tailscale SSH and
-Funnel setup, Cloudflare Tunnel setup for app domains, GitHub App setup URL
-printing when a Funnel URL exists, and `singleserver doctor`.
+Point it at your repos:
 
-On an interactive SSH session, the installer prompts for Tailscale login and a
-Cloudflare API token. For unattended installs, pass `TAILSCALE_AUTHKEY` or
-`TS_AUTHKEY` and `CLOUDFLARE_API_TOKEN` or `CF_API_TOKEN`. If the Cloudflare
-token can access multiple accounts, pass the account explicitly when repairing
-Cloudflare with `singleserver cloudflare connect --account <id>`.
-
-## Minimal config
-
-```yaml
-apps:
-  - dvassallo/sillyface-games
-  - dvassallo/fullsend
+```sh
+singleserver add https://github.com/you/your-app-1
+singleserver add https://github.com/you/your-app-2
+singleserver add https://github.com/you/your-app-3
 ```
 
-The repo name drives the defaults:
+## Then, forever
+
+Push to GitHub like you always do. Your server hears about it, builds the commit, and swaps the new version in with zero downtime. No CI queue, no registry upload, no waiting.
 
 ```text
-app name:  repository name
-checkout:  /srv/repos/<app>
-deploy:    kamal setup -q on first deploy, kamal redeploy -q after that
-branch:    repository default branch from the webhook payload
-kamal:     generated from conventions unless config/deploy.yml is tracked
+git push  →  GitHub pings your server through Tailscale Funnel
+build     →  Your server builds the container image itself, from that exact commit
+live      →  Kamal flips traffic only when the new container is ready, so nobody sees a blip
 ```
 
-App names must be unique on the server because they drive checkout paths, Kamal
-service names, containers, and storage paths. If two GitHub
-owners have a repo with the same name, add one of them with `--name` or set a
-different `name` in `apps.yml`.
+## How it works
 
-Hostnames must also be unique across apps. A domain can route to one app at a
-time; use `singleserver domains remove` before assigning it somewhere else.
+There's no magic in here. Single Server is boring, proven tools, the same ones you'd probably pick yourself, plus one small Go binary that ties them together.
 
-Use an object only when an app needs overrides:
+- **A small daemon runs the deploys.** The daemon is a webhook endpoint exposed to GitHub through Tailscale Funnel. When a push event arrives, it verifies the signature, checks that the repo is in your app list, fetches the pushed commit, builds a container image, runs the deploy through Kamal, and reports the result back to GitHub. All this happens in under 5 seconds.
 
-```yaml
-apps:
-  - repo: dvassallo/fullsend
-    branch: master
-    hosts:
-      - fullsend.game
-      - fullsend.assetstacks.com
-```
+- **A CLI to manage your apps.** The Go binary that runs the daemon doubles as the CLI you use over SSH. Add, edit, and remove apps. Trigger a deploy, or roll back to an earlier commit. Attach domains, set env vars, enable persistent storage, take and restore backups. Check status, tail logs, and run diagnostics when something looks off.
 
-By convention, a repo with a `Dockerfile` uses that Dockerfile as-is. If a repo
-does not have one, Single Server can generate a temporary Dockerfile during
-deploy from explicit runtime settings such as `runtime`, `install`, `build`,
-`start`, `static_dir`, and `app_port`. It does not infer package-manager
-commands or ports.
+- **Cloudflare fronts your apps.** You were likely going to put Cloudflare in front of your apps anyway. Single Server creates the proxied DNS records and a Cloudflare Tunnel for you, so visitors hit Cloudflare's edge for TLS, CDN, and DDoS protection, and traffic reaches your apps through the tunnel. Your server's IP stays hidden, and your apps never have to deal with certificates.
 
-Repos do not need a Kamal config. If the repo tracks `config/deploy.yml`, Single
-Server uses it as-is. Otherwise, Single Server writes a temporary
-`config/deploy.yml` for the deploy and removes it after Kamal exits.
+- **GitHub triggers deploys.** GitHub tells your server when there's something new to deploy. During setup, Single Server creates a GitHub App for you. That's GitHub's own mechanism for giving Single Server limited, revocable access to your repos: you install it once on your account, and it covers every repo you deploy. The app sends signed push events, hands the daemon short-lived tokens to fetch the pushed commit, and marks each commit as pending, deployed, or failed. No deploy keys, no GitHub Actions secrets, no per-repo webhooks.
 
-Generated Kamal config defaults:
+- **Tailscale keeps access private.** Tailscale SSH gets you into the box without exposing SSH to the public internet or scattering keys across laptops. Tailscale Funnel gives GitHub a public URL to reach the daemon's webhook endpoint, so the server itself never needs a domain name or a DNS record.
 
-```text
-service/image:      app name
-server host:        127.0.0.1
-ssh user/key:       deploy, /root/.ssh/id_ed25519
-registry:           127.0.0.1:5555
-builder:            local Docker builder for the server architecture
-proxy app_port:     80
-proxy ssl:          false behind Cloudflare Tunnel
-proxy healthcheck:  / for normal apps, /up for generated static output
-timeouts:           deploy 10s, drain 1s
-```
+- **Docker keeps apps apart.** Every app runs in its own container with its own process, env vars, and storage, so one project's dependency mess can't leak into another. Bring your own Dockerfile, or let Single Server generate one for static, Node, and Bun apps. Images build on the server and ship through a local registry, with no Docker Hub account and no upload wait.
 
-Optional app overrides for the generated config:
+- **Kamal swaps versions without downtime.** Kamal is the deploy tool 37signals built to run their own apps. It starts a container with the new release and flips traffic over once it's healthy. Single Server generates the deploy config Kamal needs, so you get zero-downtime deploys without ever writing the YAML. If your repo has its own Kamal config, it uses that instead.
 
-```yaml
-apps:
-  - repo: smallbets/userbase-homepage
-    branch: master
-    hosts:
-      - userbase.com
-      - www.userbase.com
-      - userbase.dev
-      - www.userbase.dev
-    app_port: 80
-    healthcheck_path: /up
-    healthcheck: https://userbase.com/up
-```
+- **Your app barely has to do anything.** If your app serves HTTP on a port, Single Server can run it.
 
-`healthcheck_path` controls Kamal's container readiness path. It defaults to `/`
-for normal app containers and `/up` for generated static containers. The
-`healthcheck` URL is optional external monitoring for Single Server's
-post-deploy/status checks; if it is absent, Single Server treats that external
-check as assumed healthy.
+## What you get
 
-## Host secrets
+- **Deploys in under 5 seconds.** No CI queue, no cold start, no registry upload. Your server builds the container image and swaps it in with zero downtime.
 
-Secrets live on the server, not in app repositories.
+- **No lock-in.** If you stop using Single Server tomorrow, your apps keep running on Docker, Kamal, Cloudflare, Tailscale, and GitHub.
 
-```text
-/etc/singleserver/apps.yml
-/etc/singleserver/singleserver.env
-/etc/singleserver/github-app.json
-/etc/singleserver/github-app.private-key.pem
-```
+- **A thin layer of glue.** Docker, Kamal, Tailscale, and Cloudflare do the heavy lifting. Single Server is the open-source glue that wires them together.
 
-The installer writes the daemon's service environment under
-`/etc/singleserver/singleserver.env`. `singleserver tailscale connect` adds the
-public setup and webhook URL after Tailscale Funnel is ready:
+- **Every app in its own box.** Containers isolate your projects, while the host stays a plain Linux machine you can SSH into and actually understand.
+
+- **Domains that just work.** Add a domain with one command, and DNS, TLS, CDN, and routing all happen. Your server's IP stays hidden behind Cloudflare.
+
+- **Boring operations, on purpose.** Deploy, roll back, tail logs, set env vars, take backups, run diagnostics. One CLI, on the same machine where everything runs.
+
+## Still skeptical?
+
+Fair enough. Tell Claude Code, Codex, Cursor, or your favorite AI agent to grab a throwaway VPS and try Single Server for you. And if you'd like it to work differently, it's a tiny open-source codebase, MIT licensed, that you can fork and make your own. Or just run it yourself:
 
 ```sh
-SINGLESERVER_CONFIG=/etc/singleserver/apps.yml
-SINGLESERVER_STATE_DIR=/etc/singleserver
-SINGLESERVER_PORT=8787
-SINGLESERVER_PUBLIC_URL=https://your-server.your-tailnet.ts.net
+curl -fsSL https://singleserver.com/install.sh | sh
 ```
 
-The GitHub App setup stores its webhook secret and private key in `/etc/singleserver`, so app repositories do not need GitHub Actions secrets, deploy keys, or repo-level webhooks.
+---
 
-## GitHub App
-
-The GitHub App needs:
-
-- repository contents: read
-- commit statuses: write
-- event subscription: push
-
-Install it with access to all repositories, then let `apps.yml` be the deployment allowlist.
-The generated GitHub App is public/installable so the same app can be installed
-on each owner account or organization that contains deployable repositories.
-Single Server still only deploys repositories listed in `apps.yml`.
-
-The daemon includes a one-time setup page exposed through Tailscale Funnel:
-
-```text
-https://your-server.your-tailnet.ts.net/setup/github-app?token=<setup-token>
-```
-
-That page creates the GitHub App from a manifest, exchanges GitHub's callback code, and stores the app credentials under `/etc/singleserver`.
-
-## Operator Commands
-
-Install the daemon binary as both `/usr/local/bin/singleserverd` and `/usr/local/bin/singleserver`.
-
-```sh
-ssh root@203.0.113.10
-singleserver tailscale connect
-singleserver cloudflare connect
-singleserver list
-singleserver status
-singleserver add https://github.com/owner/repo
-singleserver edit owner/repo --healthcheck-path /ready
-singleserver deploy dvassallo/fullsend
-singleserver render-deploy smallbets/userbase-homepage
-singleserver logs fullsend
-singleserver domains add fullsend play.example.com
-singleserver storage enable fullsend --mount /storage
-singleserver backup fullsend
-singleserver restore fullsend 20260608T181500Z --yes
-singleserver remove fullsend --delete-repo --delete-storage --yes
-```
-
-`singleserver tailscale connect` enables Tailscale SSH and Tailscale Funnel when
-possible. Funnel exposes the local daemon to GitHub at the server's `*.ts.net`
-URL, so the GitHub App setup page and signed push webhooks do not need a
-custom DNS record. The command can use `TS_AUTHKEY` or `TAILSCALE_AUTHKEY` for
-unattended server joins, or run `tailscale up --ssh` manually and then run
-`singleserver tailscale connect`.
-
-`singleserver cloudflare connect [--account <id>] [--tunnel <name>]` connects
-Cloudflare Tunnel for app domains. It creates or reuses a tunnel, stores the
-tunnel credentials, and installs a `cloudflared` systemd service. App domains
-are managed per hostname: when you add `app.example.com`, Single Server finds
-the Cloudflare zone that owns that hostname, creates a proxied CNAME to the
-tunnel, and routes it through `cloudflared`. The server IP stays hidden while
-Cloudflare handles public TLS, proxying, CDN, and DDoS protection.
-
-`singleserver add <github-url>` validates GitHub App access, checks the repo's
-default branch and Dockerfile path, appends the normalized `owner/repo` to
-`/etc/singleserver/apps.yml`, validates the generated Kamal config, deploys the
-current branch tip, and runs `doctor` afterward. In an interactive SSH session,
-`add` prompts for the missing pieces: generated runtime settings when a repo has
-no Dockerfile, the readiness path, optional external healthcheck URL, and whether
-to deploy immediately. It also prints the equivalent non-interactive command. In
-scripts or non-interactive shells, pass explicit generated-runtime options, such
-as `--runtime static --static-dir dist` for a static site,
-`--runtime node --start "npm start" --app-port 3000` for a web process, and
-`--domain app.example.com` for the public hostname. Pass `--no-deploy` to
-configure the app and wait for the next push or manual deploy.
-
-`singleserver edit <app|owner/repo|github-url>` changes app config after an app
-has been added. With no flags in an interactive SSH session, it prompts with the
-current settings and prints the equivalent non-interactive command. In scripts,
-pass the setting flags directly: `--dockerfile` to use the repo Dockerfile,
-`--runtime static|node|bun` plus generated Dockerfile options, `--app-port`,
-`--healthcheck-path`, `--healthcheck`, or `--no-healthcheck`. Config changes
-deploy immediately by default; pass `--no-deploy` to stage the change.
-
-`singleserver deploy <owner/repo|app> [ref]` runs the same deploy path as a push webhook. If `ref` is omitted, Single Server deploys the configured branch or the repository default branch.
-
-`singleserver render-deploy <owner/repo|app>` prints the generated Kamal `deploy.yml`
-for a configured app. It does not inspect or modify the app repository.
-
-`singleserver domains add <app> <domain>` and `singleserver domains remove <app>
-<domain>` update `apps.yml`, Cloudflare DNS and tunnel routes when connected,
-and then deploy the app so Kamal picks up the changed proxy hosts. Pass
-`--no-deploy` to stage the domain change without applying it to the running app
-immediately. `singleserver domains verify [app]` checks resolver DNS and
-Cloudflare records when credentials are available.
-
-`singleserver env set <app> KEY=value` and `singleserver env unset <app> KEY`
-update server-side app secrets. Env changes are injected by Kamal on the next
-deploy, so the command prints the deploy command to run when you are ready.
-
-`singleserver storage enable <app>` creates the host storage directory, updates
-`apps.yml`, and deploys the app so Kamal mounts it into the running container.
-Pass `--no-deploy` to stage the storage config without applying it immediately.
-
-`singleserver backup <app>` archives the app's configured persistent storage
-under `/srv/backups/<app>`. SQLite database files are copied with SQLite's backup
-API before the archive is written. `singleserver restore <app> <backup-id> --yes`
-replaces the storage directory, keeps the previous copy next to it, and restarts
-the app containers unless `--no-restart` is passed.
-
-`singleserver remove <app>` removes config, DNS records when managed, and containers. It keeps the
-repo checkout and persistent storage by default. Pass `--delete-repo --yes` or
-`--delete-storage --yes` to delete those files explicitly.
-
-## Adding An App
-
-1. Install the Single Server GitHub App on the repository owner, if it is not already installed.
-2. Add it from the server:
-
-```sh
-singleserver add https://github.com/owner/repo
-```
-
-In an interactive SSH session, Single Server asks for anything it cannot infer
-safely and then prints the equivalent command. In non-interactive usage, provide
-the build contract explicitly when the repo does not have a Dockerfile:
-
-```sh
-singleserver add https://github.com/owner/static-site --runtime static --static-dir dist
-singleserver add https://github.com/owner/node-site --runtime node --install "npm ci" --build "npm run build" --static-dir dist
-singleserver add https://github.com/owner/node-app --runtime node --install "npm ci" --start "npm start" --app-port 3000
-```
-
-Future pushes to the configured branch deploy automatically.
-
-## Editing An App
-
-Run `edit` without flags when you want Single Server to walk through the current
-settings:
-
-```sh
-singleserver edit my-app
-```
-
-For scripted changes, pass the same answers as flags:
-
-```sh
-singleserver edit https://github.com/owner/repo --healthcheck-path /ready
-singleserver edit my-app --dockerfile --no-healthcheck
-singleserver edit my-app --runtime static --static-dir public
-singleserver edit my-app --runtime node --install "npm ci" --start "npm start" --app-port 3000
-```
-
-`edit` deploys after writing `apps.yml` unless `--no-deploy` is passed.
-
-## Logs
-
-```sh
-journalctl -u singleserver.service -f
-singleserver logs
-singleserver logs app-name
-singleserver logs app-name --runtime
-singleserver logs app-name --follow
-singleserver logs --daemon
-```
+<p align="center">MIT License · <a href="https://singleserver.com">singleserver.com</a> · <a href="https://singleserver.com/docs/">Docs</a></p>

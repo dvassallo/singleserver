@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" viewBox="0 0 512 233" fill="#ffffff" role="img" aria-labelledby="title desc">
+  <title id="title">single server icon</title>
+  <desc id="desc">A single rack server icon.</desc>
+  <path d="M69.8 23.3v23.3h372.4c12.8 0 23.2 10.4 23.3 23.3V163c0 12.8-10.4 23.2-23.3 23.3H69.8c-12.8 0-23.2-10.4-23.3-23.3V69.9C46.6 57 57 46.6 69.8 46.5zV0C31.2 0 0 31.2 0 69.8v93.1c0 38.6 31.2 69.8 69.8 69.8h372.4c38.6 0 69.8-31.3 69.8-69.8V69.8C512 31.2 480.8 0 442.2 0H69.8z"/>
+  <rect x="111.7" y="104.7" width="186.2" height="23.3" rx="11.6"/>
+  <circle cx="395.6" cy="116.4" r="23.3"/>
+</svg>
