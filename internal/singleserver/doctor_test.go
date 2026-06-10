@@ -317,7 +317,14 @@ func TestDoctorCloudflareChecksCNAMERecords(t *testing.T) {
 `), 0600); err != nil {
 		t.Fatal(err)
 	}
-	stubCommandRun(t)
+	originalRun := commandRunFunc
+	t.Cleanup(func() { commandRunFunc = originalRun })
+	commandRunFunc = func(timeout time.Duration, name string, args ...string) error {
+		if name == "getent" {
+			return fmt.Errorf("local resolver should not be used in tunnel mode")
+		}
+		return nil
+	}
 	originalVerify := verifyCloudflareDNSRecordFunc
 	t.Cleanup(func() { verifyCloudflareDNSRecordFunc = originalVerify })
 	verifyCloudflareDNSRecordFunc = func(host string, state *CloudflareState, client *CloudflareClient) (string, error) {

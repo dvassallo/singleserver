@@ -4,6 +4,7 @@
 test/e2e-local-real/.env
 test/e2e-local-real/.env.*
 !test/e2e-local-real/.env.example
+test/e2e-local-real/state/
 test/e2e-local-real/work/
 *.log
 tmp/

@@ -263,7 +263,7 @@ func doctorCloudflare(w io.Writer, allApps []AppConfig, selectedApps []AppConfig
 
 	for _, app := range selectedApps {
 		for _, host := range app.Hosts {
-			if !doctorHostResolves(w, app.Name, "dns", host) {
+			if !tunnelMode && !doctorHostResolves(w, app.Name, "dns", host) {
 				failed = true
 			}
 			if cloudflareClient != nil && !doctorCloudflareDNSRecord(w, app.Name, "cloudflare_dns", host, state, cloudflareClient) {

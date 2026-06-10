@@ -1,11 +1,13 @@
 package singleserver
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -26,6 +28,8 @@ type tailscaleStatus struct {
 		TailscaleIPs []string `json:"TailscaleIPs"`
 	} `json:"Self"`
 }
+
+var tailscaleFunnelReadyFunc = waitForTailscaleFunnelReady
 
 func cliTailscaleConnect(args []string, w io.Writer) error {
 	fs := flag.NewFlagSet("tailscale connect", flag.ContinueOnError)
@@ -107,8 +111,45 @@ func cliTailscaleConnect(args []string, w io.Writer) error {
 	if err := commandRunFunc(10*time.Second, "systemctl", "restart", "singleserver.service"); err != nil {
 		return err
 	}
+	if err := tailscaleFunnelReadyFunc(funnelURL, 90*time.Second); err != nil {
+		writeCheck(w, "tailscale", "funnel", "pending", funnelURL, err.Error())
+		return nil
+	}
 	writeCheck(w, "tailscale", "funnel", "ok", funnelURL, "target=127.0.0.1:"+port)
 	return nil
+}
+
+func waitForTailscaleFunnelReady(funnelURL string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	healthURL := strings.TrimRight(funnelURL, "/") + "/health"
+	client := &http.Client{Timeout: 5 * time.Second}
+	var lastErr error
+	for time.Now().Before(deadline) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
+		if err != nil {
+			cancel()
+			return err
+		}
+		res, err := client.Do(req)
+		if err == nil {
+			_, _ = io.Copy(io.Discard, res.Body)
+			_ = res.Body.Close()
+			if res.StatusCode >= 200 && res.StatusCode < 300 {
+				cancel()
+				return nil
+			}
+			lastErr = fmt.Errorf("GET %s returned %s", healthURL, res.Status)
+		} else {
+			lastErr = err
+		}
+		cancel()
+		time.Sleep(2 * time.Second)
+	}
+	if lastErr != nil {
+		return fmt.Errorf("Funnel healthcheck did not become ready: %w", lastErr)
+	}
+	return errors.New("Funnel healthcheck did not become ready")
 }
 
 func currentTailscaleStatus() (*tailscaleStatus, error) {

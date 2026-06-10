@@ -27,6 +27,7 @@ short_id="$(printf "%s" "$RUN_ID" | sed 's/^bootstrap-//' | cut -c1-12)"
 GITHUB_APP_NAME="${SINGLESERVER_E2E_GITHUB_APP_NAME:-Single Server E2E $short_id}"
 CONTAINER="singleserver-e2e-$RUN_ID"
 IMAGE="${SINGLESERVER_E2E_IMAGE:-singleserver-e2e-server:local}"
+DOCKERFILE="${SINGLESERVER_E2E_DOCKERFILE:-$E2E_DIR/images/ubuntu.Dockerfile}"
 WORK_DIR="$E2E_DIR/work/$RUN_ID"
 WWW_DIR="$WORK_DIR/www"
 PORT_FILE="$WORK_DIR/http-port"
@@ -159,7 +160,7 @@ done
 ARTIFACT_BASE_URL="http://host.docker.internal:$(cat "$PORT_FILE")"
 
 log "Building E2E server image"
-docker build -t "$IMAGE" -f "$E2E_DIR/Dockerfile.server" "$ROOT_DIR"
+docker build -t "$IMAGE" -f "$DOCKERFILE" "$ROOT_DIR"
 
 log "Starting $CONTAINER"
 docker rm -f "$CONTAINER" >/dev/null 2>&1 || true

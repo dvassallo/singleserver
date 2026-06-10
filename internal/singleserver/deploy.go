@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -279,23 +281,57 @@ func (m *DeployManager) runHealthcheck(app AppConfig, runID string) error {
 	if app.Healthcheck == "" {
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, app.Healthcheck, nil)
-	if err != nil {
-		return err
+	client := healthcheckClient()
+	deadline := time.Now().Add(2 * time.Minute)
+	var lastErr error
+	for time.Now().Before(deadline) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, app.Healthcheck, nil)
+		if err != nil {
+			cancel()
+			return err
+		}
+		res, err := client.Do(req)
+		if err == nil {
+			_, _ = io.Copy(io.Discard, res.Body)
+			_ = res.Body.Close()
+			if res.StatusCode >= 200 && res.StatusCode < 400 {
+				cancel()
+				m.logger.Printf("[deploy:%s] healthcheck ok %s", runID, app.Healthcheck)
+				return nil
+			}
+			lastErr = fmt.Errorf("healthcheck %s returned %d", app.Healthcheck, res.StatusCode)
+		} else {
+			lastErr = err
+		}
+		cancel()
+		time.Sleep(2 * time.Second)
 	}
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
+	if lastErr != nil {
+		return lastErr
 	}
-	defer res.Body.Close()
-	if res.StatusCode < 200 || res.StatusCode >= 400 {
-		return fmt.Errorf("healthcheck %s returned %d", app.Healthcheck, res.StatusCode)
+	return fmt.Errorf("healthcheck %s did not become ready", app.Healthcheck)
+}
+
+func healthcheckClient() *http.Client {
+	resolver := &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+			dialer := net.Dialer{Timeout: 5 * time.Second}
+			return dialer.DialContext(ctx, network, "1.1.1.1:53")
+		},
 	}
-	m.logger.Printf("[deploy:%s] healthcheck ok %s", runID, app.Healthcheck)
-	return nil
+	dialer := &net.Dialer{
+		Timeout:  5 * time.Second,
+		Resolver: resolver,
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DialContext = dialer.DialContext
+	return &http.Client{
+		Timeout:   5 * time.Second,
+		Transport: transport,
+	}
 }
 
 type lockedBuffer struct {

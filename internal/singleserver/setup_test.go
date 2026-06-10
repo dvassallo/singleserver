@@ -47,10 +47,12 @@ func TestTailscaleConnectStoresHostname(t *testing.T) {
 	originalOutput := commandOutputFunc
 	originalRun := commandRunFunc
 	originalRunToWriter := commandRunToWriterFunc
+	originalFunnelReady := tailscaleFunnelReadyFunc
 	t.Cleanup(func() {
 		commandOutputFunc = originalOutput
 		commandRunFunc = originalRun
 		commandRunToWriterFunc = originalRunToWriter
+		tailscaleFunnelReadyFunc = originalFunnelReady
 	})
 	commandOutputFunc = func(timeout time.Duration, name string, args ...string) (string, error) {
 		if name != "tailscale" {
@@ -74,6 +76,11 @@ func TestTailscaleConnectStoresHostname(t *testing.T) {
 	writerCommands := []string{}
 	commandRunToWriterFunc = func(w io.Writer, timeout time.Duration, name string, args ...string) error {
 		writerCommands = append(writerCommands, name+" "+strings.Join(args, " "))
+		return nil
+	}
+	readyChecks := []string{}
+	tailscaleFunnelReadyFunc = func(funnelURL string, timeout time.Duration) error {
+		readyChecks = append(readyChecks, funnelURL)
 		return nil
 	}
 
@@ -100,6 +107,9 @@ func TestTailscaleConnectStoresHostname(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(writerCommands, "\n"), "tailscale funnel --bg --yes 8787") {
 		t.Fatalf("expected funnel command: %#v", writerCommands)
+	}
+	if strings.Join(readyChecks, "\n") != "https://assetstacks.example.ts.net" {
+		t.Fatalf("expected Funnel readiness check: %#v", readyChecks)
 	}
 	if !strings.Contains(out.String(), "tailscale\tssh\tok") {
 		t.Fatalf("ssh output missing:\n%s", out.String())
