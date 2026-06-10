@@ -38,6 +38,13 @@ if [ -n "$cloudflared_path" ] && [ "$cloudflared_path" != "/usr/local/bin/cloudf
   ln -sf "$cloudflared_path" /usr/local/bin/cloudflared
 fi
 
+if [ -n "${SINGLESERVER_DOCKER_STORAGE_DRIVER:-}" ]; then
+  mkdir -p /etc/docker
+  cat > /etc/docker/daemon.json <<EOF
+{"storage-driver":"${SINGLESERVER_DOCKER_STORAGE_DRIVER}"}
+EOF
+fi
+
 systemctl enable --now docker
 systemctl enable --now ssh || systemctl enable --now sshd || true
 
@@ -61,7 +68,8 @@ chmod 600 /home/deploy/.ssh/authorized_keys
 mkdir -p /srv/repos /srv/storage /srv/backups /etc/singleserver
 
 install_binary() {
-  binary_url="https://singleserver.com/bin/singleserver-linux-${binary_arch}"
+  download_base_url="${SINGLESERVER_DOWNLOAD_BASE_URL:-https://singleserver.com}"
+  binary_url="${download_base_url%/}/bin/singleserver-linux-${binary_arch}"
   tmp_bin="/tmp/singleserver-linux-${binary_arch}"
 
   curl -fsSL "$binary_url" -o "$tmp_bin"
@@ -114,6 +122,12 @@ systemctl enable --now singleserver.service
 
 echo
 echo "Single Server installed."
+
+if [ "${SINGLESERVER_INSTALL_SKIP_FIRST_RUN:-}" = "1" ] || [ "${SINGLESERVER_INSTALL_SKIP_FIRST_RUN:-}" = "true" ]; then
+  echo "Skipping first-run setup."
+  exit 0
+fi
+
 echo "Starting first-run setup."
 
 has_tty() {

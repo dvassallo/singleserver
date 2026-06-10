@@ -20,6 +20,7 @@ func TestParseAddArgsAllowsFlagsAfterRepo(t *testing.T) {
 		"--install", "npm ci",
 		"--build", "npm run build",
 		"--start", "npm start",
+		"--yes",
 	}, io.Discard)
 	if err != nil {
 		t.Fatal(err)
@@ -35,6 +36,9 @@ func TestParseAddArgsAllowsFlagsAfterRepo(t *testing.T) {
 	}
 	if opts.runtime != "node" || opts.installCommand != "npm ci" || opts.buildCommand != "npm run build" || opts.startCommand != "npm start" {
 		t.Fatalf("unexpected generated Dockerfile options: %#v", opts)
+	}
+	if !opts.yes {
+		t.Fatal("expected yes")
 	}
 }
 

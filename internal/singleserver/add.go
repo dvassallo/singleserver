@@ -36,6 +36,7 @@ type addOptions struct {
 	staticDir          string
 	appPort            int
 	noDeploy           bool
+	yes                bool
 	hostsSet           bool
 	healthcheckPathSet bool
 	appPortSet         bool
@@ -132,7 +133,7 @@ func cliAdd(args []string, w io.Writer, logger *log.Logger) error {
 		return fmt.Errorf("%s already has a Dockerfile on %s; remove --runtime or delete the repo Dockerfile", opts.repo, targetBranch)
 	}
 
-	if addPromptInteractiveFunc() {
+	if addPromptInteractiveFunc() && !opts.yes {
 		opts, err = promptAddOptions(opts, addPromptInput, w, addPromptContext{
 			hasDockerfile: hasDockerfile,
 			targetBranch:  targetBranch,
@@ -235,6 +236,7 @@ func parseAddArgs(args []string, w io.Writer) (addOptions, error) {
 	fs.StringVar(&opts.startCommand, "start", "", "start command for generated Node/Bun Dockerfile")
 	fs.StringVar(&opts.staticDir, "static-dir", "", "static output directory for generated Dockerfile")
 	fs.BoolVar(&opts.noDeploy, "no-deploy", false, "configure without deploying immediately")
+	fs.BoolVar(&opts.yes, "yes", false, "accept defaults and skip interactive prompts")
 
 	appPort := fs.Int("app-port", 0, "container app port for generated Kamal config")
 	if err := fs.Parse(normalizeAddArgs(args)); err != nil {

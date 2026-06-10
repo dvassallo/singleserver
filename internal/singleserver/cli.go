@@ -124,7 +124,7 @@ Usage:
   singleserver cloudflare connect [--account <id>] [--tunnel <name>]
   singleserver list
   singleserver status
-  singleserver add <github-url> [options]
+  singleserver add <github-url> [options] [--yes]
   singleserver edit <app|owner/repo|github-url> [options]
   singleserver deploy <owner/repo|app> [ref]
   singleserver render-deploy <owner/repo|app>

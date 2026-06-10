@@ -143,6 +143,28 @@ func TestSetupGitHubAppManifestIsPublic(t *testing.T) {
 	}
 }
 
+func TestSetupGitHubAppManifestCanBePrivate(t *testing.T) {
+	t.Setenv("SINGLESERVER_GITHUB_APP_NAME", "Single Server E2E")
+	t.Setenv("SINGLESERVER_GITHUB_APP_PUBLIC", "false")
+	server := &Server{
+		publicURL:  "https://assetstacks.example.ts.net",
+		setupToken: "setup-token",
+	}
+	req := httptest.NewRequest("GET", "/setup/github-app?token=setup-token", nil)
+	res := httptest.NewRecorder()
+
+	server.handleSetupGitHubApp(res, req)
+
+	body := res.Body.String()
+	if !strings.Contains(body, "private GitHub App") {
+		t.Fatalf("expected private app copy:\n%s", body)
+	}
+	manifest := setupManifestFromBody(t, body)
+	if manifest["public"] != false {
+		t.Fatalf("expected private manifest, got %#v", manifest["public"])
+	}
+}
+
 func TestGitHubAppNameFromHostname(t *testing.T) {
 	tests := []struct {
 		hostname string
@@ -150,6 +172,7 @@ func TestGitHubAppNameFromHostname(t *testing.T) {
 	}{
 		{hostname: "ubuntu-2gb-hil-2", want: "Single Server ubuntu-2gb-hil-2"},
 		{hostname: "Single_Server.local", want: "Single Server single-server-local"},
+		{hostname: "singleserver-e2e-bootstrap-20260609204840", want: "Single Server singleserver-e2e-boo"},
 		{hostname: "", want: "Single Server"},
 	}
 
