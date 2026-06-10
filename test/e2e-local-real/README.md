@@ -90,10 +90,11 @@ printed values into `test/e2e-local-real/.env`.
 test/e2e-local-real/run.sh
 ```
 
-By default this runs the Ubuntu host image and all app cases:
+By default this runs the Ubuntu, Debian, Amazon Linux 2023, and Rocky Linux 9
+host images and all app cases:
 
 ```sh
-E2E_DISTROS=ubuntu
+E2E_DISTROS="ubuntu debian amazonlinux rocky"
 E2E_CASES="dockerfile static node"
 ```
 
@@ -101,7 +102,7 @@ E2E_CASES="dockerfile static node"
 fast slice:
 
 ```sh
-E2E_DISTROS=ubuntu E2E_CASES=node test/e2e-local-real/run.sh
+E2E_DISTROS=amazonlinux E2E_CASES=node test/e2e-local-real/run.sh
 ```
 
 The run verifies:
@@ -127,8 +128,9 @@ falls back to the same host/path through Kamal on the local test host. `doctor`
 still verifies the Cloudflare DNS record and Tunnel route through the real
 provider APIs.
 
-To add another distro later, add `test/e2e-local-real/images/<name>.Dockerfile`
-and include `<name>` in `E2E_DISTROS`.
+Supported distro images live in `test/e2e-local-real/images/`. To add another
+distro later, add `test/e2e-local-real/images/<name>.Dockerfile` and include
+`<name>` in `E2E_DISTROS`.
 
 Set `SINGLESERVER_E2E_KEEP_CONTAINER=1` to keep the disposable host after a
 failed run for debugging.

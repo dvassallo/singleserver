@@ -8,55 +8,197 @@ fi
 
 os_id="unknown"
 os_pretty="unknown"
+os_version="unknown"
 if [ -r /etc/os-release ]; then
   # shellcheck disable=SC1091
   . /etc/os-release
   os_id="${ID:-unknown}"
   os_pretty="${PRETTY_NAME:-$os_id}"
+  os_version="${VERSION_ID:-unknown}"
 fi
 
 case "$os_id" in
-  debian|ubuntu) ;;
+  debian|ubuntu)
+    os_family="debian"
+    ;;
+  amzn)
+    case "$os_version" in
+      2023|2023.*)
+        os_family="amazon"
+        ;;
+      *)
+        cat >&2 <<EOF
+Single Server supports Amazon Linux 2023, but this host is running $os_pretty.
+
+Supported operating systems:
+- Ubuntu
+- Debian
+- Amazon Linux 2023
+- Rocky Linux 9
+EOF
+        exit 1
+        ;;
+    esac
+    ;;
+  rocky)
+    case "$os_version" in
+      9|9.*)
+        os_family="rocky"
+        ;;
+      *)
+        cat >&2 <<EOF
+Single Server supports Rocky Linux 9, but this host is running $os_pretty.
+
+Supported operating systems:
+- Ubuntu
+- Debian
+- Amazon Linux 2023
+- Rocky Linux 9
+EOF
+        exit 1
+        ;;
+    esac
+    ;;
   *)
     cat >&2 <<EOF
-Single Server installer currently supports Ubuntu and Debian only.
+Single Server installer currently supports these operating systems:
+- Ubuntu
+- Debian
+- Amazon Linux 2023
+- Rocky Linux 9
 
 Detected OS: $os_pretty
 
-This installer uses apt, dpkg, systemd, and Debian package names. Please run it
-on a fresh Ubuntu or Debian server.
+Please run it on a fresh server with one of the supported operating systems.
 EOF
     exit 1
     ;;
 esac
 
-export DEBIAN_FRONTEND=noninteractive
+install_os_packages() {
+  case "$os_family" in
+    debian)
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update
+      apt-get install -y ca-certificates curl git build-essential ruby-full ruby-dev docker.io docker-buildx openssh-server sqlite3
+      ;;
+    amazon)
+      dnf install -y --setopt=install_weak_deps=False \
+        ca-certificates \
+        curl-minimal \
+        git \
+        gcc \
+        gcc-c++ \
+        make \
+        ruby \
+        ruby-devel \
+        docker \
+        openssh-server \
+        sqlite \
+        systemd \
+        procps-ng \
+        iproute \
+        iptables \
+        findutils \
+        tar \
+        gzip \
+        shadow-utils
+      ;;
+    rocky)
+      dnf install -y --setopt=install_weak_deps=False \
+        ca-certificates \
+        curl-minimal \
+        dnf-plugins-core \
+        git \
+        gcc \
+        gcc-c++ \
+        make \
+        redhat-rpm-config \
+        ruby \
+        ruby-devel \
+        rubygem-io-console \
+        rubygem-json \
+        openssh-server \
+        sqlite \
+        systemd \
+        procps-ng \
+        iproute \
+        iptables \
+        findutils \
+        tar \
+        gzip \
+        shadow-utils
+      dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo
+      dnf install -y --setopt=install_weak_deps=False \
+        docker-ce \
+        docker-ce-cli \
+        containerd.io \
+        docker-buildx-plugin
+      ;;
+  esac
+}
 
-apt-get update
-apt-get install -y ca-certificates curl git build-essential ruby-full ruby-dev docker.io docker-buildx openssh-server sqlite3
+detect_arch() {
+  case "$os_family" in
+    debian)
+      arch="$(dpkg --print-architecture)"
+      ;;
+    amazon|rocky)
+      arch="$(uname -m)"
+      ;;
+  esac
+
+  case "$arch" in
+    amd64|x86_64)
+      cloudflared_arch=amd64
+      binary_arch=amd64
+      ;;
+    arm64|aarch64)
+      cloudflared_arch=arm64
+      binary_arch=arm64
+      ;;
+    *)
+      echo "Unsupported architecture: $arch" >&2
+      exit 1
+      ;;
+  esac
+}
+
+install_cloudflared() {
+  if command -v cloudflared >/dev/null 2>&1; then
+    return 0
+  fi
+
+  case "$os_family" in
+    debian)
+      tmp_deb="/tmp/cloudflared-linux-${cloudflared_arch}.deb"
+      curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${cloudflared_arch}.deb" -o "$tmp_deb"
+      dpkg -i "$tmp_deb" || apt-get install -f -y
+      rm -f "$tmp_deb"
+      ;;
+    amazon|rocky)
+      tmp_bin="/tmp/cloudflared-linux-${binary_arch}"
+      curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${binary_arch}" -o "$tmp_bin"
+      install -m 0755 "$tmp_bin" /usr/local/bin/cloudflared
+      rm -f "$tmp_bin"
+      ;;
+  esac
+}
+
+install_os_packages
 
 if ! command -v kamal >/dev/null 2>&1; then
   gem install kamal --no-document
 fi
 
-arch="$(dpkg --print-architecture)"
-case "$arch" in
-  amd64) cloudflared_arch=amd64; binary_arch=amd64 ;;
-  arm64) cloudflared_arch=arm64; binary_arch=arm64 ;;
-  *) echo "Unsupported architecture: $arch" >&2; exit 1 ;;
-esac
+detect_arch
 
 if ! command -v tailscale >/dev/null 2>&1; then
   curl -fsSL https://tailscale.com/install.sh | sh
 fi
 systemctl enable --now tailscaled || true
 
-if ! command -v cloudflared >/dev/null 2>&1; then
-  tmp_deb="/tmp/cloudflared-linux-${cloudflared_arch}.deb"
-  curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${cloudflared_arch}.deb" -o "$tmp_deb"
-  dpkg -i "$tmp_deb" || apt-get install -f -y
-  rm -f "$tmp_deb"
-fi
+install_cloudflared
 cloudflared_path="$(command -v cloudflared || true)"
 if [ -n "$cloudflared_path" ] && [ "$cloudflared_path" != "/usr/local/bin/cloudflared" ]; then
   ln -sf "$cloudflared_path" /usr/local/bin/cloudflared
@@ -70,7 +212,14 @@ EOF
 fi
 
 systemctl enable --now docker
-systemctl enable --now ssh || systemctl enable --now sshd || true
+case "$os_family" in
+  debian)
+    systemctl enable --now ssh || true
+    ;;
+  amazon|rocky)
+    systemctl enable --now sshd || true
+    ;;
+esac
 
 if ! id deploy >/dev/null 2>&1; then
   useradd --create-home --shell /bin/bash deploy

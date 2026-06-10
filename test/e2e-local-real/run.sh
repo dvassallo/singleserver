@@ -55,7 +55,7 @@ if [ -z "$RUN_ID" ]; then
   RUN_ID="$(date -u +%Y%m%d%H%M%S)"
 fi
 
-DISTROS="$(printf "%s" "${E2E_DISTROS:-ubuntu}" | tr ',' ' ')"
+DISTROS="$(printf "%s" "${E2E_DISTROS:-ubuntu debian amazonlinux rocky}" | tr ',' ' ')"
 CASES="$(printf "%s" "${E2E_CASES:-dockerfile static node}" | tr ',' ' ')"
 WORK_ROOT="$E2E_DIR/work/$RUN_ID"
 ARTIFACT_DIR="$WORK_ROOT/artifacts"
@@ -498,9 +498,15 @@ ensure_test_repo() {
 }
 
 clone_test_repo() {
+  local repo_url
   log "Cloning test app repository"
   rm -rf "$REPO_DIR"
-  gh repo clone "$GITHUB_TEST_REPO" "$REPO_DIR" >/dev/null
+  if [ -n "${GITHUB_PUSH_TOKEN:-}" ]; then
+    repo_url="https://x-access-token:${GITHUB_PUSH_TOKEN}@github.com/${GITHUB_TEST_REPO}.git"
+  else
+    repo_url="https://github.com/${GITHUB_TEST_REPO}.git"
+  fi
+  git clone "$repo_url" "$REPO_DIR" >/dev/null
   (
     cd "$REPO_DIR"
     git config user.name "Single Server E2E"
@@ -743,7 +749,7 @@ verify_dns_removed() {
 run_app_case() {
   local distro="$1"
   local case_name="$2"
-  local domain public_path initial_marker changed_marker public_url initial_sha
+  local domain public_path initial_marker changed_marker public_url initial_sha changed_sha
 
   APP_NAME="e2e-$RUN_ID-$distro-$case_name"
   domain="run-$RUN_ID-$distro-$case_name.$TEST_ZONE"
@@ -765,7 +771,8 @@ run_app_case() {
   log "Pushing $case_name change to trigger real GitHub webhook"
   changed_marker="changed-$RUN_ID-$distro-$case_name"
   prepare_case_repo "$case_name" "$changed_marker"
-  commit_and_push_case "E2E $distro $case_name change $RUN_ID" >/dev/null
+  changed_sha="$(commit_and_push_case "E2E $distro $case_name change $RUN_ID")"
+  wait_for_github_push_delivery "$changed_sha" "$distro/$case_name change push"
   wait_for_app_marker "$public_url" "$changed_marker" "$distro/$case_name webhook deploy"
 
   log "Running doctor for $case_name on $distro"
