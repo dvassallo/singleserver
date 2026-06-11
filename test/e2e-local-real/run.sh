@@ -57,6 +57,7 @@ fi
 
 DISTROS="$(printf "%s" "${E2E_DISTROS:-ubuntu debian amazonlinux rocky}" | tr ',' ' ')"
 CASES="$(printf "%s" "${E2E_CASES:-dockerfile static node}" | tr ',' ' ')"
+COMMAND_COVERAGE="${E2E_COMMAND_COVERAGE:-1}"
 WORK_ROOT="$E2E_DIR/work/$RUN_ID"
 ARTIFACT_DIR="$WORK_ROOT/artifacts"
 WWW_DIR="$ARTIFACT_DIR/www"
@@ -83,6 +84,26 @@ fail() {
   exit 1
 }
 
+assert_contains() {
+  local haystack="$1"
+  local needle="$2"
+  local label="$3"
+  if ! grep -Fq "$needle" <<<"$haystack"; then
+    printf 'Expected %s to contain %q. Output:\n%s\n' "$label" "$needle" "$haystack" >&2
+    fail "$label did not contain expected text"
+  fi
+}
+
+assert_not_contains() {
+  local haystack="$1"
+  local needle="$2"
+  local label="$3"
+  if grep -Fq "$needle" <<<"$haystack"; then
+    printf 'Expected %s not to contain %q. Output:\n%s\n' "$label" "$needle" "$haystack" >&2
+    fail "$label contained unexpected text"
+  fi
+}
+
 b64url() {
   openssl base64 -A | tr '+/' '-_' | tr -d '='
 }
@@ -105,6 +126,8 @@ github_app_api() {
   shift 2
   jwt="$(github_app_jwt)"
   curl -fsS -X "$method" \
+    --connect-timeout 10 \
+    --max-time 30 \
     -H "Authorization: Bearer $jwt" \
     -H "Accept: application/vnd.github+json" \
     -H "Content-Type: application/json" \
@@ -156,9 +179,15 @@ cloudflare_edge_ip_once() {
   return 1
 }
 
-public_dns_a_once() {
+public_dns_ip_once() {
   local host="$1"
-  dig +short @1.1.1.1 "$host" A | awk '/^[0-9.]+$/ {print; exit}'
+  local ip
+  ip="$(dig +short @1.1.1.1 "$host" A | awk '/^[0-9.]+$/ {print; exit}')"
+  if [ -n "$ip" ]; then
+    printf "%s\n" "$ip"
+    return 0
+  fi
+  dig +short @1.1.1.1 "$host" AAAA | awk '/:/ {print "[" $0 "]"; exit}'
 }
 
 tailscale_oauth_token() {
@@ -254,7 +283,7 @@ teardown_host() {
 
     log "Best-effort $CONTAINER cleanup"
     if [ -n "$APP_NAME" ]; then
-      docker exec "$CONTAINER" singleserver remove "$APP_NAME" --non-interactive >/dev/null 2>&1 || true
+      docker exec "$CONTAINER" singleserver remove "$APP_NAME" --delete-storage --non-interactive >/dev/null 2>&1 || true
       APP_NAME=""
     fi
 
@@ -418,13 +447,17 @@ connect_tailscale() {
 
 wait_for_funnel_health() {
   local url="${FUNNEL_URL%/}/health"
-  local host ip last
+  local host ip last attempts i
   host="${FUNNEL_URL#https://}"
   host="${host%%/*}"
-  for _ in $(seq 1 120); do
-    ip="$(public_dns_a_once "$host")"
+  attempts="${SINGLESERVER_E2E_FUNNEL_HEALTH_ATTEMPTS:-300}"
+  for i in $(seq 1 "$attempts"); do
+    ip="$(public_dns_ip_once "$host")"
     if [ -z "$ip" ]; then
-      last="no public A record for $host"
+      last="no public A/AAAA record for $host"
+      if [ "$i" = 1 ] || [ $((i % 15)) = 0 ]; then
+        log "Waiting for public Funnel DNS ($i/$attempts): $last"
+      fi
       sleep 2
       continue
     fi
@@ -432,8 +465,14 @@ wait_for_funnel_health() {
       return 0
     fi
     last="GET $url via $ip failed"
+    if [ "$i" = 1 ] || [ $((i % 15)) = 0 ]; then
+      log "Waiting for public Funnel health ($i/$attempts): $last"
+    fi
     sleep 2
   done
+  if curl -fsS --max-time 5 "$url" >/dev/null 2>&1; then
+    last="$last; local resolver can reach the Funnel, but public DNS is not ready"
+  fi
   fail "Funnel health endpoint did not become ready at $url: $last"
 }
 
@@ -582,6 +621,62 @@ EOF
   )
 }
 
+prepare_ops_case() {
+  local marker="$1"
+  reset_case_repo
+  (
+    cd "$REPO_DIR"
+    cat > server.mjs <<EOF
+import fs from "node:fs";
+import http from "node:http";
+import path from "node:path";
+
+const marker = "$marker";
+const port = Number(process.env.PORT || 3000);
+const storageDir = process.env.E2E_STORAGE_DIR || "/storage";
+const storedPath = path.join(storageDir, "message.txt");
+
+function send(res, status, body) {
+  res.writeHead(status, { "content-type": "text/plain" });
+  res.end(body + "\\n");
+}
+
+function storedValue() {
+  try {
+    return fs.readFileSync(storedPath, "utf8").trim();
+  } catch {
+    return "missing";
+  }
+}
+
+const server = http.createServer((req, res) => {
+  const url = new URL(req.url || "/", "http://localhost");
+  if (url.pathname === "/readyz") {
+    send(res, 200, "ready");
+    return;
+  }
+  if (url.pathname === "/stored") {
+    send(res, 200, storedValue());
+    return;
+  }
+  if (url.pathname === "/write") {
+    const value = url.searchParams.get("value") || "";
+    fs.mkdirSync(storageDir, { recursive: true });
+    fs.writeFileSync(storedPath, value);
+    send(res, 200, value);
+    return;
+  }
+  send(res, 200, marker + "|" + (process.env.E2E_GREETING || ""));
+});
+
+server.listen(port, "0.0.0.0");
+EOF
+    cat > package.json <<'EOF'
+{"type":"module","scripts":{"start":"node server.mjs"}}
+EOF
+  )
+}
+
 prepare_case_repo() {
   local case_name="$1"
   local marker="$2"
@@ -608,7 +703,7 @@ commit_and_push_case() {
   )
 }
 
-wait_for_github_push_delivery() {
+try_wait_for_github_push_delivery() {
   local sha="$1"
   local label="$2"
   local deliveries ids id detail delivered_sha status redelivered_ids last_status
@@ -617,12 +712,17 @@ wait_for_github_push_delivery() {
 
   log "Waiting for GitHub webhook delivery for $label"
   for _ in $(seq 1 60); do
-    deliveries="$(github_app_api GET "/app/hook/deliveries?per_page=10")"
+    deliveries="$(github_app_api GET "/app/hook/deliveries?per_page=30" 2>/dev/null || true)"
+    if [ -z "$deliveries" ]; then
+      last_status="delivery-list-unavailable"
+      sleep 2
+      continue
+    fi
     ids="$(printf "%s" "$deliveries" | python3 -c 'import json,sys
 for delivery in json.load(sys.stdin):
     if delivery.get("event") == "push":
         print(delivery.get("id", ""))
-')"
+' 2>/dev/null || true)"
     for id in $ids; do
       [ -n "$id" ] || continue
       detail="$(github_app_api GET "/app/hook/deliveries/$id" 2>/dev/null || true)"
@@ -647,9 +747,48 @@ for delivery in json.load(sys.stdin):
     sleep 2
   done
   if [ -n "${last_status:-}" ]; then
-    fail "GitHub webhook delivery for $label did not become OK; last status '$last_status'"
+    log "GitHub webhook delivery for $label did not become OK; last status '$last_status'"
+    return 1
   fi
-  fail "GitHub webhook delivery for $label did not arrive for $sha"
+  log "GitHub webhook delivery for $label did not arrive for $sha"
+  return 1
+}
+
+wait_for_github_push_delivery() {
+  local sha="$1"
+  local label="$2"
+  if ! try_wait_for_github_push_delivery "$sha" "$label"; then
+    fail "GitHub webhook delivery for $label did not arrive or become OK for $sha"
+  fi
+}
+
+push_case_with_delivery_retry() {
+  local prepare_kind="$1"
+  local marker_base="$2"
+  local message_base="$3"
+  local label="$4"
+  local attempt marker sha
+
+  PUSHED_MARKER=""
+  PUSHED_SHA=""
+  for attempt in 1 2 3; do
+    marker="$marker_base"
+    if [ "$attempt" != "1" ]; then
+      marker="$marker_base-retry$attempt"
+    fi
+    case "$prepare_kind" in
+      ops) prepare_ops_case "$marker" ;;
+      *) prepare_case_repo "$prepare_kind" "$marker" ;;
+    esac
+    sha="$(commit_and_push_case "$message_base attempt $attempt")"
+    if try_wait_for_github_push_delivery "$sha" "$label attempt $attempt"; then
+      PUSHED_MARKER="$marker"
+      PUSHED_SHA="$sha"
+      return 0
+    fi
+    log "No usable GitHub webhook delivery for $label attempt $attempt; pushing a fresh commit"
+  done
+  fail "GitHub webhook delivery for $label did not arrive or become OK after retries"
 }
 
 case_public_path() {
@@ -746,6 +885,21 @@ verify_dns_removed() {
   fi
 }
 
+wait_for_domain_verify() {
+  local app_name="$1"
+  local label="$2"
+  local out
+  for _ in $(seq 1 90); do
+    out="$(docker exec "$CONTAINER" singleserver domains verify "$app_name" 2>&1 || true)"
+    if grep -Fq "cloudflare_dns" <<<"$out" && ! grep -Fq "failed" <<<"$out"; then
+      return 0
+    fi
+    sleep 2
+  done
+  printf 'Last domains verify output for %s:\n%s\n' "$label" "$out" >&2
+  fail "$label domain verification did not pass"
+}
+
 run_app_case() {
   local distro="$1"
   local case_name="$2"
@@ -770,9 +924,9 @@ run_app_case() {
 
   log "Pushing $case_name change to trigger real GitHub webhook"
   changed_marker="changed-$RUN_ID-$distro-$case_name"
-  prepare_case_repo "$case_name" "$changed_marker"
-  changed_sha="$(commit_and_push_case "E2E $distro $case_name change $RUN_ID")"
-  wait_for_github_push_delivery "$changed_sha" "$distro/$case_name change push"
+  push_case_with_delivery_retry "$case_name" "$changed_marker" "E2E $distro $case_name change $RUN_ID" "$distro/$case_name change push"
+  changed_marker="$PUSHED_MARKER"
+  changed_sha="$PUSHED_SHA"
   wait_for_app_marker "$public_url" "$changed_marker" "$distro/$case_name webhook deploy"
 
   log "Running doctor for $case_name on $distro"
@@ -784,6 +938,113 @@ run_app_case() {
 
   log "Verifying Cloudflare DNS cleanup for $domain"
   verify_dns_removed "$domain"
+}
+
+run_ops_scenario() {
+  local distro="$1"
+  local domain alias_domain initial_marker changed_marker public_url stored_url initial_sha changed_sha
+  local out backup_path storage_path
+
+  APP_NAME="e2e-$RUN_ID-$distro-ops"
+  domain="run-$RUN_ID-$distro-ops.$TEST_ZONE"
+  alias_domain="run-$RUN_ID-$distro-ops-alt.$TEST_ZONE"
+  public_url="https://$domain/"
+  stored_url="https://$domain/stored"
+  storage_path="/srv/storage/$APP_NAME"
+
+  log "Preparing operational command coverage app for $distro"
+  initial_marker="initial-$RUN_ID-$distro-ops"
+  prepare_ops_case "$initial_marker"
+  initial_sha="$(commit_and_push_case "E2E $distro ops initial $RUN_ID")"
+  wait_for_github_push_delivery "$initial_sha" "$distro/ops initial push"
+
+  log "Adding operational app on $distro"
+  container_exec singleserver add "https://github.com/$GITHUB_TEST_REPO" \
+    --name "$APP_NAME" \
+    --branch main \
+    --domain "$domain" \
+    --runtime node \
+    --start "node server.mjs" \
+    --app-port 3000 \
+    --healthcheck-path /readyz \
+    --non-interactive
+  wait_for_app_marker "$public_url" "$initial_marker|" "$distro/ops initial deploy"
+
+  log "Checking list, status, and inspect for $distro"
+  out="$(docker exec "$CONTAINER" singleserver list)"
+  assert_contains "$out" "$APP_NAME" "$distro list"
+  assert_contains "$out" "$domain" "$distro list"
+  out="$(docker exec "$CONTAINER" singleserver status)"
+  assert_contains "$out" "$APP_NAME" "$distro status"
+  assert_contains "$out" "runtime=running:" "$distro status"
+  out="$(docker exec "$CONTAINER" singleserver inspect "$APP_NAME")"
+  assert_contains "$out" "service: $APP_NAME" "$distro inspect"
+  assert_contains "$out" "$domain" "$distro inspect"
+  assert_contains "$out" "path: /readyz" "$distro inspect"
+
+  log "Checking env and edit commands for $distro"
+  container_exec singleserver env set "$APP_NAME" E2E_GREETING=hello --non-interactive
+  out="$(docker exec "$CONTAINER" singleserver env list "$APP_NAME")"
+  assert_contains "$out" "E2E_GREETING=hello" "$distro env list"
+  container_exec singleserver edit "$APP_NAME" \
+    --healthcheck "https://$domain/readyz" \
+    --healthcheck-path /readyz \
+    --no-deploy \
+    --non-interactive
+  container_exec singleserver deploy "$APP_NAME" --non-interactive
+  wait_for_app_marker "$public_url" "$initial_marker|hello" "$distro env deploy"
+
+  log "Checking manual deploy and rollback for $distro"
+  changed_marker="changed-$RUN_ID-$distro-ops"
+  push_case_with_delivery_retry ops "$changed_marker" "E2E $distro ops change $RUN_ID" "$distro/ops change push"
+  changed_marker="$PUSHED_MARKER"
+  changed_sha="$PUSHED_SHA"
+  wait_for_app_marker "$public_url" "$changed_marker|hello" "$distro ops webhook deploy"
+  container_exec singleserver deploy "$APP_NAME" "$initial_sha" --non-interactive
+  wait_for_app_marker "$public_url" "$initial_marker|hello" "$distro ops rollback deploy"
+  container_exec singleserver deploy "$APP_NAME" "$changed_sha" --non-interactive
+  wait_for_app_marker "$public_url" "$changed_marker|hello" "$distro ops manual deploy"
+
+  log "Checking domains commands for $distro"
+  container_exec singleserver domains add "$APP_NAME" "$alias_domain" --no-deploy --non-interactive
+  out="$(docker exec "$CONTAINER" singleserver domains list "$APP_NAME")"
+  assert_contains "$out" "$domain" "$distro domains list"
+  assert_contains "$out" "$alias_domain" "$distro domains list"
+  container_exec singleserver deploy "$APP_NAME" --non-interactive
+  wait_for_app_marker "https://$alias_domain/" "$changed_marker|hello" "$distro ops alias deploy"
+  wait_for_domain_verify "$APP_NAME" "$distro ops alias"
+  container_exec singleserver domains remove "$APP_NAME" "$alias_domain" --no-deploy --non-interactive
+  container_exec singleserver deploy "$APP_NAME" --non-interactive
+  verify_dns_removed "$alias_domain"
+
+  log "Checking storage, backup, and restore commands for $distro"
+  container_exec singleserver storage enable "$APP_NAME" --mount /storage --path "$storage_path" --non-interactive
+  wait_for_app_marker "$public_url" "$changed_marker|hello" "$distro ops storage deploy"
+  wait_for_app_marker "https://$domain/write?value=before-$RUN_ID-$distro" "before-$RUN_ID-$distro" "$distro ops storage write"
+  wait_for_app_marker "$stored_url" "before-$RUN_ID-$distro" "$distro ops storage read"
+  container_bash "sqlite3 '$storage_path/state.db' 'create table if not exists data(value text); insert into data values (\"before\");'"
+  out="$(docker exec "$CONTAINER" singleserver backup "$APP_NAME")"
+  assert_contains "$out" "backup" "$distro backup"
+  assert_contains "$out" "ok" "$distro backup"
+  assert_contains "$out" "sqlite=1" "$distro backup"
+  backup_path="$(awk -v app="$APP_NAME" '$1 == app && $2 == "backup" && $3 == "ok" {print $4; exit}' <<<"$out")"
+  if [ -z "$backup_path" ]; then
+    printf 'Backup output for %s:\n%s\n' "$distro" "$out" >&2
+    fail "could not parse backup path"
+  fi
+  wait_for_app_marker "https://$domain/write?value=after-$RUN_ID-$distro" "after-$RUN_ID-$distro" "$distro ops storage mutate"
+  wait_for_app_marker "$stored_url" "after-$RUN_ID-$distro" "$distro ops storage mutated read"
+  container_exec singleserver restore "$APP_NAME" "$backup_path" --non-interactive
+  wait_for_app_marker "$stored_url" "before-$RUN_ID-$distro" "$distro ops restore"
+
+  log "Checking env unset and removing operational app from $distro"
+  container_exec singleserver env unset "$APP_NAME" E2E_GREETING --non-interactive
+  out="$(docker exec "$CONTAINER" singleserver env list "$APP_NAME")"
+  assert_not_contains "$out" "E2E_GREETING=" "$distro env unset"
+  container_exec singleserver remove "$APP_NAME" --delete-storage --non-interactive
+  APP_NAME=""
+  verify_dns_removed "$domain"
+  verify_dns_removed "$alias_domain"
 }
 
 run_distro() {
@@ -803,7 +1064,11 @@ run_distro() {
     run_app_case "$distro" "$case_name"
   done
 
-  log "E2E passed for $distro cases: $CASES"
+  if [ "$COMMAND_COVERAGE" != "0" ]; then
+    run_ops_scenario "$distro"
+  fi
+
+  log "E2E passed for $distro cases: $CASES command_coverage=$COMMAND_COVERAGE"
   teardown_host
 }
 
