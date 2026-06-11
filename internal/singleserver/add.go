@@ -36,7 +36,7 @@ type addOptions struct {
 	staticDir          string
 	appPort            int
 	noDeploy           bool
-	yes                bool
+	nonInteractive     bool
 	hostsSet           bool
 	healthcheckPathSet bool
 	appPortSet         bool
@@ -133,7 +133,7 @@ func cliAdd(args []string, w io.Writer, logger *log.Logger) error {
 		return fmt.Errorf("%s already has a Dockerfile on %s; remove --runtime or delete the repo Dockerfile", opts.repo, targetBranch)
 	}
 
-	if addPromptInteractiveFunc() && !opts.yes {
+	if addPromptInteractiveFunc() && !opts.nonInteractive {
 		opts, err = promptAddOptions(opts, addPromptInput, w, addPromptContext{
 			hasDockerfile: hasDockerfile,
 			targetBranch:  targetBranch,
@@ -223,6 +223,12 @@ func ensureGitHubSetupReady(github *GitHubClient) error {
 
 func parseAddArgs(args []string, w io.Writer) (addOptions, error) {
 	var opts addOptions
+	mode, args, err := commandModeFromArgs(args, addFlagTakesValue)
+	if err != nil {
+		return addOptions{}, err
+	}
+	opts.nonInteractive = mode.NonInteractive
+
 	fs := flag.NewFlagSet("add", flag.ContinueOnError)
 	fs.SetOutput(w)
 	fs.StringVar(&opts.name, "name", "", "app name override")
@@ -236,7 +242,6 @@ func parseAddArgs(args []string, w io.Writer) (addOptions, error) {
 	fs.StringVar(&opts.startCommand, "start", "", "start command for generated Node/Bun Dockerfile")
 	fs.StringVar(&opts.staticDir, "static-dir", "", "static output directory for generated Dockerfile")
 	fs.BoolVar(&opts.noDeploy, "no-deploy", false, "configure without deploying immediately")
-	fs.BoolVar(&opts.yes, "yes", false, "accept defaults and skip interactive prompts")
 
 	appPort := fs.Int("app-port", 0, "container app port for generated Kamal config")
 	if err := fs.Parse(normalizeAddArgs(args)); err != nil {
@@ -533,6 +538,7 @@ func addEquivalentCommand(opts addOptions) string {
 	if opts.noDeploy {
 		parts = append(parts, "--no-deploy")
 	}
+	parts = append(parts, "--non-interactive")
 	return strings.Join(parts, " ")
 }
 

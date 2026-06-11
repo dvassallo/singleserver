@@ -40,6 +40,7 @@ type editOptions struct {
 	startSet           bool
 	staticDirSet       bool
 	appPortSet         bool
+	nonInteractive     bool
 }
 
 type editPromptContext struct {
@@ -75,7 +76,7 @@ func cliEdit(args []string, w io.Writer, logger *log.Logger) error {
 	}
 
 	original := config.Apps[appIndex]
-	if editPromptInteractiveFunc() && !opts.hasSettingFlags() {
+	if editPromptInteractiveFunc() && !opts.nonInteractive && !opts.hasSettingFlags() {
 		ctx, err := inspectEditRepo(original)
 		if err != nil {
 			return err
@@ -115,6 +116,12 @@ func cliEdit(args []string, w io.Writer, logger *log.Logger) error {
 
 func parseEditArgs(args []string, w io.Writer) (editOptions, error) {
 	var opts editOptions
+	mode, args, err := commandModeFromArgs(args, editFlagTakesValue)
+	if err != nil {
+		return editOptions{}, err
+	}
+	opts.nonInteractive = mode.NonInteractive
+
 	fs := flag.NewFlagSet("edit", flag.ContinueOnError)
 	fs.SetOutput(w)
 	fs.StringVar(&opts.branch, "branch", "", "branch override")
@@ -553,5 +560,6 @@ func editEquivalentCommand(appName string, opts editOptions) string {
 	if opts.noDeploy {
 		parts = append(parts, "--no-deploy")
 	}
+	parts = append(parts, "--non-interactive")
 	return strings.Join(parts, " ")
 }

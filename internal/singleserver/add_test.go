@@ -20,7 +20,7 @@ func TestParseAddArgsAllowsFlagsAfterRepo(t *testing.T) {
 		"--install", "npm ci",
 		"--build", "npm run build",
 		"--start", "npm start",
-		"--yes",
+		"--non-interactive",
 	}, io.Discard)
 	if err != nil {
 		t.Fatal(err)
@@ -37,8 +37,8 @@ func TestParseAddArgsAllowsFlagsAfterRepo(t *testing.T) {
 	if opts.runtime != "node" || opts.installCommand != "npm ci" || opts.buildCommand != "npm run build" || opts.startCommand != "npm start" {
 		t.Fatalf("unexpected generated Dockerfile options: %#v", opts)
 	}
-	if !opts.yes {
-		t.Fatal("expected yes")
+	if !opts.nonInteractive {
+		t.Fatal("expected non-interactive")
 	}
 }
 
@@ -49,6 +49,13 @@ func TestParseAddArgsUsageMentionsOptions(t *testing.T) {
 	}
 	if err.Error() != addUsage {
 		t.Fatalf("unexpected usage: %v", err)
+	}
+}
+
+func TestParseAddArgsRejectsRemovedYesFlag(t *testing.T) {
+	_, err := parseAddArgs([]string{"https://github.com/smallbets/userbase-homepage", "--yes"}, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "--yes has been removed") {
+		t.Fatalf("expected removed --yes error, got %v", err)
 	}
 }
 
@@ -135,6 +142,9 @@ func TestPromptAddOptionsUsesDockerfileDefaults(t *testing.T) {
 	}
 	if !strings.Contains(text, "Equivalent command:") {
 		t.Fatalf("expected equivalent command:\n%s", text)
+	}
+	if !strings.Contains(text, "--non-interactive") {
+		t.Fatalf("expected equivalent command to be scriptable:\n%s", text)
 	}
 }
 

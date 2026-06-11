@@ -186,6 +186,9 @@ func TestPromptEditOptionsSwitchesToDockerfile(t *testing.T) {
 	if !strings.Contains(out.String(), "Equivalent command:") || !strings.Contains(out.String(), "--dockerfile") || !strings.Contains(out.String(), "--no-healthcheck") {
 		t.Fatalf("unexpected prompt output:\n%s", out.String())
 	}
+	if !strings.Contains(out.String(), "--non-interactive") {
+		t.Fatalf("expected equivalent command to be scriptable:\n%s", out.String())
+	}
 }
 
 func stubEditPrompt(t *testing.T, interactive bool) {

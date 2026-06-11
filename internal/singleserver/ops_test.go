@@ -74,7 +74,7 @@ func TestStorageEnableFailsBeforeConfigWriteWhenOwnershipFixFails(t *testing.T) 
 
 	var out bytes.Buffer
 	logger := log.New(io.Discard, "", 0)
-	err := cliStorage([]string{"enable", "fullsend", "--path", storagePath, "--no-deploy"}, &out, logger)
+	err := cliStorage([]string{"enable", "fullsend", "--path", storagePath, "--no-deploy", "--non-interactive"}, &out, logger)
 	if err == nil {
 		t.Fatal("expected chown error")
 	}
@@ -110,7 +110,7 @@ func TestStorageEnableReportsSuccessOnlyAfterConfigWrite(t *testing.T) {
 
 	var out bytes.Buffer
 	logger := log.New(io.Discard, "", 0)
-	err := cliStorage([]string{"enable", "fullsend", "--path", storagePath, "--no-deploy"}, &out, logger)
+	err := cliStorage([]string{"enable", "fullsend", "--path", storagePath, "--no-deploy", "--non-interactive"}, &out, logger)
 	if err == nil {
 		t.Fatal("expected config write error")
 	}
@@ -504,7 +504,7 @@ func TestBackupAndRestoreStorageReplacesDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	out.Reset()
-	if err := cliRestore([]string{"fullsend", backupPath, "--yes", "--no-restart"}, &out); err != nil {
+	if err := cliRestore([]string{"fullsend", backupPath, "--non-interactive", "--no-restart"}, &out); err != nil {
 		t.Fatal(err)
 	}
 
@@ -564,7 +564,7 @@ func TestRestoreFailsBeforeReplacingStorageWhenOwnershipFixFails(t *testing.T) {
 		return errors.New("chown failed")
 	}
 	out.Reset()
-	err := cliRestore([]string{"fullsend", backupPath, "--yes", "--no-restart"}, &out)
+	err := cliRestore([]string{"fullsend", backupPath, "--non-interactive", "--no-restart"}, &out)
 	if err == nil {
 		t.Fatal("expected chown error")
 	}
@@ -583,7 +583,7 @@ func TestRestoreFailsBeforeReplacingStorageWhenOwnershipFixFails(t *testing.T) {
 	}
 }
 
-func TestRestoreRequiresConfirmation(t *testing.T) {
+func TestRestoreRejectsRemovedYesFlag(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "apps.yml")
 	storagePath := filepath.Join(dir, "storage")
@@ -601,13 +601,13 @@ func TestRestoreRequiresConfirmation(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	err := cliRestore([]string{"fullsend", filepath.Join(dir, "missing.tar.gz"), "--no-restart"}, &out)
-	if err == nil || !strings.Contains(err.Error(), "--yes") {
-		t.Fatalf("expected --yes confirmation error, got %v", err)
+	err := cliRestore([]string{"fullsend", filepath.Join(dir, "missing.tar.gz"), "--yes", "--no-restart"}, &out)
+	if err == nil || !strings.Contains(err.Error(), "--yes has been removed") {
+		t.Fatalf("expected removed --yes error, got %v", err)
 	}
 }
 
-func TestRemoveDeleteStorageRequiresConfirmation(t *testing.T) {
+func TestRemoveRejectsRemovedYesFlag(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "apps.yml")
 	storagePath := filepath.Join(dir, "storage")
@@ -631,9 +631,9 @@ func TestRemoveDeleteStorageRequiresConfirmation(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	err := cliRemove([]string{"fullsend", "--delete-storage"}, &out)
-	if err == nil || !strings.Contains(err.Error(), "--yes") {
-		t.Fatalf("expected --yes confirmation error, got %v", err)
+	err := cliRemove([]string{"fullsend", "--delete-storage", "--yes"}, &out)
+	if err == nil || !strings.Contains(err.Error(), "--yes has been removed") {
+		t.Fatalf("expected removed --yes error, got %v", err)
 	}
 	if _, err := os.Stat(storagePath); err != nil {
 		t.Fatalf("expected storage kept: %v", err)
@@ -673,7 +673,7 @@ func TestRemoveKeepsConfigWhenCloudflareFails(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	err := cliRemove([]string{"fullsend"}, &out)
+	err := cliRemove([]string{"fullsend", "--non-interactive"}, &out)
 	if err == nil {
 		t.Fatal("expected Cloudflare error")
 	}
@@ -723,7 +723,7 @@ func TestRemoveKeepsFilesWhenContainerStopFails(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	err := cliRemove([]string{"fullsend", "--delete-storage", "--delete-repo", "--yes"}, &out)
+	err := cliRemove([]string{"fullsend", "--delete-storage", "--delete-repo", "--non-interactive"}, &out)
 	if err == nil {
 		t.Fatal("expected container stop error")
 	}
@@ -738,7 +738,7 @@ func TestRemoveKeepsFilesWhenContainerStopFails(t *testing.T) {
 	}
 }
 
-func TestRemoveDeleteStorageWithConfirmation(t *testing.T) {
+func TestRemoveDeleteStorageWithExplicitFlags(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "apps.yml")
 	storagePath := filepath.Join(dir, "storage")
@@ -773,7 +773,7 @@ func TestRemoveDeleteStorageWithConfirmation(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := cliRemove([]string{"fullsend", "--delete-storage", "--delete-repo", "--yes"}, &out); err != nil {
+	if err := cliRemove([]string{"fullsend", "--delete-storage", "--delete-repo", "--non-interactive"}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(storagePath); !os.IsNotExist(err) {

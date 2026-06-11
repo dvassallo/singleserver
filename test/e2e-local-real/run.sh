@@ -62,7 +62,7 @@ ARTIFACT_DIR="$WORK_ROOT/artifacts"
 WWW_DIR="$ARTIFACT_DIR/www"
 PORT_FILE="$ARTIFACT_DIR/http-port"
 SERVER_LOG="$ARTIFACT_DIR/http.log"
-TAILSCALE_STATE_ROOT="${SINGLESERVER_E2E_TAILSCALE_STATE_ROOT:-$E2E_DIR/state/tailscale}"
+TAILSCALE_STATE_ROOT="${SINGLESERVER_E2E_TAILSCALE_STATE_ROOT:-$E2E_DIR/state/tailscale/$RUN_ID}"
 
 CONTAINER=""
 WORK_DIR=""
@@ -254,7 +254,7 @@ teardown_host() {
 
     log "Best-effort $CONTAINER cleanup"
     if [ -n "$APP_NAME" ]; then
-      docker exec "$CONTAINER" singleserver remove "$APP_NAME" --yes >/dev/null 2>&1 || true
+      docker exec "$CONTAINER" singleserver remove "$APP_NAME" --non-interactive >/dev/null 2>&1 || true
       APP_NAME=""
     fi
 
@@ -266,11 +266,9 @@ teardown_host() {
       cf_api DELETE "/accounts/$account_id/cfd_tunnel/$tunnel_id" >/dev/null 2>&1 || true
     fi
 
-    if [ "${SINGLESERVER_E2E_RESET_TAILSCALE_STATE:-0}" = "1" ]; then
-      docker exec "$CONTAINER" tailscale logout >/dev/null 2>&1 || true
-      if [ -n "$TAILSCALE_STATE_DIR" ]; then
-        rm -rf "$TAILSCALE_STATE_DIR"
-      fi
+    docker exec "$CONTAINER" tailscale logout >/dev/null 2>&1 || true
+    if [ -n "$TAILSCALE_STATE_DIR" ]; then
+      rm -rf "$TAILSCALE_STATE_DIR"
     fi
 
     if [ "${SINGLESERVER_E2E_KEEP_CONTAINER:-0}" != "1" ]; then
@@ -357,7 +355,9 @@ start_distro_host() {
   CONTAINER="singleserver-e2e-$RUN_ID-$distro"
   WORK_DIR="$WORK_ROOT/$distro"
   REPO_DIR="$WORK_DIR/repo"
-  TAILSCALE_HOSTNAME="${SINGLESERVER_E2E_TAILSCALE_HOSTNAME_PREFIX:-singleserver-e2e}-$distro"
+  local hostname_run
+  hostname_run="${RUN_ID%%-*}-${RUN_ID##*-}"
+  TAILSCALE_HOSTNAME="${SINGLESERVER_E2E_TAILSCALE_HOSTNAME_PREFIX:-singleserver-e2e}-$hostname_run-$distro"
   TAILSCALE_STATE_DIR="$TAILSCALE_STATE_ROOT/$distro"
   mkdir -p "$REPO_DIR" "$TAILSCALE_STATE_DIR"
 
@@ -672,7 +672,7 @@ add_case_app() {
         --domain "$domain" \
         --healthcheck-path /up \
         --healthcheck "https://$domain/up" \
-        --yes
+        --non-interactive
       ;;
     static)
       container_exec singleserver add "https://github.com/$GITHUB_TEST_REPO" \
@@ -682,7 +682,7 @@ add_case_app() {
         --runtime static \
         --static-dir public \
         --healthcheck-path /ready \
-        --yes
+        --non-interactive
       ;;
     node)
       container_exec singleserver add "https://github.com/$GITHUB_TEST_REPO" \
@@ -693,7 +693,7 @@ add_case_app() {
         --start "node server.mjs" \
         --app-port 3000 \
         --healthcheck-path /readyz \
-        --yes
+        --non-interactive
       ;;
     *) fail "Unknown E2E app case '$case_name'" ;;
   esac
@@ -779,7 +779,7 @@ run_app_case() {
   container_exec singleserver doctor "$APP_NAME"
 
   log "Removing $case_name app from $distro"
-  container_exec singleserver remove "$APP_NAME" --yes
+  container_exec singleserver remove "$APP_NAME" --non-interactive
   APP_NAME=""
 
   log "Verifying Cloudflare DNS cleanup for $domain"

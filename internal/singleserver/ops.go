@@ -1,6 +1,7 @@
 package singleserver
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"flag"
@@ -10,11 +11,32 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
 
 func cliEnv(args []string, w io.Writer) error {
+	mode, args, err := commandModeFromArgs(args, noFlagValues)
+	if err != nil {
+		return err
+	}
+	prompting := cliCanPrompt(mode)
+	p := interactivePrompter(w)
+	if len(args) == 0 && prompting {
+		action, err := p.askChoice("Env action", []string{"set", "list", "unset"})
+		if err != nil {
+			return err
+		}
+		args = append(args, action)
+	}
+	if len(args) < 2 && prompting {
+		appName, err := promptConfiguredAppName(p, "App")
+		if err != nil {
+			return err
+		}
+		args = append(args, appName)
+	}
 	if len(args) < 2 {
 		return errors.New("usage: singleserver env <set|list|unset> <app> [KEY=value|KEY]")
 	}
@@ -27,6 +49,17 @@ func cliEnv(args []string, w io.Writer) error {
 
 	switch command {
 	case "set":
+		if len(args) < 3 && prompting {
+			key, err := p.askRequired("Env key")
+			if err != nil {
+				return err
+			}
+			value, err := p.askOptional("Env value")
+			if err != nil {
+				return err
+			}
+			args = append(args, key+"="+value)
+		}
 		if len(args) != 3 {
 			return errors.New("usage: singleserver env set <app> KEY=value")
 		}
@@ -56,6 +89,13 @@ func cliEnv(args []string, w io.Writer) error {
 			fmt.Fprintf(w, "%s=%s\n", key, values[key])
 		}
 	case "unset":
+		if len(args) < 3 && prompting {
+			key, err := p.askRequired("Env key")
+			if err != nil {
+				return err
+			}
+			args = append(args, key)
+		}
 		if len(args) != 3 {
 			return errors.New("usage: singleserver env unset <app> KEY")
 		}
@@ -80,30 +120,58 @@ func cliEnv(args []string, w io.Writer) error {
 }
 
 func cliStorage(args []string, w io.Writer, logger *log.Logger) error {
+	mode, args, err := commandModeFromArgs(args, noFlagValues)
+	if err != nil {
+		return err
+	}
 	if len(args) == 0 {
 		return errors.New("usage: singleserver storage enable <app> [--mount /storage] [--path /srv/storage/app] [--no-deploy]")
 	}
-	switch args[0] {
-	case "enable":
-		return cliStorageEnable(args[1:], w, logger)
-	default:
-		return fmt.Errorf("unknown storage command %q", args[0])
-	}
+	return withCLIMode(mode, func() error {
+		switch args[0] {
+		case "enable":
+			return cliStorageEnable(args[1:], w, logger)
+		default:
+			return fmt.Errorf("unknown storage command %q", args[0])
+		}
+	})
 }
 
 func cliStorageEnable(args []string, w io.Writer, logger *log.Logger) error {
+	mode, args, err := commandModeFromArgs(args, storageFlagTakesValue)
+	if err != nil {
+		return err
+	}
 	fs := flag.NewFlagSet("storage enable", flag.ContinueOnError)
 	fs.SetOutput(w)
 	mount := fs.String("mount", "/storage", "container mount path")
 	path := fs.String("path", "", "host storage path")
 	noDeploy := fs.Bool("no-deploy", false, "update config without deploying")
+	mountSet := false
+	pathSet := false
 	if err := fs.Parse(normalizeFlagArgs(args, storageFlagTakesValue)); err != nil {
 		return err
 	}
-	if fs.NArg() != 1 {
+	fs.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "mount":
+			mountSet = true
+		case "path":
+			pathSet = true
+		}
+	})
+	prompting := cliCanPrompt(mode)
+	appName := ""
+	if fs.NArg() == 1 {
+		appName = fs.Arg(0)
+	} else if fs.NArg() == 0 && prompting {
+		appName, err = promptConfiguredAppName(interactivePrompter(w), "App")
+		if err != nil {
+			return err
+		}
+	} else {
 		return errors.New("usage: singleserver storage enable <app> [--mount /storage] [--path /srv/storage/app] [--no-deploy]")
 	}
-	appName := fs.Arg(0)
 
 	configPath := envDefault("SINGLESERVER_CONFIG", "/etc/singleserver/apps.yml")
 	config, err := LoadConfig(configPath)
@@ -119,6 +187,31 @@ func cliStorageEnable(args []string, w io.Writer, logger *log.Logger) error {
 	}
 	if appIndex == -1 {
 		return fmt.Errorf("%s is not configured", appName)
+	}
+
+	if prompting {
+		p := interactivePrompter(w)
+		if !pathSet {
+			value, err := p.askDefault("Host storage path", filepath.Join(storageRoot(), config.Apps[appIndex].Name))
+			if err != nil {
+				return err
+			}
+			*path = value
+		}
+		if !mountSet {
+			value, err := p.askDefault("Container mount path", *mount)
+			if err != nil {
+				return err
+			}
+			*mount = value
+		}
+		if !*noDeploy {
+			deploy, err := p.askYesNo("Deploy now?", true)
+			if err != nil {
+				return err
+			}
+			*noDeploy = !deploy
+		}
 	}
 
 	app := &config.Apps[appIndex]
@@ -168,6 +261,17 @@ func cliStorageEnable(args []string, w io.Writer, logger *log.Logger) error {
 }
 
 func cliBackup(args []string, w io.Writer) error {
+	mode, args, err := commandModeFromArgs(args, noFlagValues)
+	if err != nil {
+		return err
+	}
+	if len(args) == 0 && cliCanPrompt(mode) {
+		appName, err := promptConfiguredAppName(interactivePrompter(w), "App to back up")
+		if err != nil {
+			return err
+		}
+		args = append(args, appName)
+	}
 	if len(args) != 1 {
 		return errors.New("usage: singleserver backup <app>")
 	}
@@ -188,20 +292,37 @@ func cliBackup(args []string, w io.Writer) error {
 }
 
 func cliRestore(args []string, w io.Writer) error {
+	mode, args, err := commandModeFromArgs(args, noFlagValues)
+	if err != nil {
+		return err
+	}
 	fs := flag.NewFlagSet("restore", flag.ContinueOnError)
 	fs.SetOutput(w)
-	yes := fs.Bool("yes", false, "confirm destructive restore")
 	noRestart := fs.Bool("no-restart", false, "restore files without restarting app containers")
 	if err := fs.Parse(normalizeFlagArgs(args, noFlagValues)); err != nil {
 		return err
 	}
-	if fs.NArg() != 2 {
-		return errors.New("usage: singleserver restore <app> <backup-id-or-path> --yes [--no-restart]")
+	prompting := cliCanPrompt(mode)
+	p := interactivePrompter(w)
+	restoreArgs := fs.Args()
+	if len(restoreArgs) == 0 && prompting {
+		appName, err := promptConfiguredAppName(p, "App to restore")
+		if err != nil {
+			return err
+		}
+		restoreArgs = append(restoreArgs, appName)
 	}
-	if !*yes {
-		return errors.New("restore replaces app storage; rerun with --yes to confirm")
+	if len(restoreArgs) == 1 && prompting {
+		backup, err := p.askRequired("Backup id or path")
+		if err != nil {
+			return err
+		}
+		restoreArgs = append(restoreArgs, backup)
 	}
-	app, err := configuredApp(fs.Arg(0))
+	if len(restoreArgs) != 2 {
+		return errors.New("usage: singleserver restore <app> <backup-id-or-path> [--no-restart]")
+	}
+	app, err := configuredApp(restoreArgs[0])
 	if err != nil {
 		return err
 	}
@@ -209,7 +330,19 @@ func cliRestore(args []string, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	backupPath := resolveBackupPath(app.Name, fs.Arg(1))
+	backupPath := resolveBackupPath(app.Name, restoreArgs[1])
+	if prompting {
+		fmt.Fprintf(w, "Restore %s from %s.\n", app.Name, backupPath)
+		fmt.Fprintf(w, "Current storage will move aside before the backup is restored: %s\n", storage.Path)
+		proceed, err := p.askYesNo("Continue?", false)
+		if err != nil {
+			return err
+		}
+		if !proceed {
+			writeCheck(w, app.Name, "restore", "canceled", backupPath)
+			return nil
+		}
+	}
 	if err := restoreStorageBackup(app.Name, storage.Path, backupPath, *noRestart, w); err != nil {
 		return err
 	}
@@ -217,21 +350,40 @@ func cliRestore(args []string, w io.Writer) error {
 }
 
 func cliRemove(args []string, w io.Writer) error {
+	mode, args, err := commandModeFromArgs(args, noFlagValues)
+	if err != nil {
+		return err
+	}
 	fs := flag.NewFlagSet("remove", flag.ContinueOnError)
 	fs.SetOutput(w)
 	deleteStorage := fs.Bool("delete-storage", false, "delete persistent storage")
 	deleteRepo := fs.Bool("delete-repo", false, "delete repository checkout")
-	yes := fs.Bool("yes", false, "confirm destructive deletion")
+	deleteStorageSet := false
+	deleteRepoSet := false
 	if err := fs.Parse(normalizeFlagArgs(args, noFlagValues)); err != nil {
 		return err
 	}
-	if fs.NArg() != 1 {
-		return errors.New("usage: singleserver remove <app> [--delete-storage] [--delete-repo] [--yes]")
+	fs.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "delete-storage":
+			deleteStorageSet = true
+		case "delete-repo":
+			deleteRepoSet = true
+		}
+	})
+	prompting := cliCanPrompt(mode)
+	p := interactivePrompter(w)
+	appName := ""
+	if fs.NArg() == 1 {
+		appName = fs.Arg(0)
+	} else if fs.NArg() == 0 && prompting {
+		appName, err = promptConfiguredAppName(p, "App to remove")
+		if err != nil {
+			return err
+		}
+	} else {
+		return errors.New("usage: singleserver remove <app> [--delete-storage] [--delete-repo]")
 	}
-	if (*deleteStorage || *deleteRepo) && !*yes {
-		return errors.New("remove deletes app files; rerun with --yes to confirm")
-	}
-	appName := fs.Arg(0)
 	configPath := envDefault("SINGLESERVER_CONFIG", "/etc/singleserver/apps.yml")
 	config, err := LoadConfig(configPath)
 	if err != nil {
@@ -248,6 +400,32 @@ func cliRemove(args []string, w io.Writer) error {
 	}
 	if index < 0 {
 		return fmt.Errorf("%s is not configured", appName)
+	}
+
+	if prompting {
+		fmt.Fprintf(w, "Remove %s (%s).\n", app.Name, app.Repo)
+		if app.Storage != nil && !deleteStorageSet {
+			choice, err := p.askYesNo("Delete persistent storage?", false)
+			if err != nil {
+				return err
+			}
+			*deleteStorage = choice
+		}
+		if !deleteRepoSet {
+			choice, err := p.askYesNo("Delete repository checkout?", false)
+			if err != nil {
+				return err
+			}
+			*deleteRepo = choice
+		}
+		proceed, err := p.askYesNo("Continue?", false)
+		if err != nil {
+			return err
+		}
+		if !proceed {
+			writeCheck(w, app.Name, "remove", "canceled", "-")
+			return nil
+		}
 	}
 
 	removedHosts := []string{}
@@ -295,27 +473,33 @@ func cliRemove(args []string, w io.Writer) error {
 }
 
 func cliDomains(args []string, w io.Writer, logger *log.Logger) error {
+	mode, args, err := commandModeFromArgs(args, noFlagValues)
+	if err != nil {
+		return err
+	}
 	if len(args) == 0 {
 		return errors.New("usage: singleserver domains <add|remove|list|verify> ...")
 	}
-	switch args[0] {
-	case "add":
-		return cliDomainChange(args[1:], true, w, logger)
-	case "remove":
-		return cliDomainChange(args[1:], false, w, logger)
-	case "list":
-		if len(args) > 2 {
-			return errors.New("usage: singleserver domains list [app]")
+	return withCLIMode(mode, func() error {
+		switch args[0] {
+		case "add":
+			return cliDomainChange(args[1:], true, w, logger)
+		case "remove":
+			return cliDomainChange(args[1:], false, w, logger)
+		case "list":
+			if len(args) > 2 {
+				return errors.New("usage: singleserver domains list [app]")
+			}
+			return listDomains(args[1:], w)
+		case "verify":
+			if len(args) > 2 {
+				return errors.New("usage: singleserver domains verify [app]")
+			}
+			return verifyDomains(args[1:], w)
+		default:
+			return fmt.Errorf("unknown domains command %q", args[0])
 		}
-		return listDomains(args[1:], w)
-	case "verify":
-		if len(args) > 2 {
-			return errors.New("usage: singleserver domains verify [app]")
-		}
-		return verifyDomains(args[1:], w)
-	default:
-		return fmt.Errorf("unknown domains command %q", args[0])
-	}
+	})
 }
 
 func cliDomainChange(args []string, add bool, w io.Writer, logger *log.Logger) error {
@@ -323,17 +507,49 @@ func cliDomainChange(args []string, add bool, w io.Writer, logger *log.Logger) e
 	if !add {
 		command = "remove"
 	}
+	mode, args, err := commandModeFromArgs(args, noFlagValues)
+	if err != nil {
+		return err
+	}
 	fs := flag.NewFlagSet("domains "+command, flag.ContinueOnError)
 	fs.SetOutput(w)
 	noDeploy := fs.Bool("no-deploy", false, "update config and DNS without deploying")
 	if err := fs.Parse(normalizeFlagArgs(args, noFlagValues)); err != nil {
 		return err
 	}
-	if fs.NArg() != 2 {
+	prompting := cliCanPrompt(mode)
+	p := interactivePrompter(w)
+	changeArgs := fs.Args()
+	if len(changeArgs) == 0 && prompting {
+		appName, err := promptConfiguredAppName(p, "App")
+		if err != nil {
+			return err
+		}
+		changeArgs = append(changeArgs, appName)
+	}
+	if len(changeArgs) == 1 && prompting {
+		label := "Domain to add"
+		if !add {
+			label = "Domain to remove"
+		}
+		host, err := p.askRequired(label)
+		if err != nil {
+			return err
+		}
+		changeArgs = append(changeArgs, host)
+	}
+	if len(changeArgs) != 2 {
 		return fmt.Errorf("usage: singleserver domains %s <app> <domain> [--no-deploy]", command)
 	}
+	if prompting && !*noDeploy {
+		deploy, err := p.askYesNo("Deploy now?", true)
+		if err != nil {
+			return err
+		}
+		*noDeploy = !deploy
+	}
 
-	app, err := updateDomain(fs.Arg(0), fs.Arg(1), add, w)
+	app, err := updateDomain(changeArgs[0], changeArgs[1], add, w)
 	if err != nil {
 		return err
 	}
@@ -538,7 +754,24 @@ func verifyCloudflareDNSRecord(host string, state *CloudflareState, client *Clou
 	return target, fmt.Errorf("CNAME points to %s, expected %s", strings.Join(contents, ","), target)
 }
 
-func cliUpgrade(w io.Writer) error {
+func cliUpgrade(args []string, w io.Writer) error {
+	mode, args, err := commandModeFromArgs(args, noFlagValues)
+	if err != nil {
+		return err
+	}
+	if len(args) != 0 {
+		return errors.New("usage: singleserver upgrade")
+	}
+	if cliCanPrompt(mode) {
+		proceed, err := interactivePrompter(w).askYesNo("Upgrade Single Server now?", false)
+		if err != nil {
+			return err
+		}
+		if !proceed {
+			writeCheck(w, "upgrade", "installer", "canceled", "-")
+			return nil
+		}
+	}
 	if err := commandRunFunc(10*time.Minute, "bash", "-lc", "curl -fsSL https://singleserver.com/install.sh | sh"); err != nil {
 		return err
 	}
@@ -558,6 +791,42 @@ func configuredApp(appName string) (*AppConfig, error) {
 		return app, nil
 	}
 	return nil, fmt.Errorf("%s is not configured", appName)
+}
+
+func interactivePrompter(w io.Writer) addPrompter {
+	return addPrompter{reader: bufio.NewReader(addPromptInput), w: w}
+}
+
+func promptConfiguredAppName(p addPrompter, label string) (string, error) {
+	config, err := LoadConfig(envDefault("SINGLESERVER_CONFIG", "/etc/singleserver/apps.yml"))
+	if err != nil {
+		return "", err
+	}
+	if len(config.Apps) == 0 {
+		return "", errors.New("no apps configured; add your first app with `singleserver add https://github.com/owner/repo`")
+	}
+	if len(config.Apps) == 1 {
+		return p.askDefault(label, config.Apps[0].Name)
+	}
+	fmt.Fprintln(p.w, "Configured apps:")
+	for i, app := range config.Apps {
+		fmt.Fprintf(p.w, "  %d. %s (%s)\n", i+1, app.Name, app.Repo)
+	}
+	for {
+		value, err := p.askRequired(label)
+		if err != nil {
+			return "", err
+		}
+		if n, parseErr := strconv.Atoi(value); parseErr == nil && n >= 1 && n <= len(config.Apps) {
+			return config.Apps[n-1].Name, nil
+		}
+		for _, app := range config.Apps {
+			if appMatches(app, value) {
+				return app.Name, nil
+			}
+		}
+		fmt.Fprintln(p.w, "Enter an app name, repo, or number from the list.")
+	}
 }
 
 func updateConfiguredApp(appName string, mutate func(app *AppConfig) error) error {

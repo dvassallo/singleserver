@@ -32,6 +32,10 @@ type tailscaleStatus struct {
 var tailscaleFunnelReadyFunc = waitForTailscaleFunnelReady
 
 func cliTailscaleConnect(args []string, w io.Writer) error {
+	_, args, err := commandModeFromArgs(args, tailscaleFlagTakesValue)
+	if err != nil {
+		return err
+	}
 	fs := flag.NewFlagSet("connect tailscale", flag.ContinueOnError)
 	fs.SetOutput(w)
 	authKey := fs.String("auth-key", defaultTailscaleAuthKey(), "Tailscale auth key")

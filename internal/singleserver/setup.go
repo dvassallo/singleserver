@@ -9,11 +9,16 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
 
 func cliGitHubConnect(args []string, w io.Writer) error {
+	_, args, err := commandModeFromArgs(args, githubFlagTakesValue)
+	if err != nil {
+		return err
+	}
 	fs := flag.NewFlagSet("connect github", flag.ContinueOnError)
 	fs.SetOutput(w)
 	if err := fs.Parse(normalizeFlagArgs(args, githubFlagTakesValue)); err != nil {
@@ -53,6 +58,10 @@ func cliGitHubConnect(args []string, w io.Writer) error {
 }
 
 func cliCloudflareConnect(args []string, w io.Writer) error {
+	mode, args, err := commandModeFromArgs(args, cloudflareFlagTakesValue)
+	if err != nil {
+		return err
+	}
 	fs := flag.NewFlagSet("connect cloudflare", flag.ContinueOnError)
 	fs.SetOutput(w)
 	accountID := fs.String("account", "", "Cloudflare account id")
@@ -78,12 +87,19 @@ func cliCloudflareConnect(args []string, w io.Writer) error {
 		return err
 	}
 	token := cloudflareTokenFromEnvOrState(state)
+	if token == "" && cliCanPrompt(mode) {
+		value, err := interactivePrompter(w).askRequired("Cloudflare API token")
+		if err != nil {
+			return err
+		}
+		token = value
+	}
 	client, err := newCloudflareClient(token)
 	if err != nil {
 		return err
 	}
 
-	selectedAccountID, err := selectCloudflareAccount(client, *accountID)
+	selectedAccountID, err := selectCloudflareAccount(client, *accountID, cliCanPrompt(mode), w)
 	if err != nil {
 		return err
 	}
@@ -231,7 +247,7 @@ func ensureBaseFiles() error {
 	return writeServiceEnv(env)
 }
 
-func selectCloudflareAccount(client *CloudflareClient, accountID string) (string, error) {
+func selectCloudflareAccount(client *CloudflareClient, accountID string, interactive bool, w io.Writer) (string, error) {
 	accountID = strings.TrimSpace(accountID)
 	if accountID != "" {
 		return accountID, nil
@@ -240,7 +256,51 @@ func selectCloudflareAccount(client *CloudflareClient, accountID string) (string
 	if err != nil {
 		return "", err
 	}
+	if interactive {
+		if selected, ok, err := promptCloudflareAccount(zones, w); ok || err != nil {
+			return selected, err
+		}
+	}
 	return accountIDFromZones(zones)
+}
+
+func promptCloudflareAccount(zones []cloudflareZone, w io.Writer) (string, bool, error) {
+	accounts := map[string]string{}
+	for _, zone := range zones {
+		id := strings.TrimSpace(zone.Account.ID)
+		if id == "" {
+			continue
+		}
+		name := strings.TrimSpace(zone.Account.Name)
+		if name == "" {
+			name = id
+		}
+		accounts[id] = name
+	}
+	if len(accounts) <= 1 {
+		return "", false, nil
+	}
+	ids := sortedEnvKeys(accounts)
+	fmt.Fprintln(w, "Cloudflare accounts:")
+	for i, id := range ids {
+		fmt.Fprintf(w, "  %d. %s (%s)\n", i+1, accounts[id], id)
+	}
+	p := interactivePrompter(w)
+	for {
+		value, err := p.askRequired("Cloudflare account")
+		if err != nil {
+			return "", true, err
+		}
+		if n, parseErr := strconv.Atoi(value); parseErr == nil && n >= 1 && n <= len(ids) {
+			return ids[n-1], true, nil
+		}
+		for _, id := range ids {
+			if strings.EqualFold(value, id) || strings.EqualFold(value, accounts[id]) {
+				return id, true, nil
+			}
+		}
+		fmt.Fprintln(w, "Enter an account id, name, or number from the list.")
+	}
 }
 
 func accountIDFromZones(zones []cloudflareZone) (string, error) {

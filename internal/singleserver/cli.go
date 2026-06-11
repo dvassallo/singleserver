@@ -35,59 +35,69 @@ func RunCLI(args []string, logger *log.Logger) error {
 }
 
 func runCLI(args []string, logger *log.Logger, stdout io.Writer) error {
-
-	switch args[0] {
-	case "help", "-h", "--help":
+	mode, args, err := parseRootCLIMode(args)
+	if err != nil {
+		return err
+	}
+	if len(args) == 0 {
 		printUsage(stdout)
 		return nil
-	case "version", "--version":
-		printVersion(stdout)
-		return nil
-	case "connect":
-		if len(args) >= 2 {
-			switch args[1] {
-			case "tailscale":
-				return cliTailscaleConnect(args[2:], stdout)
-			case "cloudflare":
-				return cliCloudflareConnect(args[2:], stdout)
-			case "github":
-				return cliGitHubConnect(args[2:], stdout)
-			}
-		}
-		return errors.New("usage: singleserver connect <tailscale|cloudflare|github> [options]")
-	case "list":
-		return cliList(stdout)
-	case "status":
-		return cliStatus(stdout)
-	case "add":
-		return cliAdd(args[1:], stdout, logger)
-	case "edit":
-		return cliEdit(args[1:], stdout, logger)
-	case "deploy":
-		return cliDeploy(args[1:], stdout, logger)
-	case "inspect":
-		return cliInspect(args[1:], stdout)
-	case "doctor":
-		return cliDoctor(args[1:], stdout)
-	case "logs":
-		return cliLogs(args[1:], stdout)
-	case "remove":
-		return cliRemove(args[1:], stdout)
-	case "domains":
-		return cliDomains(args[1:], stdout, logger)
-	case "env":
-		return cliEnv(args[1:], stdout)
-	case "storage":
-		return cliStorage(args[1:], stdout, logger)
-	case "backup":
-		return cliBackup(args[1:], stdout)
-	case "restore":
-		return cliRestore(args[1:], stdout)
-	case "upgrade":
-		return cliUpgrade(stdout)
-	default:
-		return fmt.Errorf("unknown command %q", args[0])
 	}
+
+	return withCLIMode(mode, func() error {
+		switch args[0] {
+		case "help", "-h", "--help":
+			printUsage(stdout)
+			return nil
+		case "version", "--version":
+			printVersion(stdout)
+			return nil
+		case "connect":
+			if len(args) >= 2 {
+				switch args[1] {
+				case "tailscale":
+					return cliTailscaleConnect(args[2:], stdout)
+				case "cloudflare":
+					return cliCloudflareConnect(args[2:], stdout)
+				case "github":
+					return cliGitHubConnect(args[2:], stdout)
+				}
+			}
+			return errors.New("usage: singleserver connect <tailscale|cloudflare|github> [options]")
+		case "list":
+			return cliList(stdout)
+		case "status":
+			return cliStatus(stdout)
+		case "add":
+			return cliAdd(args[1:], stdout, logger)
+		case "edit":
+			return cliEdit(args[1:], stdout, logger)
+		case "deploy":
+			return cliDeploy(args[1:], stdout, logger)
+		case "inspect":
+			return cliInspect(args[1:], stdout)
+		case "doctor":
+			return cliDoctor(args[1:], stdout)
+		case "logs":
+			return cliLogs(args[1:], stdout)
+		case "remove":
+			return cliRemove(args[1:], stdout)
+		case "domains":
+			return cliDomains(args[1:], stdout, logger)
+		case "env":
+			return cliEnv(args[1:], stdout)
+		case "storage":
+			return cliStorage(args[1:], stdout, logger)
+		case "backup":
+			return cliBackup(args[1:], stdout)
+		case "restore":
+			return cliRestore(args[1:], stdout)
+		case "upgrade":
+			return cliUpgrade(args[1:], stdout)
+		default:
+			return fmt.Errorf("unknown command %q", args[0])
+		}
+	})
 }
 
 func writeCheck(w io.Writer, scope string, check string, status string, value string, details ...string) {
@@ -115,15 +125,21 @@ func printUsage(w io.Writer) {
 	fmt.Fprint(w, `Single Server
 
 Usage:
+  singleserver [--non-interactive] <command> [args]
+
+Global options:
+  --non-interactive  Never prompt. Missing required input is an error.
+
+Common commands:
   singleserver version
   singleserver connect tailscale [--auth-key <key>] [--hostname <name>]
   singleserver connect cloudflare [--account <id>] [--tunnel <name>]
   singleserver connect github
   singleserver list
   singleserver status
-  singleserver add <github-url> [options] [--yes]
+  singleserver add <github-url> [options]
   singleserver edit <app|owner/repo|github-url> [options]
-  singleserver deploy <owner/repo|app> [ref]
+  singleserver deploy [owner/repo|app] [ref]
   singleserver inspect <owner/repo|app>
   singleserver doctor [app]
   singleserver logs [app] [options]
@@ -131,8 +147,8 @@ Usage:
   singleserver env <set|list|unset> ...
   singleserver storage enable <app> [--mount /storage] [--path /srv/storage/app] [--no-deploy]
   singleserver backup <app>
-  singleserver restore <app> <backup-id-or-path> --yes [--no-restart]
-  singleserver remove <app> [--delete-storage] [--delete-repo] [--yes]
+  singleserver restore <app> <backup-id-or-path> [--no-restart]
+  singleserver remove <app> [--delete-storage] [--delete-repo]
   singleserver upgrade
 
 Commands:
@@ -142,7 +158,7 @@ Commands:
   status         Check the local daemon, apps, and optional healthchecks.
   add            Add and deploy a GitHub repository.
   edit           Edit app config interactively or with flags.
-  deploy         Deploy a configured app immediately.
+  deploy         Deploy a configured app, prompting for an app when omitted.
   inspect        Print the generated Kamal deploy.yml for a configured app.
   doctor         Check config, deploy plumbing, GitHub App access, checkouts, deploy logs, and optional healthchecks.
   logs           Show recent deploy logs, optionally filtered by app.
@@ -314,10 +330,27 @@ func appRuntimeStatus(app AppConfig, containers map[string]string, err error) st
 }
 
 func cliDeploy(args []string, w io.Writer, logger *log.Logger) error {
-	if len(args) < 1 || len(args) > 2 {
+	mode, args, err := commandModeFromArgs(args, noFlagValues)
+	if err != nil {
+		return err
+	}
+	if len(args) > 2 {
+		return errors.New("usage: singleserver deploy [owner/repo|app] [ref]")
+	}
+	prompting := cliCanPrompt(mode)
+	if len(args) == 0 && !prompting {
 		return errors.New("usage: singleserver deploy <owner/repo|app> [ref]")
 	}
-	target := strings.TrimSpace(args[0])
+	target := ""
+	if len(args) >= 1 {
+		target = strings.TrimSpace(args[0])
+	}
+	if target == "" && prompting {
+		target, err = promptConfiguredAppName(interactivePrompter(w), "App to deploy")
+		if err != nil {
+			return err
+		}
+	}
 	if target == "" {
 		return errors.New("usage: singleserver deploy <owner/repo|app> [ref]")
 	}

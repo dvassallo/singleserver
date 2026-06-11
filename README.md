@@ -30,6 +30,17 @@ singleserver add https://github.com/you/your-app-2
 singleserver add https://github.com/you/your-app-3
 ```
 
+Commands that change the server are interactive by default when you run them over SSH. For scripts, pass `--non-interactive` or set `SINGLESERVER_NON_INTERACTIVE=1`, and provide every value as an argument, flag, or environment variable:
+
+```sh
+singleserver add https://github.com/you/your-app \
+  --domain app.example.com \
+  --runtime node \
+  --start "npm start" \
+  --app-port 3000 \
+  --non-interactive
+```
+
 ## Then, forever
 
 Push to GitHub like you always do. Your server hears about it, builds the commit, and swaps the new version in with zero downtime. No CI queue, no registry upload, no waiting.
