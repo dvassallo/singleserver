@@ -480,7 +480,7 @@ func verifyDomains(args []string, w io.Writer) error {
 			}
 		}
 	} else if appsHaveHosts(apps) {
-		writeCheck(w, "cloudflare", "setup", "skipped", "-", "connect Cloudflare with `singleserver cloudflare connect` to verify DNS and tunnel routes")
+		writeCheck(w, "cloudflare", "setup", "skipped", "-", "connect Cloudflare with `singleserver connect cloudflare` to verify DNS and tunnel routes")
 	}
 
 	for _, app := range apps {
@@ -512,7 +512,7 @@ var verifyCloudflareDNSRecordFunc = verifyCloudflareDNSRecord
 
 func verifyCloudflareDNSRecord(host string, state *CloudflareState, client *CloudflareClient) (string, error) {
 	if strings.TrimSpace(state.TunnelID) == "" {
-		return "", errors.New("no Cloudflare DNS target configured; run `singleserver cloudflare connect`")
+		return "", errors.New("no Cloudflare DNS target configured; run `singleserver connect cloudflare`")
 	}
 	target := state.TunnelID + ".cfargotunnel.com"
 	zone, err := client.zoneForHostname(host)

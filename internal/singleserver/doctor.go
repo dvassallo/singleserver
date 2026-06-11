@@ -198,13 +198,13 @@ func doctorCloudflare(w io.Writer, allApps []AppConfig, selectedApps []AppConfig
 	cloudflareConfigured := state.TunnelID != "" || token != ""
 	if !cloudflareConfigured {
 		if appsHaveHosts(selectedApps) {
-			writeCheck(w, "cloudflare", "setup", "skipped", "-", "connect Cloudflare with `singleserver cloudflare connect` to verify DNS and tunnel routes")
+			writeCheck(w, "cloudflare", "setup", "skipped", "-", "connect Cloudflare with `singleserver connect cloudflare` to verify DNS and tunnel routes")
 		} else {
 			writeCheck(w, "cloudflare", "setup", "skipped", "-", "no DNS provider configured")
 		}
 	} else {
 		if state.TunnelID == "" {
-			writeCheck(w, "cloudflare", "state", "failed", "-", "missing tunnel; run `singleserver cloudflare connect`")
+			writeCheck(w, "cloudflare", "state", "failed", "-", "missing tunnel; run `singleserver connect cloudflare`")
 			failed = true
 		} else {
 			writeCheck(w, "cloudflare", "state", "ok", "mode=tunnel")
@@ -318,7 +318,7 @@ func doctorGitHubSetup(w io.Writer, github *GitHubClient, appCount int, expected
 		if appCount > 0 {
 			status = "failed"
 		}
-		writeCheck(w, "github", "setup", status, "run `singleserver github connect`", err.Error())
+		writeCheck(w, "github", "setup", status, "run `singleserver connect github`", err.Error())
 		return appCount == 0
 	}
 	if _, err := github.loadPrivateKey(); err != nil {

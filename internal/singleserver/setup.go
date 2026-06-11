@@ -14,13 +14,13 @@ import (
 )
 
 func cliGitHubConnect(args []string, w io.Writer) error {
-	fs := flag.NewFlagSet("github connect", flag.ContinueOnError)
+	fs := flag.NewFlagSet("connect github", flag.ContinueOnError)
 	fs.SetOutput(w)
 	if err := fs.Parse(normalizeFlagArgs(args, githubFlagTakesValue)); err != nil {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: singleserver github connect")
+		return errors.New("usage: singleserver connect github")
 	}
 	if err := ensureBaseFiles(); err != nil {
 		return err
@@ -53,7 +53,7 @@ func cliGitHubConnect(args []string, w io.Writer) error {
 }
 
 func cliCloudflareConnect(args []string, w io.Writer) error {
-	fs := flag.NewFlagSet("cloudflare connect", flag.ContinueOnError)
+	fs := flag.NewFlagSet("connect cloudflare", flag.ContinueOnError)
 	fs.SetOutput(w)
 	accountID := fs.String("account", "", "Cloudflare account id")
 	tunnelName := fs.String("tunnel", "", "Cloudflare tunnel name")
@@ -61,7 +61,7 @@ func cliCloudflareConnect(args []string, w io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: singleserver cloudflare connect [--account <id>] [--tunnel <name>]")
+		return errors.New("usage: singleserver connect cloudflare [--account <id>] [--tunnel <name>]")
 	}
 	if err := ensureBaseFiles(); err != nil {
 		return err
@@ -257,7 +257,7 @@ func accountIDFromZones(zones []cloudflareZone) (string, error) {
 		return "", errors.New("Cloudflare token did not expose an account id")
 	}
 	if len(accounts) > 1 {
-		return "", errors.New("Cloudflare token can access multiple accounts; run singleserver cloudflare connect --account <id>")
+		return "", errors.New("Cloudflare token can access multiple accounts; run singleserver connect cloudflare --account <id>")
 	}
 	for id := range accounts {
 		return id, nil

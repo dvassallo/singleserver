@@ -43,21 +43,18 @@ func runCLI(args []string, logger *log.Logger, stdout io.Writer) error {
 	case "version", "--version":
 		printVersion(stdout)
 		return nil
-	case "github":
-		if len(args) >= 2 && args[1] == "connect" {
-			return cliGitHubConnect(args[2:], stdout)
+	case "connect":
+		if len(args) >= 2 {
+			switch args[1] {
+			case "tailscale":
+				return cliTailscaleConnect(args[2:], stdout)
+			case "cloudflare":
+				return cliCloudflareConnect(args[2:], stdout)
+			case "github":
+				return cliGitHubConnect(args[2:], stdout)
+			}
 		}
-		return errors.New("usage: singleserver github connect")
-	case "tailscale":
-		if len(args) >= 2 && args[1] == "connect" {
-			return cliTailscaleConnect(args[2:], stdout)
-		}
-		return errors.New("usage: singleserver tailscale connect")
-	case "cloudflare":
-		if len(args) >= 2 && args[1] == "connect" {
-			return cliCloudflareConnect(args[2:], stdout)
-		}
-		return errors.New("usage: singleserver cloudflare connect")
+		return errors.New("usage: singleserver connect <tailscale|cloudflare|github> [options]")
 	case "list":
 		return cliList(stdout)
 	case "status":
@@ -68,8 +65,8 @@ func runCLI(args []string, logger *log.Logger, stdout io.Writer) error {
 		return cliEdit(args[1:], stdout, logger)
 	case "deploy":
 		return cliDeploy(args[1:], stdout, logger)
-	case "render-deploy":
-		return cliRenderDeploy(args[1:], stdout)
+	case "inspect":
+		return cliInspect(args[1:], stdout)
 	case "doctor":
 		return cliDoctor(args[1:], stdout)
 	case "logs":
@@ -119,15 +116,15 @@ func printUsage(w io.Writer) {
 
 Usage:
   singleserver version
-  singleserver tailscale connect [--auth-key <key>] [--hostname <name>]
-  singleserver github connect
-  singleserver cloudflare connect [--account <id>] [--tunnel <name>]
+  singleserver connect tailscale [--auth-key <key>] [--hostname <name>]
+  singleserver connect cloudflare [--account <id>] [--tunnel <name>]
+  singleserver connect github
   singleserver list
   singleserver status
   singleserver add <github-url> [options] [--yes]
   singleserver edit <app|owner/repo|github-url> [options]
   singleserver deploy <owner/repo|app> [ref]
-  singleserver render-deploy <owner/repo|app>
+  singleserver inspect <owner/repo|app>
   singleserver doctor [app]
   singleserver logs [app] [options]
   singleserver domains <add|remove|list|verify> ...
@@ -140,15 +137,13 @@ Usage:
 
 Commands:
   version        Print the installed Single Server version.
-  tailscale      Connect Tailscale SSH and Funnel for setup/webhooks.
-  github         Repair or print the GitHub App setup URL.
-  cloudflare     Connect Cloudflare Tunnel and DNS for public app ingress.
+  connect        Connect or repair Tailscale, Cloudflare, or GitHub.
   list           Show configured apps.
   status         Check the local daemon, apps, and optional healthchecks.
   add            Add and deploy a GitHub repository.
   edit           Edit app config interactively or with flags.
   deploy         Deploy a configured app immediately.
-  render-deploy  Print the generated Kamal deploy.yml for a configured app.
+  inspect        Print the generated Kamal deploy.yml for a configured app.
   doctor         Check config, deploy plumbing, GitHub App access, checkouts, deploy logs, and optional healthchecks.
   logs           Show recent deploy logs, optionally filtered by app.
   domains        Manage app domains in apps.yml.
@@ -400,13 +395,13 @@ func appLiveURL(app AppConfig) string {
 	return "https://" + app.Hosts[0]
 }
 
-func cliRenderDeploy(args []string, w io.Writer) error {
+func cliInspect(args []string, w io.Writer) error {
 	if len(args) != 1 {
-		return errors.New("usage: singleserver render-deploy <owner/repo|app>")
+		return errors.New("usage: singleserver inspect <owner/repo|app>")
 	}
 	target := strings.TrimSpace(args[0])
 	if target == "" {
-		return errors.New("usage: singleserver render-deploy <owner/repo|app>")
+		return errors.New("usage: singleserver inspect <owner/repo|app>")
 	}
 	app, err := configuredApp(target)
 	if err != nil {

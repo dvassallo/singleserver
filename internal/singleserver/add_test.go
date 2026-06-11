@@ -86,7 +86,7 @@ func TestEnsureGitHubSetupReadyExplainsMissingSetup(t *testing.T) {
 		t.Fatal("expected missing setup error")
 	}
 	text := err.Error()
-	if !strings.Contains(text, "GitHub is not connected yet") || !strings.Contains(text, "singleserver github connect") {
+	if !strings.Contains(text, "GitHub is not connected yet") || !strings.Contains(text, "singleserver connect github") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if strings.Contains(text, "github-app.json") {
@@ -105,7 +105,7 @@ func TestEnsureGitHubSetupReadyExplainsIncompleteSetup(t *testing.T) {
 		t.Fatal("expected incomplete setup error")
 	}
 	text := err.Error()
-	if !strings.Contains(text, "GitHub App setup is incomplete") || !strings.Contains(text, "singleserver github connect") {
+	if !strings.Contains(text, "GitHub App setup is incomplete") || !strings.Contains(text, "singleserver connect github") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

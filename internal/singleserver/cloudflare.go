@@ -555,7 +555,7 @@ func syncCloudflareAppDomain(hostname string, add bool, w io.Writer) error {
 		return err
 	}
 	if state.TunnelID == "" {
-		writeCheck(w, "cloudflare", "setup", "skipped", "-", "connect Cloudflare first with `singleserver cloudflare connect`")
+		writeCheck(w, "cloudflare", "setup", "skipped", "-", "connect Cloudflare first with `singleserver connect cloudflare`")
 		return nil
 	}
 	client, err := newCloudflareClient(cloudflareTokenFromEnvOrState(state))
@@ -604,7 +604,7 @@ func syncCloudflareAppDomainWithOps(hostname string, add bool, w io.Writer, stat
 
 func cloudflareDomainOps(state *CloudflareState, client *CloudflareClient) (cloudflareDomainSyncOps, error) {
 	if state.TunnelID == "" || state.ConfigFile == "" {
-		return cloudflareDomainSyncOps{}, errors.New("Cloudflare is connected but no tunnel route target is configured; run `singleserver cloudflare connect`")
+		return cloudflareDomainSyncOps{}, errors.New("Cloudflare is connected but no tunnel route target is configured; run `singleserver connect cloudflare`")
 	}
 	target := state.TunnelID + ".cfargotunnel.com"
 	return cloudflareDomainSyncOps{

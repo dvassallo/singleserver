@@ -199,11 +199,11 @@ fi
 TAILSCALE_E2E_AUTHKEY="$(tailscale_e2e_authkey)"
 docker exec \
   -e TAILSCALE_AUTHKEY="$TAILSCALE_E2E_AUTHKEY" \
-  "$CONTAINER" singleserver tailscale connect --hostname "$CONTAINER"
+  "$CONTAINER" singleserver connect tailscale --hostname "$CONTAINER"
 TAILSCALE_E2E_AUTHKEY=""
 
 log "Creating private GitHub App through manifest flow"
-setup_output="$(docker exec "$CONTAINER" singleserver github connect)"
+setup_output="$(docker exec "$CONTAINER" singleserver connect github)"
 printf "%s\n" "$setup_output"
 setup_url="$(printf "%s\n" "$setup_output" | awk '/github[[:space:]]+connect/ { print $4; exit }')"
 if [ -z "$setup_url" ]; then

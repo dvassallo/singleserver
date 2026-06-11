@@ -367,65 +367,65 @@ has_tailscale_authkey() {
 }
 
 if has_public_url || tailscale_running || has_tailscale_authkey; then
-  if /usr/local/bin/singleserver tailscale connect; then
+  if /usr/local/bin/singleserver connect tailscale; then
     :
   else
-    echo "tailscale pending: run singleserver tailscale connect"
+    echo "tailscale pending: run singleserver connect tailscale"
   fi
 elif prompt_yes "Connect Tailscale now? This opens a Tailscale login URL. [Y/n]" "Y"; then
   if tailscale up --ssh < /dev/tty; then
-    if /usr/local/bin/singleserver tailscale connect; then
+    if /usr/local/bin/singleserver connect tailscale; then
       :
     else
-      echo "tailscale pending: run singleserver tailscale connect"
+      echo "tailscale pending: run singleserver connect tailscale"
     fi
   else
-    echo "tailscale pending: run tailscale up --ssh, then run singleserver tailscale connect"
+    echo "tailscale pending: run tailscale up --ssh, then run singleserver connect tailscale"
   fi
 else
-  echo "tailscale pending: run tailscale up --ssh, then run singleserver tailscale connect"
+  echo "tailscale pending: run tailscale up --ssh, then run singleserver connect tailscale"
 fi
 
 if ! has_public_url; then
-  echo "tailscale pending: run tailscale up --ssh, then run singleserver tailscale connect"
+  echo "tailscale pending: run tailscale up --ssh, then run singleserver connect tailscale"
 fi
 
 if [ -n "${CLOUDFLARE_API_TOKEN:-}" ] || [ -f /etc/singleserver/cloudflare.json ]; then
-  if /usr/local/bin/singleserver cloudflare connect; then
+  if /usr/local/bin/singleserver connect cloudflare; then
     :
   else
-    echo "cloudflare pending: run singleserver cloudflare connect"
+    echo "cloudflare pending: run singleserver connect cloudflare"
   fi
 elif prompt_yes "Connect Cloudflare now? This needs an API token that can manage DNS and tunnels. [Y/n]" "Y"; then
   cf_token="$(prompt_secret "Cloudflare API token: ")"
   if [ -n "$cf_token" ]; then
-    if CLOUDFLARE_API_TOKEN="$cf_token" /usr/local/bin/singleserver cloudflare connect; then
+    if CLOUDFLARE_API_TOKEN="$cf_token" /usr/local/bin/singleserver connect cloudflare; then
       :
     else
-      echo "cloudflare pending: run singleserver cloudflare connect"
+      echo "cloudflare pending: run singleserver connect cloudflare"
     fi
   else
-    echo "cloudflare pending: set CLOUDFLARE_API_TOKEN, then run singleserver cloudflare connect"
+    echo "cloudflare pending: set CLOUDFLARE_API_TOKEN, then run singleserver connect cloudflare"
   fi
 else
-  echo "cloudflare pending: set CLOUDFLARE_API_TOKEN, then run singleserver cloudflare connect"
+  echo "cloudflare pending: set CLOUDFLARE_API_TOKEN, then run singleserver connect cloudflare"
 fi
 
 if github_connected; then
   echo "github ok"
 elif grep -q "^SINGLESERVER_PUBLIC_URL=" /etc/singleserver/singleserver.env 2>/dev/null; then
-  if /usr/local/bin/singleserver github connect; then
+  if /usr/local/bin/singleserver connect github; then
     echo "github pending: open the setup URL above and install the GitHub App"
     if wait_for_github_setup; then
       echo "github ok"
     else
-      echo "github pending: run singleserver github connect"
+      echo "github pending: run singleserver connect github"
     fi
   else
-    echo "github pending: run singleserver github connect"
+    echo "github pending: run singleserver connect github"
   fi
 else
-  echo "github pending: connect Tailscale first, then run singleserver github connect"
+  echo "github pending: connect Tailscale first, then run singleserver connect github"
 fi
 
 /usr/local/bin/singleserver doctor || true
@@ -434,5 +434,5 @@ echo
 if github_connected; then
   echo "Next: run singleserver add https://github.com/you/my-app"
 else
-  echo "Next: finish GitHub setup with singleserver github connect, then run singleserver add https://github.com/you/my-app"
+  echo "Next: finish GitHub setup with singleserver connect github, then run singleserver add https://github.com/you/my-app"
 fi

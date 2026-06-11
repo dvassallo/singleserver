@@ -213,10 +213,10 @@ func cliAdd(args []string, w io.Writer, logger *log.Logger) error {
 
 func ensureGitHubSetupReady(github *GitHubClient) error {
 	if _, err := github.LoadSecrets(); err != nil {
-		return errors.New("GitHub is not connected yet. Run `singleserver github connect`, open the setup URL, create/install the GitHub App, then rerun this command.")
+		return errors.New("GitHub is not connected yet. Run `singleserver connect github`, open the setup URL, create/install the GitHub App, then rerun this command.")
 	}
 	if _, err := github.loadPrivateKey(); err != nil {
-		return errors.New("GitHub App setup is incomplete. Run `singleserver github connect`, open the setup URL, create/install the GitHub App, then rerun this command.")
+		return errors.New("GitHub App setup is incomplete. Run `singleserver connect github`, open the setup URL, create/install the GitHub App, then rerun this command.")
 	}
 	return nil
 }

@@ -32,7 +32,7 @@ type tailscaleStatus struct {
 var tailscaleFunnelReadyFunc = waitForTailscaleFunnelReady
 
 func cliTailscaleConnect(args []string, w io.Writer) error {
-	fs := flag.NewFlagSet("tailscale connect", flag.ContinueOnError)
+	fs := flag.NewFlagSet("connect tailscale", flag.ContinueOnError)
 	fs.SetOutput(w)
 	authKey := fs.String("auth-key", defaultTailscaleAuthKey(), "Tailscale auth key")
 	hostname := fs.String("hostname", strings.TrimSpace(os.Getenv("SINGLESERVER_TAILSCALE_HOSTNAME")), "Tailscale hostname")
@@ -40,7 +40,7 @@ func cliTailscaleConnect(args []string, w io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: singleserver tailscale connect [--auth-key <key>] [--hostname <name>]")
+		return errors.New("usage: singleserver connect tailscale [--auth-key <key>] [--hostname <name>]")
 	}
 	if err := ensureBaseFiles(); err != nil {
 		return err
@@ -55,7 +55,7 @@ func cliTailscaleConnect(args []string, w io.Writer) error {
 	status, err := currentTailscaleStatus()
 	if err != nil || !tailscaleRunning(status) {
 		if strings.TrimSpace(*authKey) == "" {
-			writeCheck(w, "tailscale", "login", "pending", "run `tailscale up --ssh` on this server, then run `singleserver tailscale connect`")
+			writeCheck(w, "tailscale", "login", "pending", "run `tailscale up --ssh` on this server, then run `singleserver connect tailscale`")
 			return nil
 		}
 		upArgs := []string{"up", "--ssh", "--auth-key=" + strings.TrimSpace(*authKey)}
@@ -71,7 +71,7 @@ func cliTailscaleConnect(args []string, w io.Writer) error {
 		}
 	}
 	if !tailscaleRunning(status) {
-		writeCheck(w, "tailscale", "login", "pending", "run `tailscale up --ssh` on this server, then run `singleserver tailscale connect`")
+		writeCheck(w, "tailscale", "login", "pending", "run `tailscale up --ssh` on this server, then run `singleserver connect tailscale`")
 		return nil
 	}
 	writeCheck(w, "tailscale", "status", "ok", tailscaleStatusName(status))
@@ -271,7 +271,7 @@ func doctorTailscale(w io.Writer, appCount int) bool {
 		if appCount > 0 {
 			status = "failed"
 		}
-		writeCheck(w, "tailscale", "funnel", status, "run `singleserver tailscale connect`")
+		writeCheck(w, "tailscale", "funnel", status, "run `singleserver connect tailscale`")
 		return appCount == 0
 	}
 	parsed, err := url.Parse(publicURL)

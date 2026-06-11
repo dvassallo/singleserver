@@ -405,7 +405,7 @@ connect_tailscale() {
   TAILSCALE_E2E_AUTHKEY="$(tailscale_e2e_authkey)"
   docker exec \
     -e TAILSCALE_AUTHKEY="$TAILSCALE_E2E_AUTHKEY" \
-    "$CONTAINER" singleserver tailscale connect --hostname "$TAILSCALE_HOSTNAME"
+    "$CONTAINER" singleserver connect tailscale --hostname "$TAILSCALE_HOSTNAME"
   TAILSCALE_E2E_AUTHKEY=""
 
   FUNNEL_URL="$(container_bash ". /etc/singleserver/singleserver.env; printf '%s' \"\$SINGLESERVER_PUBLIC_URL\"")"
@@ -440,7 +440,7 @@ wait_for_funnel_health() {
 connect_cloudflare() {
   local cloudflare_args
   log "Connecting Cloudflare for $CONTAINER"
-  cloudflare_args=(singleserver cloudflare connect)
+  cloudflare_args=(singleserver connect cloudflare)
   if [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
     cloudflare_args+=(--account "$CLOUDFLARE_ACCOUNT_ID")
   fi

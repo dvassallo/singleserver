@@ -214,7 +214,7 @@ func TestDeployOutputHelpers(t *testing.T) {
 	}
 }
 
-func TestRenderDeployIncludesServerSideEnvSecrets(t *testing.T) {
+func TestInspectIncludesServerSideEnvSecrets(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "apps.yml")
 	t.Setenv("SINGLESERVER_CONFIG", configPath)
@@ -227,7 +227,7 @@ func TestRenderDeployIncludesServerSideEnvSecrets(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := cliRenderDeploy([]string{"fullsend"}, &out); err != nil {
+	if err := cliInspect([]string{"fullsend"}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "secret:\n    - DATABASE_URL") {
