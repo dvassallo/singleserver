@@ -12,7 +12,7 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
     <link rel="manifest" href="/site.webmanifest">
     <meta name="theme-color" content="#ffffff">
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="preload" href="../fonts/space-grotesk.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="../style.css">
     <script src="../script.js" defer></script>
 </head>
@@ -62,7 +62,7 @@
             <div>
                 <p class="step-title">Run the interactive installer.</p>
                 <div class="code-wrapper">
-                    <pre class="code-block">curl -fsSL https://singleserver.com/install.sh | sh</pre>
+                    <pre class="code-block">curl -fsSL <span class="accent">https://singleserver.com/install.sh</span> | sh</pre>
                     <button class="copy-btn" aria-label="Copy to clipboard">
                         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
                     </button>
@@ -71,7 +71,7 @@
             <div>
                 <p class="step-title">Add an app.</p>
                 <div class="code-wrapper">
-                    <pre class="code-block">singleserver add https://github.com/you/your-app</pre>
+                    <pre class="code-block">singleserver add <span class="accent">https://github.com/you/your-app</span></pre>
                     <button class="copy-btn" aria-label="Copy to clipboard">
                         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
                     </button>
@@ -220,7 +220,7 @@
             <div class="command" id="cmd-install">
                 <h4>Install or upgrade everything</h4>
                 <div class="code-wrapper">
-                    <pre class="code-block">curl -fsSL https://singleserver.com/install.sh | sh</pre>
+                    <pre class="code-block">curl -fsSL <span class="accent">https://singleserver.com/install.sh</span> | sh</pre>
                 </div>
                 <p>Installs Docker, Kamal, Tailscale, cloudflared, sqlite3, the <code>singleserver</code> binary, the systemd daemon, a local Docker registry, and a <code>deploy</code> user for Kamal. Then it runs first-run setup: connecting Tailscale, Cloudflare, and GitHub, and finishing with <code>doctor</code>. Rerunning it is safe; it skips what is already done.</p>
                 <ul class="option-list">
@@ -275,7 +275,7 @@ singleserver connect github</pre>
             <div class="command" id="cmd-add">
                 <h4>Add an app</h4>
                 <div class="code-wrapper">
-                    <pre class="code-block">singleserver add https://github.com/owner/repo [options]</pre>
+                    <pre class="code-block">singleserver add <span class="accent">https://github.com/owner/repo</span> [options]</pre>
                 </div>
                 <p>Adds a repository, verifies the GitHub App can reach it, writes the entry to <code>apps.yml</code>, wires up any domains, deploys the current branch tip, and runs <code>doctor</code>. In an interactive session it asks only the questions it cannot answer itself, then prints the equivalent flag-based command with <code>--non-interactive</code>.</p>
                 <ul class="option-list">
@@ -464,7 +464,7 @@ singleserver env unset &lt;app&gt; KEY [--non-interactive]</pre>
     install: npm ci
     build: npm run build
     static_dir: dist
-    healthcheck: https://app.example.com/up
+    healthcheck: <span class="accent">https://app.example.com/up</span>
     storage:
       mount: /storage</pre>
             <button class="copy-btn" aria-label="Copy to clipboard">
@@ -493,14 +493,14 @@ singleserver env unset &lt;app&gt; KEY [--non-interactive]</pre>
         <p>A repo with a Dockerfile is always used as-is, no questions asked. For everything else, Single Server generates a Dockerfile from your explicit settings at deploy time, uses it for the build, and deletes it afterward. Nothing is committed to your repo. Three shapes are supported.</p>
         <div class="code-wrapper">
             <pre class="code-block"><span class="muted"># Static files, already built. nginx serves them.</span>
-singleserver add https://github.com/you/site --runtime static --static-dir dist
+singleserver add <span class="accent">https://github.com/you/site</span> --runtime static --static-dir dist
 
 <span class="muted"># A build step that outputs static files. Build with Node, serve with nginx.</span>
-singleserver add https://github.com/you/site --runtime node --install "npm ci" \
+singleserver add <span class="accent">https://github.com/you/site</span> --runtime node --install "npm ci" \
   --build "npm run build" --static-dir dist
 
 <span class="muted"># A long-running web process.</span>
-singleserver add https://github.com/you/app --runtime bun --install "bun install" \
+singleserver add <span class="accent">https://github.com/you/app</span> --runtime bun --install "bun install" \
   --start "bun run start" --app-port 3000</pre>
             <button class="copy-btn" aria-label="Copy to clipboard">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
@@ -552,20 +552,56 @@ singleserver add https://github.com/you/app --runtime bun --install "bun install
     <section id="files">
         <h2>Files on your server</h2>
         <p>No hidden state. Everything Single Server knows is in plain files you can read, back up, or move to a new box.</p>
-        <ul class="settings-list">
-            <li><strong><code>/etc/singleserver/apps.yml</code></strong>The app allowlist and all app config.</li>
-            <li><strong><code>/etc/singleserver/singleserver.env</code></strong>Daemon environment: local port, public Funnel URL, setup token.</li>
-            <li><strong><code>/etc/singleserver/env/&lt;app&gt;.env</code></strong>Per-app env vars and secrets, injected on deploy.</li>
-            <li><strong><code>/etc/singleserver/github-app.json</code></strong>GitHub App ID, slug, and webhook secret.</li>
-            <li><strong><code>/etc/singleserver/github-app.private-key.pem</code></strong>GitHub App private key, used to mint short-lived repo tokens.</li>
-            <li><strong><code>/etc/singleserver/tailscale.json</code></strong>Tailscale hostname and Funnel URL.</li>
-            <li><strong><code>/etc/singleserver/cloudflare.json</code></strong>Cloudflare account, tunnel, and token state.</li>
-            <li><strong><code>/etc/cloudflared/singleserver.yml</code></strong>Tunnel ingress routes, one per app domain.</li>
-            <li><strong><code>/srv/repos/&lt;app&gt;</code></strong>Git checkout per app, reset to the exact pushed commit on every deploy.</li>
-            <li><strong><code>/srv/storage/&lt;app&gt;</code></strong>Persistent app storage, mounted into the container.</li>
-            <li><strong><code>/srv/backups/&lt;app&gt;</code></strong>Timestamped storage backups.</li>
-            <li><strong><code>journalctl -u singleserver.service</code></strong>Daemon and deploy logs, also reachable through <code>singleserver logs</code>.</li>
-        </ul>
+        <table class="files-table">
+            <tr>
+                <td>/etc/singleserver/apps.yml</td>
+                <td>The app allowlist and all app config.</td>
+            </tr>
+            <tr>
+                <td>/etc/singleserver/singleserver.env</td>
+                <td>Daemon environment: local port, public Funnel URL, setup token.</td>
+            </tr>
+            <tr>
+                <td>/etc/singleserver/env/&lt;app&gt;.env</td>
+                <td>Per-app env vars and secrets, injected on deploy.</td>
+            </tr>
+            <tr>
+                <td>/etc/singleserver/github.json</td>
+                <td>GitHub App ID, slug, and webhook secret.</td>
+            </tr>
+            <tr>
+                <td>/etc/singleserver/github.private-key.pem</td>
+                <td>GitHub App private key, used to mint short-lived repo tokens.</td>
+            </tr>
+            <tr>
+                <td>/etc/singleserver/tailscale.json</td>
+                <td>Tailscale hostname and Funnel URL.</td>
+            </tr>
+            <tr>
+                <td>/etc/singleserver/cloudflare.json</td>
+                <td>Cloudflare account, tunnel, and token state.</td>
+            </tr>
+            <tr>
+                <td>/etc/cloudflared/singleserver.yml</td>
+                <td>Tunnel ingress routes, one per app domain.</td>
+            </tr>
+            <tr>
+                <td>/srv/repos/&lt;app&gt;</td>
+                <td>Git checkout per app, reset to the exact pushed commit on every deploy.</td>
+            </tr>
+            <tr>
+                <td>/srv/storage/&lt;app&gt;</td>
+                <td>Persistent app storage, mounted into the container.</td>
+            </tr>
+            <tr>
+                <td>/srv/backups/&lt;app&gt;</td>
+                <td>Timestamped storage backups.</td>
+            </tr>
+            <tr>
+                <td>journalctl -u singleserver.service</td>
+                <td>Daemon and deploy logs, also reachable through <code>singleserver logs</code>.</td>
+            </tr>
+        </table>
     </section>
 
     <section id="troubleshooting">

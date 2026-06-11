@@ -58,3 +58,37 @@ document.querySelectorAll('.copy-btn').forEach((btn) => {
         }
     });
 });
+
+const TOKEN_RULES = new RegExp(
+    [
+        '(#[^\n]*)',                       // 1 comment
+        '(https?://[^\\s<>"\')]+)',      // 2 url
+        '(--[a-z][\\w-]*)',               // 3 flag
+        '([A-Z][A-Z0-9_]{2,}(?==))',        // 4 env key
+        '(^[ \\t-]*[a-z_]+(?=:))',        // 5 yaml key
+        '(<[^<>\\n]+>)',                  // 6 required placeholder
+        '(\\[[^\\]\\n]+\\])',       // 7 optional placeholder
+    ].join('|'),
+    'gm'
+);
+
+const TOKEN_CLASSES = ['', 'tok-comment', 'tok-url', 'tok-flag', 'tok-flag', 'tok-key', 'tok-ph', 'tok-ph'];
+
+const escapeHTML = (value) => value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+
+document.querySelectorAll('.code-block').forEach((block) => {
+    const source = block.textContent;
+    let out = '';
+    let last = 0;
+    for (const match of source.matchAll(TOKEN_RULES)) {
+        const group = match.findIndex((value, index) => index > 0 && value !== undefined);
+        out += escapeHTML(source.slice(last, match.index));
+        out += '<span class="' + TOKEN_CLASSES[group] + '">' + escapeHTML(match[0]) + '</span>';
+        last = match.index + match[0].length;
+    }
+    out += escapeHTML(source.slice(last));
+    block.innerHTML = out;
+});

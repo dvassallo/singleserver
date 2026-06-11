@@ -12,7 +12,7 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
     <link rel="manifest" href="/site.webmanifest">
     <meta name="theme-color" content="#ffffff">
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="preload" href="fonts/space-grotesk.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="style.css">
     <script src="script.js" defer></script>
 </head>
@@ -50,7 +50,7 @@
             </div>
 
             <div class="command-item">
-                <p class="step-desc">Run the interactive installer. It sets up everything you would otherwise configure by hand:</p>
+                <p class="step-desc">Run the interactive installer:</p>
                 <div class="code-wrapper">
                     <code class="code-block">curl -fsSL <span class="accent">https://singleserver.com/install.sh</span> | sh</code>
                     <button class="copy-btn" aria-label="Copy to clipboard">

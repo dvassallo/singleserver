@@ -1,5 +1,22 @@
 /* Single Server site styles: shared base, then page-scoped sections. */
 
+/* Font */
+
+@font-face {
+    font-family: 'Space Grotesk';
+    font-style: normal;
+    font-weight: 300 700;
+    font-display: swap;
+    src: url('fonts/space-grotesk.woff2') format('woff2');
+}
+
+/* Arial, width-matched to Space Grotesk so a late font swap doesn't reflow */
+@font-face {
+    font-family: 'Space Grotesk Fallback';
+    src: local('Arial');
+    size-adjust: 106%;
+}
+
 /* Tokens and reset */
 
 :root {
@@ -17,7 +34,7 @@ html { scroll-behavior: smooth; }
 /* Base */
 
 body {
-    font-family: 'Space Grotesk', system-ui, sans-serif;
+    font-family: 'Space Grotesk', 'Space Grotesk Fallback', system-ui, sans-serif;
     line-height: 1.5;
     padding: 40px 20px;
     color: var(--ink);
@@ -204,8 +221,16 @@ h3::before,
     line-height: 1.6;
 }
 
-.code-block .accent { color: var(--secondary); }
-.code-block .muted { color: #888; }
+.code-block .accent,
+.code-block .tok-url,
+.code-block .tok-key { color: var(--secondary); }
+
+.code-block .muted,
+.code-block .tok-comment { color: #888; }
+
+.code-block .tok-flag { color: var(--tertiary); }
+
+.code-block .tok-ph { color: #969696; }
 
 .copy-btn {
     position: absolute;
@@ -426,7 +451,7 @@ footer a:hover { border-color: var(--secondary); }
 .toc {
     float: right;
     width: 225px;
-    margin: 8px 0 24px 32px;
+    margin: 38px 0 24px 32px;
     border: 2px solid var(--ink);
     box-shadow: 5px 5px 0 var(--highlight);
     padding: 14px 16px;
@@ -439,11 +464,11 @@ footer a:hover { border-color: var(--secondary); }
 .toc-label {
     font-weight: 700;
     text-transform: uppercase;
-    font-size: 0.85rem;
+    font-size: 1.05rem;
     letter-spacing: 0.04em;
     border-bottom: 3px solid var(--primary);
     align-self: flex-start;
-    margin-bottom: 4px;
+    margin-bottom: 6px;
 }
 
 .toc a {
@@ -636,6 +661,30 @@ footer a:hover { border-color: var(--secondary); }
     color: var(--ink);
 }
 
+.files-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 18px;
+    border-top: 2px solid var(--ink);
+}
+
+.files-table td {
+    border-bottom: 2px solid var(--highlight);
+    padding: 12px 0;
+    vertical-align: top;
+    font-size: 1rem;
+    line-height: 1.55;
+    color: #222;
+}
+
+.files-table td:first-child {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-weight: 700;
+    color: var(--ink);
+    white-space: nowrap;
+    padding-right: 28px;
+}
+
 /* Mobile */
 
 @media (max-width: 760px) {
@@ -698,6 +747,24 @@ footer a:hover { border-color: var(--secondary); }
     .command-index-label {
         flex: 0 0 auto;
         margin-top: 0;
+    }
+
+    .files-table tr {
+        display: block;
+        border-bottom: 2px solid var(--highlight);
+        padding: 12px 0;
+    }
+
+    .files-table td {
+        display: block;
+        border: none;
+        padding: 0;
+    }
+
+    .files-table td:first-child {
+        white-space: normal;
+        overflow-wrap: anywhere;
+        margin-bottom: 3px;
     }
 }
 
