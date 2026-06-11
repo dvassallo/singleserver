@@ -452,16 +452,16 @@ connect_cloudflare() {
 connect_github_app() {
   log "Writing GitHub App credentials for $CONTAINER"
   container_exec mkdir -p /etc/singleserver
-  docker cp "$GITHUB_APP_PRIVATE_KEY_PATH" "$CONTAINER:/etc/singleserver/github-app.private-key.pem"
-  container_bash "chmod 600 /etc/singleserver/github-app.private-key.pem"
-  python3 - "$GITHUB_APP_ID" "$GITHUB_APP_SLUG" "$GITHUB_WEBHOOK_SECRET" <<'PY' | docker exec -i "$CONTAINER" tee /etc/singleserver/github-app.json >/dev/null
+  docker cp "$GITHUB_APP_PRIVATE_KEY_PATH" "$CONTAINER:/etc/singleserver/github.private-key.pem"
+  container_bash "chmod 600 /etc/singleserver/github.private-key.pem"
+  python3 - "$GITHUB_APP_ID" "$GITHUB_APP_SLUG" "$GITHUB_WEBHOOK_SECRET" <<'PY' | docker exec -i "$CONTAINER" tee /etc/singleserver/github.json >/dev/null
 import json
 import sys
 
 app_id, slug, secret = sys.argv[1:4]
 print(json.dumps({"app_id": int(app_id), "slug": slug, "webhook_secret": secret}, indent=2))
 PY
-  container_bash "chmod 600 /etc/singleserver/github-app.json && systemctl restart singleserver.service"
+  container_bash "chmod 600 /etc/singleserver/github.json && systemctl restart singleserver.service"
   wait_for_funnel_health
 
   log "Updating GitHub App webhook URL"

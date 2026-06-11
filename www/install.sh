@@ -346,7 +346,7 @@ has_public_url() {
 }
 
 github_connected() {
-  [ -f /etc/singleserver/github-app.json ] && [ -f /etc/singleserver/github-app.private-key.pem ]
+  [ -f /etc/singleserver/github.json ] && [ -f /etc/singleserver/github.private-key.pem ]
 }
 
 wait_for_github_setup() {

@@ -118,7 +118,7 @@ func (c *GitHubClient) LoadSecrets() (*GitHubAppSecrets, error) {
 		return &GitHubAppSecrets{AppID: appID, WebhookSecret: webhookSecretFromEnv}, nil
 	}
 
-	body, err := os.ReadFile(filepath.Join(c.stateDir, "github-app.json"))
+	body, err := os.ReadFile(filepath.Join(c.stateDir, "github.json"))
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +127,7 @@ func (c *GitHubClient) LoadSecrets() (*GitHubAppSecrets, error) {
 		return nil, err
 	}
 	if secrets.AppID == 0 || secrets.WebhookSecret == "" {
-		return nil, errors.New("github-app.json is missing app_id or webhook_secret")
+		return nil, errors.New("github.json is missing app_id or webhook_secret")
 	}
 	return &secrets, nil
 }
@@ -297,7 +297,7 @@ func (c *GitHubClient) ConvertManifestCode(code string) (*GitHubAppSecrets, stri
 	if err := os.MkdirAll(c.stateDir, 0700); err != nil {
 		return nil, "", err
 	}
-	privateKeyPath := filepath.Join(c.stateDir, "github-app.private-key.pem")
+	privateKeyPath := filepath.Join(c.stateDir, "github.private-key.pem")
 	if err := os.WriteFile(privateKeyPath, []byte(response.PEM), 0600); err != nil {
 		return nil, "", err
 	}
@@ -308,7 +308,7 @@ func (c *GitHubClient) ConvertManifestCode(code string) (*GitHubAppSecrets, stri
 		WebhookSecret: response.WebhookSecret,
 	}
 	body, _ := json.MarshalIndent(secrets, "", "  ")
-	if err := os.WriteFile(filepath.Join(c.stateDir, "github-app.json"), append(body, '\n'), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(c.stateDir, "github.json"), append(body, '\n'), 0600); err != nil {
 		return nil, "", err
 	}
 
@@ -327,7 +327,7 @@ func (c *GitHubClient) loadPrivateKey() (*rsa.PrivateKey, error) {
 	} else {
 		privateKeyPath := strings.TrimSpace(os.Getenv("SINGLESERVER_GITHUB_PRIVATE_KEY_PATH"))
 		if privateKeyPath == "" {
-			privateKeyPath = filepath.Join(c.stateDir, "github-app.private-key.pem")
+			privateKeyPath = filepath.Join(c.stateDir, "github.private-key.pem")
 		}
 		body, err := os.ReadFile(privateKeyPath)
 		if err != nil {

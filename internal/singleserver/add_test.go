@@ -96,14 +96,14 @@ func TestEnsureGitHubSetupReadyExplainsMissingSetup(t *testing.T) {
 	if !strings.Contains(text, "GitHub is not connected yet") || !strings.Contains(text, "singleserver connect github") {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if strings.Contains(text, "github-app.json") {
+	if strings.Contains(text, "github.json") {
 		t.Fatalf("raw file error leaked: %v", err)
 	}
 }
 
 func TestEnsureGitHubSetupReadyExplainsIncompleteSetup(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "github-app.json"), []byte(`{"app_id":123,"webhook_secret":"secret"}`), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "github.json"), []byte(`{"app_id":123,"webhook_secret":"secret"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 

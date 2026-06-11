@@ -221,18 +221,18 @@ fi
 echo
 echo "Waiting for GitHub App credentials to be written inside the container..."
 for _ in $(seq 1 600); do
-  if docker exec "$CONTAINER" test -s /etc/singleserver/github-app.json \
-    && docker exec "$CONTAINER" test -s /etc/singleserver/github-app.private-key.pem; then
+  if docker exec "$CONTAINER" test -s /etc/singleserver/github.json \
+    && docker exec "$CONTAINER" test -s /etc/singleserver/github.private-key.pem; then
     break
   fi
   sleep 2
 done
 
-docker exec "$CONTAINER" test -s /etc/singleserver/github-app.json
-docker exec "$CONTAINER" test -s /etc/singleserver/github-app.private-key.pem
+docker exec "$CONTAINER" test -s /etc/singleserver/github.json
+docker exec "$CONTAINER" test -s /etc/singleserver/github.private-key.pem
 
-docker cp "$CONTAINER:/etc/singleserver/github-app.json" "$CREDS_DIR/github-app.json"
-docker cp "$CONTAINER:/etc/singleserver/github-app.private-key.pem" "$CREDS_DIR/github-app.private-key.pem"
+docker cp "$CONTAINER:/etc/singleserver/github.json" "$CREDS_DIR/github-app.json"
+docker cp "$CONTAINER:/etc/singleserver/github.private-key.pem" "$CREDS_DIR/github-app.private-key.pem"
 chmod 600 "$CREDS_DIR/github-app.private-key.pem"
 
 app_id="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["app_id"])' "$CREDS_DIR/github-app.json")"

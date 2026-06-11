@@ -91,7 +91,7 @@ func TestDoctorGitHubSetupFailsWithConfiguredApps(t *testing.T) {
 
 func TestDoctorGitHubSetupOK(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "github-app.json"), []byte(`{"app_id":123,"slug":"single-server-test","webhook_secret":"secret"}`), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "github.json"), []byte(`{"app_id":123,"slug":"single-server-test","webhook_secret":"secret"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -99,7 +99,7 @@ func TestDoctorGitHubSetupOK(t *testing.T) {
 		t.Fatal(err)
 	}
 	pemBody := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
-	if err := os.WriteFile(filepath.Join(dir, "github-app.private-key.pem"), pemBody, 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "github.private-key.pem"), pemBody, 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -116,7 +116,7 @@ func TestDoctorGitHubSetupOK(t *testing.T) {
 
 func TestDoctorGitHubSetupFailsWhenWebhookTargetsDifferentServer(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "github-app.json"), []byte(`{"app_id":123,"slug":"single-server-test","webhook_secret":"secret"}`), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "github.json"), []byte(`{"app_id":123,"slug":"single-server-test","webhook_secret":"secret"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -124,7 +124,7 @@ func TestDoctorGitHubSetupFailsWhenWebhookTargetsDifferentServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	pemBody := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
-	if err := os.WriteFile(filepath.Join(dir, "github-app.private-key.pem"), pemBody, 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "github.private-key.pem"), pemBody, 0600); err != nil {
 		t.Fatal(err)
 	}
 
