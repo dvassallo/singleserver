@@ -5,11 +5,13 @@ RUN apk add --no-cache git
 WORKDIR /src
 
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
 
 COPY . .
 
-RUN set -eux; \
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    set -eux; \
     mkdir -p /out/www/bin; \
     cp -R www/. /out/www/; \
     commit="$(git rev-parse HEAD 2>/dev/null || true)"; \
