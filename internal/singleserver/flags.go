@@ -110,3 +110,7 @@ func normalizeFlagArgs(args []string, takesValue func(string) bool) []string {
 	}
 	return append(flags, positionals...)
 }
+
+func noFlagValues(string) bool {
+	return false
+}
