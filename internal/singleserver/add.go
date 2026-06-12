@@ -71,6 +71,7 @@ type addAppEntry struct {
 	staticDir       string
 	appPort         int
 	appPortSet      bool
+	deployTimeout   string
 	storage         *StorageConfig
 }
 
@@ -550,6 +551,7 @@ func (o addOptions) app() (AppConfig, addAppEntry, error) {
 		BuildCommand:    o.buildCommand,
 		StartCommand:    o.startCommand,
 		StaticDir:       o.staticDir,
+		DeployTimeout:   o.deployTimeout,
 		AppPortSet:      o.appPortSet,
 	}
 	if o.appPortSet {
@@ -570,6 +572,7 @@ func (o addOptions) app() (AppConfig, addAppEntry, error) {
 		staticDir:       app.StaticDir,
 		appPort:         app.AppPort,
 		appPortSet:      o.appPortSet,
+		deployTimeout:   app.DeployTimeout,
 	}
 	if strings.TrimSpace(o.name) != "" {
 		entry.name = app.Name
@@ -690,6 +693,9 @@ func (e addAppEntry) yamlNode() *yaml.Node {
 	if e.appPortSet {
 		appendScalarPair(node, "app_port", strconv.Itoa(e.appPort))
 	}
+	if e.deployTimeout != "" {
+		appendScalarPair(node, "deploy_timeout", e.deployTimeout)
+	}
 	if e.storage != nil {
 		storageNode := &yaml.Node{Kind: yaml.MappingNode}
 		if e.storage.Path != "" {
@@ -716,6 +722,7 @@ func (e addAppEntry) isScalar() bool {
 		e.startCommand == "" &&
 		!shouldWriteStaticDir(e.runtime, e.staticDir) &&
 		!e.appPortSet &&
+		e.deployTimeout == "" &&
 		e.storage == nil
 }
 

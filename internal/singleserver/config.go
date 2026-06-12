@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -36,6 +37,7 @@ type AppConfig struct {
 	BuildCommand    string         `yaml:"build,omitempty"`
 	StartCommand    string         `yaml:"start,omitempty"`
 	StaticDir       string         `yaml:"static_dir,omitempty"`
+	DeployTimeout   string         `yaml:"deploy_timeout,omitempty"`
 	Storage         *StorageConfig `yaml:"storage,omitempty"`
 	SecretEnvKeys   []string       `yaml:"-"`
 }
@@ -89,6 +91,16 @@ func (a *AppConfig) Normalize() error {
 	a.BuildCommand = strings.TrimSpace(a.BuildCommand)
 	a.StartCommand = strings.TrimSpace(a.StartCommand)
 	a.StaticDir = strings.TrimSpace(a.StaticDir)
+	a.DeployTimeout = strings.TrimSpace(a.DeployTimeout)
+	if a.DeployTimeout != "" {
+		parsed, err := time.ParseDuration(a.DeployTimeout)
+		if err != nil {
+			return fmt.Errorf("invalid deploy_timeout for %s: %q", a.Repo, a.DeployTimeout)
+		}
+		if parsed <= 0 {
+			return fmt.Errorf("deploy_timeout for %s must be positive: %q", a.Repo, a.DeployTimeout)
+		}
+	}
 	if a.AppPort == 0 {
 		a.AppPort = 80
 	}
@@ -142,6 +154,15 @@ func (a *AppConfig) Normalize() error {
 		}
 	}
 	return nil
+}
+
+const defaultDeployTimeout = 10 * time.Minute
+
+func (a AppConfig) DeployTimeoutDuration() time.Duration {
+	if parsed, err := time.ParseDuration(a.DeployTimeout); err == nil && parsed > 0 {
+		return parsed
+	}
+	return defaultDeployTimeout
 }
 
 func reposRoot() string {

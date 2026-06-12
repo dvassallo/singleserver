@@ -61,6 +61,7 @@ func appConfigEntry(app AppConfig) addAppEntry {
 		staticDir:       app.StaticDir,
 		appPort:         app.AppPort,
 		appPortSet:      app.AppPortSet || (app.AppPort != 0 && app.AppPort != 80),
+		deployTimeout:   app.DeployTimeout,
 		storage:         app.Storage,
 	}
 	repoName := ""

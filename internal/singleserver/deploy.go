@@ -118,7 +118,7 @@ func (m *DeployManager) runKamal(req DeployRequest, token string) (DeployTiming,
 		return DeployTiming{}, err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), req.App.DeployTimeoutDuration())
 	defer cancel()
 
 	command := exec.CommandContext(ctx, "bash", "-lc", kamalDeployScript)
@@ -141,7 +141,7 @@ func (m *DeployManager) runKamal(req DeployRequest, token string) (DeployTiming,
 	start := time.Now()
 	err = command.Run()
 	if ctx.Err() == context.DeadlineExceeded {
-		return DeployTiming{}, fmt.Errorf("deploy timed out")
+		return DeployTiming{}, fmt.Errorf("deploy timed out after %s", req.App.DeployTimeoutDuration())
 	}
 	if err != nil {
 		return DeployTiming{}, err

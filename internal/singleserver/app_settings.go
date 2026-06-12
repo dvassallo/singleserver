@@ -15,6 +15,7 @@ type appSettings struct {
 	buildCommand    string
 	startCommand    string
 	staticDir       string
+	deployTimeout   string
 	appPort         int
 
 	branchSet          bool
@@ -25,6 +26,7 @@ type appSettings struct {
 	buildSet           bool
 	startSet           bool
 	staticDirSet       bool
+	deployTimeoutSet   bool
 	appPortSet         bool
 }
 
@@ -37,6 +39,7 @@ func bindAppSettingsFlags(fs *flag.FlagSet, settings *appSettings) *int {
 	fs.StringVar(&settings.buildCommand, "build", "", "build command for generated Node/Bun Dockerfile")
 	fs.StringVar(&settings.startCommand, "start", "", "start command for generated Node/Bun Dockerfile")
 	fs.StringVar(&settings.staticDir, "static-dir", "", "static output directory for generated Dockerfile")
+	fs.StringVar(&settings.deployTimeout, "deploy-timeout", "", "deploy timeout, a Go duration like 20m")
 	return fs.Int("app-port", 0, "container app port for generated Kamal config")
 }
 
@@ -58,6 +61,8 @@ func noteAppSettingsFlag(settings *appSettings, name string) {
 		settings.startSet = true
 	case "static-dir":
 		settings.staticDirSet = true
+	case "deploy-timeout":
+		settings.deployTimeoutSet = true
 	case "app-port":
 		settings.appPortSet = true
 	}
@@ -69,7 +74,7 @@ func appSettingsFlagTakesValue(arg string) bool {
 		name = before
 	}
 	switch name {
-	case "branch", "healthcheck", "healthcheck-path", "runtime", "install", "build", "start", "static-dir", "app-port":
+	case "branch", "healthcheck", "healthcheck-path", "runtime", "install", "build", "start", "static-dir", "deploy-timeout", "app-port":
 		return true
 	default:
 		return false
@@ -103,6 +108,9 @@ func appendAppSettingsFlags(parts []string, settings appSettings, onlySet bool) 
 	}
 	if settings.appPortSet {
 		appendFlagValue("--app-port", strconv.Itoa(settings.appPort))
+	}
+	if !onlySet || settings.deployTimeoutSet {
+		appendFlagValue("--deploy-timeout", settings.deployTimeout)
 	}
 	if settings.healthcheckPathSet {
 		appendFlagValue("--healthcheck-path", settings.healthcheckPath)
@@ -152,6 +160,9 @@ func applyAppSettings(app AppConfig, settings appSettings, dockerfile bool, noHe
 	}
 	if settings.healthcheckPathSet {
 		app.HealthcheckPath = settings.healthcheckPath
+	}
+	if settings.deployTimeoutSet {
+		app.DeployTimeout = settings.deployTimeout
 	}
 	if noHealthcheck {
 		app.Healthcheck = ""

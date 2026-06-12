@@ -41,6 +41,7 @@
             <a href="#contract">The app contract</a>
             <a href="#files">Files on your server</a>
             <a href="#troubleshooting">When something breaks</a>
+            <a href="#faq">FAQ</a>
         </nav>
         <p class="lede">Single Server turns one Linux box into the place where all your apps live. This page covers everything it does on your behalf and every command you might use. The commands are few and the conventions are predictable, so most of this you'll read once and never need again.</p>
     </header>
@@ -165,7 +166,7 @@
             </div>
         </div>
 
-        <p>Deploys for the same app run one at a time, in order, so rapid pushes queue up. The first deploy of an app runs <code>kamal setup</code>; every deploy after that runs <code>kamal redeploy</code>. A deploy that exceeds 10 minutes is killed and reported as failed. And if the app has an external healthcheck URL configured, Single Server polls it after the rollout and fails the deploy if it never comes up.</p>
+        <p>Deploys for the same app run one at a time, in order, so rapid pushes queue up. The first deploy of an app runs <code>kamal setup</code>; every deploy after that runs <code>kamal redeploy</code>. A deploy that runs past its timeout, 10 minutes by default, is killed and reported as failed; apps with heavier builds can raise <code>deploy_timeout</code>. And if the app has an external healthcheck URL configured, Single Server polls it after the rollout and fails the deploy if it never comes up.</p>
         <p>Manual deploys go through exactly the same path. <code>singleserver deploy</code> exists for redeploys, rollbacks, and staged changes, not as a separate mechanism.</p>
     </section>
 
@@ -288,6 +289,7 @@ singleserver connect github</pre>
                     <li><code>--static-dir &lt;dir&gt;</code> <span class="opt-badge">Default: .</span><span>Directory of static files to serve with nginx, relative to the repo.</span></li>
                     <li><code>--healthcheck-path &lt;path&gt;</code> <span class="opt-badge">Default: / (static: /up)</span><span>Path Kamal polls to decide the new container is ready.</span></li>
                     <li><code>--healthcheck &lt;url&gt;</code><span>Optional public URL checked after each deploy and by status and doctor.</span></li>
+                    <li><code>--deploy-timeout &lt;duration&gt;</code> <span class="opt-badge">Default: 10m</span><span>How long the deploy may run before it is killed, as a Go duration such as <code>20m</code>.</span></li>
                     <li><code>--no-deploy</code><span>Write the config but wait for the next push or a manual deploy.</span></li>
                     <li><code>--non-interactive</code><span>Never prompt. Required values must be supplied as arguments or flags.</span></li>
                 </ul>
@@ -304,6 +306,7 @@ singleserver connect github</pre>
                     <li><code>--runtime static|node|bun</code><span>Switch to a generated Dockerfile, with the same companion flags as <code>add</code>.</span></li>
                     <li><code>--branch &lt;name&gt;</code><span>Change which branch deploys automatically.</span></li>
                     <li><code>--healthcheck-path &lt;path&gt;</code><span>Change the container healthcheck path.</span></li>
+                    <li><code>--deploy-timeout &lt;duration&gt;</code> <span class="opt-badge">Default: 10m</span><span>Raise or lower the deploy timeout for this app.</span></li>
                     <li><code>--healthcheck &lt;url&gt;</code> / <code>--no-healthcheck</code><span>Set or clear the optional external healthcheck URL.</span></li>
                     <li><code>--no-deploy</code><span>Write the config change without applying it to the running app yet.</span></li>
                     <li><code>--non-interactive</code><span>Never open the editor. Missing settings are an error.</span></li>
@@ -486,6 +489,7 @@ singleserver env unset &lt;app&gt; KEY [--non-interactive]</pre>
             <li><strong><code>app_port</code></strong><span class="default">Default: <code>80</code>.</span> The container port that receives traffic. Required for generated Node/Bun processes; always <code>80</code> for static output.</li>
             <li><strong><code>healthcheck_path</code></strong><span class="default">Default: <code>/</code>, or <code>/up</code> for generated static output.</span> The path Kamal polls before flipping traffic to a new container.</li>
             <li><strong><code>healthcheck</code></strong><span class="default">Default: absent.</span> Optional external URL checked after deploys and by status and doctor. When absent, the external check is reported as assumed rather than failed.</li>
+            <li><strong><code>deploy_timeout</code></strong><span class="default">Default: 10m.</span> How long a deploy may run before it is killed and reported as failed. A Go duration such as <code>20m</code> or <code>90s</code>.</li>
             <li><strong><code>storage</code></strong><span class="default">Default: absent until enabled.</span> Persistent storage mapping, with optional <code>path</code> (host, default <code>/srv/storage/&lt;name&gt;</code>) and <code>mount</code> (container, default <code>/storage</code>).</li>
         </ul>
 
@@ -627,6 +631,16 @@ singleserver add <span class="accent">https://github.com/you/app</span> --runtim
             <div>
                 <strong>Going deeper.</strong>
                 <p>Everything underneath is standard and inspectable: <code>docker ps</code> for containers, <code>journalctl -u singleserver.service</code> for the daemon, and the tailscaled and cloudflared services log through systemd as usual. Whatever you find, you are debugging well-documented tools on a machine you fully control.</p>
+            </div>
+        </div>
+    </section>
+
+    <section id="faq">
+        <h2>FAQ</h2>
+        <div class="idea-list">
+            <div>
+                <strong>How long can a deploy take?</strong>
+                <p>10 minutes by default, covering the fetch, the image build, and the rollout. A deploy that runs past the limit is killed and reported as failed, and the running version keeps serving. Apps with heavier builds can raise it: set <code>deploy_timeout</code> in <code>apps.yml</code> to a Go duration such as <code>20m</code>, or pass <code>--deploy-timeout</code> to <code>add</code> or <code>edit</code>.</p>
             </div>
         </div>
     </section>
