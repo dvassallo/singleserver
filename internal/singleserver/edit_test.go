@@ -15,9 +15,9 @@ func TestCliEditUpdatesHealthcheckSettings(t *testing.T) {
 	configPath := filepath.Join(dir, "apps.yml")
 	t.Setenv("SINGLESERVER_CONFIG", configPath)
 	if err := os.WriteFile(configPath, []byte(`apps:
-  - repo: dvassallo/fullsend
+  - repo: acme/scoreboard
     hosts:
-      - fullsend.game
+      - scoreboard.example.com
 `), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -25,9 +25,9 @@ func TestCliEditUpdatesHealthcheckSettings(t *testing.T) {
 
 	var out bytes.Buffer
 	err := cliEdit([]string{
-		"https://github.com/dvassallo/fullsend",
+		"https://github.com/acme/scoreboard",
 		"--healthcheck-path", "/ready",
-		"--healthcheck", "https://fullsend.game/ready",
+		"--healthcheck", "https://scoreboard.example.com/ready",
 		"--no-deploy",
 	}, &out, log.New(io.Discard, "", 0))
 	if err != nil {
@@ -42,10 +42,10 @@ func TestCliEditUpdatesHealthcheckSettings(t *testing.T) {
 	if app.HealthcheckPath != "/ready" {
 		t.Fatalf("unexpected healthcheck path: %s", app.HealthcheckPath)
 	}
-	if app.Healthcheck != "https://fullsend.game/ready" {
+	if app.Healthcheck != "https://scoreboard.example.com/ready" {
 		t.Fatalf("unexpected healthcheck: %s", app.Healthcheck)
 	}
-	if !strings.Contains(out.String(), "fullsend\tconfig\tok") {
+	if !strings.Contains(out.String(), "scoreboard\tconfig\tok") {
 		t.Fatalf("expected config output:\n%s", out.String())
 	}
 }
@@ -55,7 +55,7 @@ func TestCliEditSwitchesToRepoDockerfile(t *testing.T) {
 	configPath := filepath.Join(dir, "apps.yml")
 	t.Setenv("SINGLESERVER_CONFIG", configPath)
 	if err := os.WriteFile(configPath, []byte(`apps:
-  - repo: smallbets/app
+  - repo: acme/app
     runtime: node
     install: npm ci
     build: npm run build
@@ -103,7 +103,7 @@ func TestCliEditSwitchesToGeneratedStatic(t *testing.T) {
 	configPath := filepath.Join(dir, "apps.yml")
 	t.Setenv("SINGLESERVER_CONFIG", configPath)
 	if err := os.WriteFile(configPath, []byte(`apps:
-  - repo: smallbets/site
+  - repo: acme/site
     app_port: 3000
     healthcheck_path: /ready
 `), 0600); err != nil {
@@ -147,7 +147,7 @@ func TestCliEditSwitchesToGeneratedStatic(t *testing.T) {
 
 func TestPromptEditOptionsSwitchesToDockerfile(t *testing.T) {
 	app := AppConfig{
-		Repo:           "smallbets/app",
+		Repo:           "acme/app",
 		Name:           "app",
 		Runtime:        "node",
 		InstallCommand: "npm ci",

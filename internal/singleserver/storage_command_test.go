@@ -17,20 +17,20 @@ func TestDomainsAndStorageCommandsUpdateConfig(t *testing.T) {
 	configPath := filepath.Join(dir, "apps.yml")
 	t.Setenv("SINGLESERVER_CONFIG", configPath)
 	stubCommandRun(t)
-	if err := os.WriteFile(configPath, []byte("apps:\n  - dvassallo/fullsend\n"), 0600); err != nil {
+	if err := os.WriteFile(configPath, []byte("apps:\n  - acme/scoreboard\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
 	var out bytes.Buffer
 	logger := log.New(io.Discard, "", 0)
-	if err := cliDomains([]string{"add", "fullsend", "play.nobrainer.host", "--no-deploy"}, &out, logger); err != nil {
+	if err := cliDomains([]string{"add", "scoreboard", "play.example.com", "--no-deploy"}, &out, logger); err != nil {
 		t.Fatal(err)
 	}
 	storagePath := filepath.Join(dir, "storage")
-	if err := cliStorage([]string{"enable", "fullsend", "--path", storagePath, "--mount", "/data", "--no-deploy"}, &out, logger); err != nil {
+	if err := cliStorage([]string{"enable", "scoreboard", "--path", storagePath, "--mount", "/data", "--no-deploy"}, &out, logger); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "fullsend\tnext\tpending\tdeploy with `singleserver deploy dvassallo/fullsend`") {
+	if !strings.Contains(out.String(), "scoreboard\tnext\tpending\tdeploy with `singleserver deploy acme/scoreboard`") {
 		t.Fatalf("expected staged deploy message, got:\n%s", out.String())
 	}
 
@@ -39,7 +39,7 @@ func TestDomainsAndStorageCommandsUpdateConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	app := config.Apps[0]
-	if len(app.Hosts) != 1 || app.Hosts[0] != "play.nobrainer.host" {
+	if len(app.Hosts) != 1 || app.Hosts[0] != "play.example.com" {
 		t.Fatalf("unexpected hosts: %#v", app.Hosts)
 	}
 	if app.Healthcheck != "" {
@@ -55,7 +55,7 @@ func TestStorageEnableFailsBeforeConfigWriteWhenOwnershipFixFails(t *testing.T) 
 	configPath := filepath.Join(dir, "apps.yml")
 	storagePath := filepath.Join(dir, "storage")
 	t.Setenv("SINGLESERVER_CONFIG", configPath)
-	if err := os.WriteFile(configPath, []byte("apps:\n  - dvassallo/fullsend\n"), 0600); err != nil {
+	if err := os.WriteFile(configPath, []byte("apps:\n  - acme/scoreboard\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -74,7 +74,7 @@ func TestStorageEnableFailsBeforeConfigWriteWhenOwnershipFixFails(t *testing.T) 
 
 	var out bytes.Buffer
 	logger := log.New(io.Discard, "", 0)
-	err := cliStorage([]string{"enable", "fullsend", "--path", storagePath, "--no-deploy", "--non-interactive"}, &out, logger)
+	err := cliStorage([]string{"enable", "scoreboard", "--path", storagePath, "--no-deploy", "--non-interactive"}, &out, logger)
 	if err == nil {
 		t.Fatal("expected chown error")
 	}
@@ -98,7 +98,7 @@ func TestStorageEnableReportsSuccessOnlyAfterConfigWrite(t *testing.T) {
 	storagePath := filepath.Join(dir, "storage")
 	t.Setenv("SINGLESERVER_CONFIG", configPath)
 	stubCommandRun(t)
-	if err := os.WriteFile(configPath, []byte("apps:\n  - dvassallo/fullsend\n"), 0600); err != nil {
+	if err := os.WriteFile(configPath, []byte("apps:\n  - acme/scoreboard\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -110,7 +110,7 @@ func TestStorageEnableReportsSuccessOnlyAfterConfigWrite(t *testing.T) {
 
 	var out bytes.Buffer
 	logger := log.New(io.Discard, "", 0)
-	err := cliStorage([]string{"enable", "fullsend", "--path", storagePath, "--no-deploy", "--non-interactive"}, &out, logger)
+	err := cliStorage([]string{"enable", "scoreboard", "--path", storagePath, "--no-deploy", "--non-interactive"}, &out, logger)
 	if err == nil {
 		t.Fatal("expected config write error")
 	}

@@ -18,8 +18,8 @@ import (
 
 func TestDoctorAppsReturnsAllWhenNoFilter(t *testing.T) {
 	apps := []AppConfig{
-		{Repo: "dvassallo/fullsend", Name: "fullsend"},
-		{Repo: "smallbets/userbase-homepage", Name: "userbase-homepage"},
+		{Repo: "acme/scoreboard", Name: "scoreboard"},
+		{Repo: "acme/marketing-site", Name: "marketing-site"},
 	}
 
 	got, err := doctorApps(apps, nil)
@@ -33,34 +33,34 @@ func TestDoctorAppsReturnsAllWhenNoFilter(t *testing.T) {
 
 func TestDoctorAppsFiltersByNameOrRepo(t *testing.T) {
 	apps := []AppConfig{
-		{Repo: "dvassallo/fullsend", Name: "fullsend"},
-		{Repo: "smallbets/userbase-homepage", Name: "userbase-homepage"},
+		{Repo: "acme/scoreboard", Name: "scoreboard"},
+		{Repo: "acme/marketing-site", Name: "marketing-site"},
 	}
 
-	byName, err := doctorApps(apps, []string{"fullsend"})
+	byName, err := doctorApps(apps, []string{"scoreboard"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(byName) != 1 || byName[0].Repo != "dvassallo/fullsend" {
+	if len(byName) != 1 || byName[0].Repo != "acme/scoreboard" {
 		t.Fatalf("unexpected app selected by name: %#v", byName)
 	}
 
-	byRepo, err := doctorApps(apps, []string{"smallbets/userbase-homepage"})
+	byRepo, err := doctorApps(apps, []string{"acme/marketing-site"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(byRepo) != 1 || byRepo[0].Name != "userbase-homepage" {
+	if len(byRepo) != 1 || byRepo[0].Name != "marketing-site" {
 		t.Fatalf("unexpected app selected by repo: %#v", byRepo)
 	}
 }
 
 func TestDoctorAppsRejectsUnknownAndExtraArgs(t *testing.T) {
-	apps := []AppConfig{{Repo: "dvassallo/fullsend", Name: "fullsend"}}
+	apps := []AppConfig{{Repo: "acme/scoreboard", Name: "scoreboard"}}
 
 	if _, err := doctorApps(apps, []string{"missing"}); err == nil {
 		t.Fatal("expected unknown app to fail")
 	}
-	if _, err := doctorApps(apps, []string{"fullsend", "extra"}); err == nil {
+	if _, err := doctorApps(apps, []string{"scoreboard", "extra"}); err == nil {
 		t.Fatal("expected extra args to fail")
 	}
 }
@@ -212,17 +212,17 @@ func TestDoctorDeployConfigFailsOnInvalidServerSideEnv(t *testing.T) {
 	if err := os.MkdirAll(envDir, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(envDir, "fullsend.env"), []byte("not valid\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(envDir, "scoreboard.env"), []byte("not valid\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
 	var out bytes.Buffer
-	ok := doctorDeployConfig(&out, AppConfig{Repo: "dvassallo/fullsend", Name: "fullsend"})
+	ok := doctorDeployConfig(&out, AppConfig{Repo: "acme/scoreboard", Name: "scoreboard"})
 
 	if ok {
 		t.Fatal("expected invalid env file to fail deploy config check")
 	}
-	if !strings.Contains(out.String(), "fullsend\tdeploy_config\tfailed") {
+	if !strings.Contains(out.String(), "scoreboard\tdeploy_config\tfailed") {
 		t.Fatalf("expected deploy_config failure output, got:\n%s", out.String())
 	}
 	if !strings.Contains(out.String(), "invalid env line") {
@@ -252,21 +252,21 @@ func TestCloudflaredRoutes(t *testing.T) {
 }
 
 func TestAppsHaveHosts(t *testing.T) {
-	if appsHaveHosts([]AppConfig{{Repo: "dvassallo/fullsend", Name: "fullsend"}}) {
+	if appsHaveHosts([]AppConfig{{Repo: "acme/scoreboard", Name: "scoreboard"}}) {
 		t.Fatal("expected no hosts")
 	}
-	if !appsHaveHosts([]AppConfig{{Repo: "dvassallo/fullsend", Name: "fullsend", Hosts: []string{"fullsend.game"}}}) {
+	if !appsHaveHosts([]AppConfig{{Repo: "acme/scoreboard", Name: "scoreboard", Hosts: []string{"scoreboard.example.com"}}}) {
 		t.Fatal("expected hosts")
 	}
 }
 
 func TestExpectedCloudflaredHosts(t *testing.T) {
 	hosts := expectedCloudflaredHosts([]AppConfig{
-		{Repo: "dvassallo/fullsend", Name: "fullsend", Hosts: []string{"Fullsend.Game", "fullsend.assetstacks.com"}},
-		{Repo: "smallbets/userbase-homepage", Name: "userbase-homepage"},
+		{Repo: "acme/scoreboard", Name: "scoreboard", Hosts: []string{"Scoreboard.Example.Com", "scoreboard-alt.example.com"}},
+		{Repo: "acme/marketing-site", Name: "marketing-site"},
 	})
 
-	for _, host := range []string{"fullsend.game", "fullsend.assetstacks.com"} {
+	for _, host := range []string{"scoreboard.example.com", "scoreboard-alt.example.com"} {
 		if !hosts[host] {
 			t.Fatalf("expected host %s in %#v", host, hosts)
 		}
@@ -274,7 +274,7 @@ func TestExpectedCloudflaredHosts(t *testing.T) {
 	if hosts["admin.example.com"] {
 		t.Fatalf("unexpected unrelated host set: %#v", hosts)
 	}
-	if hosts["userbase.com"] {
+	if hosts["marketing.example.com"] {
 		t.Fatalf("unexpected host set: %#v", hosts)
 	}
 }
@@ -395,11 +395,11 @@ func TestFormatBytesGB(t *testing.T) {
 
 func TestLastDeployStatusFromJournalUsesMostRecentOutcome(t *testing.T) {
 	journal := `
-[deploy:fullsend-1] success total_ms=1200
-[deploy:userbase-homepage-1] success total_ms=900
-[deploy:fullsend-2] failed after 300ms: boom
+[deploy:scoreboard-1] success total_ms=1200
+[deploy:marketing-site-1] success total_ms=900
+[deploy:scoreboard-2] failed after 300ms: boom
 `
-	status, detail := lastDeployStatusFromJournal("fullsend", journal)
+	status, detail := lastDeployStatusFromJournal("scoreboard", journal)
 	if status != "failed" {
 		t.Fatalf("unexpected status: %s", status)
 	}
@@ -409,7 +409,7 @@ func TestLastDeployStatusFromJournalUsesMostRecentOutcome(t *testing.T) {
 }
 
 func TestLastDeployStatusFromJournalReportsUnknown(t *testing.T) {
-	status, detail := lastDeployStatusFromJournal("sillyface-games", "[server] ok")
+	status, detail := lastDeployStatusFromJournal("arcade-games", "[server] ok")
 	if status != "unknown" {
 		t.Fatalf("unexpected status: %s", status)
 	}

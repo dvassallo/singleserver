@@ -14,7 +14,7 @@ func TestRemoveRejectsRemovedYesFlag(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "apps.yml")
 	storagePath := filepath.Join(dir, "storage")
-	repoPath := filepath.Join(dir, "repos", "fullsend")
+	repoPath := filepath.Join(dir, "repos", "scoreboard")
 	t.Setenv("SINGLESERVER_CONFIG", configPath)
 	t.Setenv("SINGLESERVER_STATE_DIR", dir)
 	if err := os.MkdirAll(storagePath, 0700); err != nil {
@@ -24,7 +24,7 @@ func TestRemoveRejectsRemovedYesFlag(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(configPath, []byte(`apps:
-  - repo: dvassallo/fullsend
+  - repo: acme/scoreboard
     path: `+repoPath+`
     storage:
       path: `+storagePath+`
@@ -34,7 +34,7 @@ func TestRemoveRejectsRemovedYesFlag(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	err := cliRemove([]string{"fullsend", "--delete-storage", "--yes"}, &out)
+	err := cliRemove([]string{"scoreboard", "--delete-storage", "--yes"}, &out)
 	if err == nil || !strings.Contains(err.Error(), "--yes has been removed") {
 		t.Fatalf("expected removed --yes error, got %v", err)
 	}
@@ -59,9 +59,9 @@ func TestRemoveKeepsConfigWhenCloudflareFails(t *testing.T) {
 	t.Setenv("SINGLESERVER_CONFIG", configPath)
 	t.Setenv("SINGLESERVER_STATE_DIR", dir)
 	if err := os.WriteFile(configPath, []byte(`apps:
-  - repo: dvassallo/fullsend
+  - repo: acme/scoreboard
     hosts:
-      - play.nobrainer.host
+      - play.example.com
 `), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestRemoveKeepsConfigWhenCloudflareFails(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	err := cliRemove([]string{"fullsend", "--non-interactive"}, &out)
+	err := cliRemove([]string{"scoreboard", "--non-interactive"}, &out)
 	if err == nil {
 		t.Fatal("expected Cloudflare error")
 	}
@@ -91,7 +91,7 @@ func TestRemoveKeepsConfigWhenCloudflareFails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(config.Apps) != 1 || config.Apps[0].Repo != "dvassallo/fullsend" {
+	if len(config.Apps) != 1 || config.Apps[0].Repo != "acme/scoreboard" {
 		t.Fatalf("expected app config kept, got %#v", config.Apps)
 	}
 }
@@ -100,7 +100,7 @@ func TestRemoveKeepsFilesWhenContainerStopFails(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "apps.yml")
 	storagePath := filepath.Join(dir, "storage")
-	repoPath := filepath.Join(dir, "repos", "fullsend")
+	repoPath := filepath.Join(dir, "repos", "scoreboard")
 	t.Setenv("SINGLESERVER_CONFIG", configPath)
 	t.Setenv("SINGLESERVER_STATE_DIR", dir)
 	if err := os.MkdirAll(storagePath, 0700); err != nil {
@@ -110,7 +110,7 @@ func TestRemoveKeepsFilesWhenContainerStopFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(configPath, []byte(`apps:
-  - repo: dvassallo/fullsend
+  - repo: acme/scoreboard
     path: `+repoPath+`
     storage:
       path: `+storagePath+`
@@ -126,7 +126,7 @@ func TestRemoveKeepsFilesWhenContainerStopFails(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	err := cliRemove([]string{"fullsend", "--delete-storage", "--delete-repo", "--non-interactive"}, &out)
+	err := cliRemove([]string{"scoreboard", "--delete-storage", "--delete-repo", "--non-interactive"}, &out)
 	if err == nil {
 		t.Fatal("expected container stop error")
 	}
@@ -145,7 +145,7 @@ func TestRemoveDeleteStorageWithExplicitFlags(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "apps.yml")
 	storagePath := filepath.Join(dir, "storage")
-	repoPath := filepath.Join(dir, "repos", "fullsend")
+	repoPath := filepath.Join(dir, "repos", "scoreboard")
 	t.Setenv("SINGLESERVER_CONFIG", configPath)
 	t.Setenv("SINGLESERVER_STATE_DIR", dir)
 	if err := os.MkdirAll(storagePath, 0700); err != nil {
@@ -161,7 +161,7 @@ func TestRemoveDeleteStorageWithExplicitFlags(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(configPath, []byte(`apps:
-  - repo: dvassallo/fullsend
+  - repo: acme/scoreboard
     path: `+repoPath+`
     storage:
       path: `+storagePath+`
@@ -176,7 +176,7 @@ func TestRemoveDeleteStorageWithExplicitFlags(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := cliRemove([]string{"fullsend", "--delete-storage", "--delete-repo", "--non-interactive"}, &out); err != nil {
+	if err := cliRemove([]string{"scoreboard", "--delete-storage", "--delete-repo", "--non-interactive"}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(storagePath); !os.IsNotExist(err) {

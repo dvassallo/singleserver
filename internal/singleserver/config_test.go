@@ -11,14 +11,14 @@ func TestLoadConfigSupportsStringAndMapApps(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "apps.yml")
 	body := []byte(`apps:
-  - dvassallo/sillyface-games
-  - repo: dvassallo/fullsend
+  - acme/arcade-games
+  - repo: acme/scoreboard
     branch: master
-    healthcheck: https://fullsend.game/up
+    healthcheck: https://scoreboard.example.com/up
     hosts:
-      - fullsend.game
-      - fullsend.assetstacks.com
-      - fullsend.game
+      - scoreboard.example.com
+      - scoreboard-alt.example.com
+      - scoreboard.example.com
     app_port: 3000
     healthcheck_path: health
 `)
@@ -33,7 +33,7 @@ func TestLoadConfigSupportsStringAndMapApps(t *testing.T) {
 	if len(config.Apps) != 2 {
 		t.Fatalf("expected 2 apps, got %d", len(config.Apps))
 	}
-	if config.Apps[0].Name != "sillyface-games" {
+	if config.Apps[0].Name != "arcade-games" {
 		t.Fatalf("unexpected default app name: %s", config.Apps[0].Name)
 	}
 	if config.Apps[1].Branch != "master" {
@@ -51,12 +51,12 @@ func TestLoadConfigSupportsStringAndMapApps(t *testing.T) {
 }
 
 func TestAppForPushUsesDefaultBranch(t *testing.T) {
-	config := &Config{Apps: []AppConfig{{Repo: "dvassallo/sillyface-games", Name: "sillyface-games"}}}
+	config := &Config{Apps: []AppConfig{{Repo: "acme/arcade-games", Name: "arcade-games"}}}
 	payload := &PushPayload{
 		Ref:   "refs/heads/main",
 		After: "abc123",
 		Repository: Repo{
-			FullName:      "dvassallo/sillyface-games",
+			FullName:      "acme/arcade-games",
 			DefaultBranch: "main",
 		},
 	}
@@ -71,12 +71,12 @@ func TestAppForPushUsesDefaultBranch(t *testing.T) {
 }
 
 func TestAppForPushRequiresDefaultBranchWhenAppBranchUnset(t *testing.T) {
-	config := &Config{Apps: []AppConfig{{Repo: "dvassallo/sillyface-games", Name: "sillyface-games"}}}
+	config := &Config{Apps: []AppConfig{{Repo: "acme/arcade-games", Name: "arcade-games"}}}
 	payload := &PushPayload{
 		Ref:   "refs/heads/feature",
 		After: "abc123",
 		Repository: Repo{
-			FullName: "dvassallo/sillyface-games",
+			FullName: "acme/arcade-games",
 		},
 	}
 
@@ -93,43 +93,43 @@ func TestAppForPushRequiresDefaultBranchWhenAppBranchUnset(t *testing.T) {
 }
 
 func TestAppByRepoIsCaseInsensitive(t *testing.T) {
-	config := &Config{Apps: []AppConfig{{Repo: "dvassallo/fullsend", Name: "fullsend"}}}
-	app, ok := config.AppByRepo("DVASSALLO/FULLSEND")
+	config := &Config{Apps: []AppConfig{{Repo: "acme/scoreboard", Name: "scoreboard"}}}
+	app, ok := config.AppByRepo("ACME/SCOREBOARD")
 	if !ok {
 		t.Fatal("expected app")
 	}
-	if app.Name != "fullsend" {
+	if app.Name != "scoreboard" {
 		t.Fatalf("unexpected app: %s", app.Name)
 	}
 }
 
 func TestAppByNameIsCaseInsensitive(t *testing.T) {
-	config := &Config{Apps: []AppConfig{{Repo: "dvassallo/fullsend", Name: "fullsend"}}}
-	app, ok := config.AppByName("FULLSEND")
+	config := &Config{Apps: []AppConfig{{Repo: "acme/scoreboard", Name: "scoreboard"}}}
+	app, ok := config.AppByName("SCOREBOARD")
 	if !ok {
 		t.Fatal("expected app")
 	}
-	if app.Repo != "dvassallo/fullsend" {
+	if app.Repo != "acme/scoreboard" {
 		t.Fatalf("unexpected app: %s", app.Repo)
 	}
 }
 
 func TestAppByNameOrRepoMatchesEitherIdentifier(t *testing.T) {
-	config := &Config{Apps: []AppConfig{{Repo: "dvassallo/fullsend", Name: "fullsend"}}}
+	config := &Config{Apps: []AppConfig{{Repo: "acme/scoreboard", Name: "scoreboard"}}}
 
-	byName, ok := config.AppByNameOrRepo("FULLSEND")
+	byName, ok := config.AppByNameOrRepo("SCOREBOARD")
 	if !ok {
 		t.Fatal("expected app by name")
 	}
-	if byName.Repo != "dvassallo/fullsend" {
+	if byName.Repo != "acme/scoreboard" {
 		t.Fatalf("unexpected app by name: %s", byName.Repo)
 	}
 
-	byRepo, ok := config.AppByNameOrRepo("DVASSALLO/FULLSEND")
+	byRepo, ok := config.AppByNameOrRepo("ACME/SCOREBOARD")
 	if !ok {
 		t.Fatal("expected app by repo")
 	}
-	if byRepo.Name != "fullsend" {
+	if byRepo.Name != "scoreboard" {
 		t.Fatalf("unexpected app by repo: %s", byRepo.Name)
 	}
 }
@@ -180,8 +180,8 @@ func TestLoadConfigRejectsDuplicateHostsAcrossApps(t *testing.T) {
 
 func TestNormalizeRejectsURLHosts(t *testing.T) {
 	app := AppConfig{
-		Repo:  "dvassallo/fullsend",
-		Hosts: []string{"https://fullsend.game"},
+		Repo:  "acme/scoreboard",
+		Hosts: []string{"https://scoreboard.example.com"},
 	}
 	if err := app.Normalize(); err == nil {
 		t.Fatal("expected URL host to be rejected")
@@ -190,13 +190,13 @@ func TestNormalizeRejectsURLHosts(t *testing.T) {
 
 func TestNormalizeStorageDefaults(t *testing.T) {
 	app := AppConfig{
-		Repo:    "dvassallo/fullsend",
+		Repo:    "acme/scoreboard",
 		Storage: &StorageConfig{},
 	}
 	if err := app.Normalize(); err != nil {
 		t.Fatal(err)
 	}
-	if app.Storage.Path != "/srv/storage/fullsend" {
+	if app.Storage.Path != "/srv/storage/scoreboard" {
 		t.Fatalf("unexpected storage path: %s", app.Storage.Path)
 	}
 	if app.Storage.Mount != "/storage" {
@@ -205,7 +205,7 @@ func TestNormalizeStorageDefaults(t *testing.T) {
 }
 
 func TestNormalizeDefaultsReadinessToRootForRepoDockerfiles(t *testing.T) {
-	app := AppConfig{Repo: "dvassallo/fullsend"}
+	app := AppConfig{Repo: "acme/scoreboard"}
 	if err := app.Normalize(); err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +216,7 @@ func TestNormalizeDefaultsReadinessToRootForRepoDockerfiles(t *testing.T) {
 
 func TestNormalizeStaticRuntimeDefaults(t *testing.T) {
 	app := AppConfig{
-		Repo:    "smallbets/homepage",
+		Repo:    "acme/homepage",
 		Runtime: "static",
 	}
 	if err := app.Normalize(); err != nil {
@@ -235,7 +235,7 @@ func TestNormalizeStaticRuntimeDefaults(t *testing.T) {
 
 func TestNormalizeNodeDynamicRequiresStartAndAppPort(t *testing.T) {
 	app := AppConfig{
-		Repo:    "smallbets/api",
+		Repo:    "acme/api",
 		Runtime: "node",
 	}
 	if err := app.Normalize(); err == nil || !strings.Contains(err.Error(), "requires start") {
@@ -256,7 +256,7 @@ func TestNormalizeNodeDynamicRequiresStartAndAppPort(t *testing.T) {
 
 func TestNormalizeNodeStaticBuildDoesNotNeedStart(t *testing.T) {
 	app := AppConfig{
-		Repo:           "smallbets/homepage",
+		Repo:           "acme/homepage",
 		Runtime:        "node",
 		InstallCommand: "npm ci",
 		BuildCommand:   "npm run build",
@@ -272,7 +272,7 @@ func TestNormalizeNodeStaticBuildDoesNotNeedStart(t *testing.T) {
 
 func TestNormalizeRejectsUnsafeStaticDir(t *testing.T) {
 	app := AppConfig{
-		Repo:      "smallbets/homepage",
+		Repo:      "acme/homepage",
 		Runtime:   "static",
 		StaticDir: "../dist",
 	}
@@ -285,7 +285,7 @@ func TestLoadConfigTracksExplicitAppPortForGeneratedRuntime(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "apps.yml")
 	body := []byte(`apps:
-  - repo: smallbets/api
+  - repo: acme/api
     runtime: node
     start: npm start
     app_port: 3000

@@ -28,7 +28,7 @@ func TestBackupAndRestoreStorageReplacesDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(configPath, []byte(`apps:
-  - repo: dvassallo/fullsend
+  - repo: acme/scoreboard
     storage:
       path: `+storagePath+`
       mount: /storage
@@ -37,7 +37,7 @@ func TestBackupAndRestoreStorageReplacesDirectory(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := cliBackup([]string{"fullsend"}, &out); err != nil {
+	if err := cliBackup([]string{"scoreboard"}, &out); err != nil {
 		t.Fatal(err)
 	}
 	fields := strings.Fields(out.String())
@@ -53,7 +53,7 @@ func TestBackupAndRestoreStorageReplacesDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	out.Reset()
-	if err := cliRestore([]string{"fullsend", backupPath, "--non-interactive", "--no-restart"}, &out); err != nil {
+	if err := cliRestore([]string{"scoreboard", backupPath, "--non-interactive", "--no-restart"}, &out); err != nil {
 		t.Fatal(err)
 	}
 
@@ -86,7 +86,7 @@ func TestRestoreFailsBeforeReplacingStorageWhenOwnershipFixFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(configPath, []byte(`apps:
-  - repo: dvassallo/fullsend
+  - repo: acme/scoreboard
     storage:
       path: `+storagePath+`
       mount: /storage
@@ -95,7 +95,7 @@ func TestRestoreFailsBeforeReplacingStorageWhenOwnershipFixFails(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := cliBackup([]string{"fullsend"}, &out); err != nil {
+	if err := cliBackup([]string{"scoreboard"}, &out); err != nil {
 		t.Fatal(err)
 	}
 	fields := strings.Fields(out.String())
@@ -113,7 +113,7 @@ func TestRestoreFailsBeforeReplacingStorageWhenOwnershipFixFails(t *testing.T) {
 		return errors.New("chown failed")
 	}
 	out.Reset()
-	err := cliRestore([]string{"fullsend", backupPath, "--non-interactive", "--no-restart"}, &out)
+	err := cliRestore([]string{"scoreboard", backupPath, "--non-interactive", "--no-restart"}, &out)
 	if err == nil {
 		t.Fatal("expected chown error")
 	}
@@ -141,7 +141,7 @@ func TestRestoreRejectsRemovedYesFlag(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(configPath, []byte(`apps:
-  - repo: dvassallo/fullsend
+  - repo: acme/scoreboard
     storage:
       path: `+storagePath+`
       mount: /storage
@@ -150,7 +150,7 @@ func TestRestoreRejectsRemovedYesFlag(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	err := cliRestore([]string{"fullsend", filepath.Join(dir, "missing.tar.gz"), "--yes", "--no-restart"}, &out)
+	err := cliRestore([]string{"scoreboard", filepath.Join(dir, "missing.tar.gz"), "--yes", "--no-restart"}, &out)
 	if err == nil || !strings.Contains(err.Error(), "--yes has been removed") {
 		t.Fatalf("expected removed --yes error, got %v", err)
 	}

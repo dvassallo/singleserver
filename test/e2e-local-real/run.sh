@@ -20,7 +20,7 @@ set +a
 : "${GITHUB_APP_ID:?GITHUB_APP_ID is required}"
 : "${GITHUB_WEBHOOK_SECRET:?GITHUB_WEBHOOK_SECRET is required}"
 : "${GITHUB_APP_PRIVATE_KEY_PATH:?GITHUB_APP_PRIVATE_KEY_PATH is required}"
-: "${GITHUB_TEST_REPO:=dvassallo/singleserver-e2e-app}"
+: "${GITHUB_TEST_REPO:?GITHUB_TEST_REPO is required}"
 
 if [ -z "${TAILSCALE_AUTHKEY:-}" ]; then
   : "${TAILSCALE_OAUTH_CLIENT_ID:?TAILSCALE_OAUTH_CLIENT_ID or TAILSCALE_AUTHKEY is required}"

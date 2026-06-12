@@ -1,13 +1,13 @@
 apps:
-  - dvassallo/sillyface-games
-  - repo: dvassallo/fullsend
+  - acme/arcade-games
+  - repo: acme/scoreboard
     branch: master
-    healthcheck: https://fullsend.game/up
-  - repo: smallbets/userbase-homepage
+    healthcheck: https://scoreboard.example.com/up
+  - repo: acme/marketing-site
     branch: master
     hosts:
-      - userbase.com
-      - www.userbase.com
-      - userbase.dev
-      - www.userbase.dev
-    healthcheck: https://userbase.com/up
+      - marketing.example.com
+      - www.marketing.example.com
+      - marketing.example.net
+      - www.marketing.example.net
+    healthcheck: https://marketing.example.com/up

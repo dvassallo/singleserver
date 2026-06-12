@@ -11,8 +11,8 @@ func TestGeneratedDeployYAMLUsesConventionsAndOverrides(t *testing.T) {
 	t.Setenv("SINGLESERVER_STATE_DIR", t.TempDir())
 
 	body, err := GeneratedDeployYAML(AppConfig{
-		Repo:            "smallbets/userbase-homepage",
-		Hosts:           []string{"userbase.com", "www.userbase.com"},
+		Repo:            "acme/marketing-site",
+		Hosts:           []string{"marketing.example.com", "www.marketing.example.com"},
 		AppPort:         8080,
 		HealthcheckPath: "/ready",
 	})
@@ -25,10 +25,10 @@ func TestGeneratedDeployYAMLUsesConventionsAndOverrides(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if config["service"] != "userbase-homepage" {
+	if config["service"] != "marketing-site" {
 		t.Fatalf("unexpected service: %v", config["service"])
 	}
-	if config["image"] != "userbase-homepage" {
+	if config["image"] != "marketing-site" {
 		t.Fatalf("unexpected image: %v", config["image"])
 	}
 	builder := config["builder"].(map[string]any)
@@ -62,7 +62,7 @@ func TestGeneratedDeployYAMLUsesConventionsAndOverrides(t *testing.T) {
 	}
 
 	hosts := proxy["hosts"].([]any)
-	if len(hosts) != 2 || hosts[0] != "userbase.com" || hosts[1] != "www.userbase.com" {
+	if len(hosts) != 2 || hosts[0] != "marketing.example.com" || hosts[1] != "www.marketing.example.com" {
 		t.Fatalf("unexpected hosts: %#v", hosts)
 	}
 
@@ -76,8 +76,8 @@ func TestGeneratedDeployYAMLKeepsProxySSLDisabled(t *testing.T) {
 	t.Setenv("SINGLESERVER_STATE_DIR", t.TempDir())
 
 	body, err := GeneratedDeployYAML(AppConfig{
-		Repo:  "smallbets/userbase-homepage",
-		Hosts: []string{"userbase.com"},
+		Repo:  "acme/marketing-site",
+		Hosts: []string{"marketing.example.com"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -96,7 +96,7 @@ func TestGeneratedDeployYAMLKeepsProxySSLDisabled(t *testing.T) {
 func TestGeneratedDeployYAMLOmitsEmptyProxyHosts(t *testing.T) {
 	t.Setenv("SINGLESERVER_STATE_DIR", t.TempDir())
 
-	body, err := GeneratedDeployYAML(AppConfig{Repo: "dvassallo/sillyface-games"})
+	body, err := GeneratedDeployYAML(AppConfig{Repo: "acme/arcade-games"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,10 +120,10 @@ func TestGeneratedDeployYAMLOmitsEmptyProxyHosts(t *testing.T) {
 
 func TestGeneratedDeployYAMLIncludesSecretsAndStorage(t *testing.T) {
 	body, err := GeneratedDeployYAML(AppConfig{
-		Repo:          "dvassallo/fullsend",
+		Repo:          "acme/scoreboard",
 		SecretEnvKeys: []string{"ADMIN_PASSWORD", "STRIPE_SECRET_KEY"},
 		Storage: &StorageConfig{
-			Path:  "/srv/storage/fullsend",
+			Path:  "/srv/storage/scoreboard",
 			Mount: "/storage",
 		},
 	})
@@ -141,7 +141,7 @@ func TestGeneratedDeployYAMLIncludesSecretsAndStorage(t *testing.T) {
 		t.Fatalf("unexpected secrets: %#v", secrets)
 	}
 	volumes := config["volumes"].([]any)
-	if len(volumes) != 1 || volumes[0] != "/srv/storage/fullsend:/storage" {
+	if len(volumes) != 1 || volumes[0] != "/srv/storage/scoreboard:/storage" {
 		t.Fatalf("unexpected volumes: %#v", volumes)
 	}
 }

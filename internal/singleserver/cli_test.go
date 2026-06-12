@@ -10,7 +10,7 @@ import (
 )
 
 func TestDisplayAppDefaults(t *testing.T) {
-	app := AppConfig{Repo: "dvassallo/fullsend", Name: "fullsend"}
+	app := AppConfig{Repo: "acme/scoreboard", Name: "scoreboard"}
 
 	if got := displayBranch(app); got != "(repo default)" {
 		t.Fatalf("unexpected branch display: %q", got)
@@ -116,7 +116,7 @@ func TestStatusShowsConfigAndFirstAppHintWhenEmpty(t *testing.T) {
 func TestTabWriterAlignsCheckRows(t *testing.T) {
 	var out bytes.Buffer
 	w := tabwriter.NewWriter(&out, 0, 0, 2, ' ', 0)
-	writeCheck(w, "sillyface-games", "deploy", "ok", "12668ms", "ref=main", "sha=26e1a21d7082")
+	writeCheck(w, "arcade-games", "deploy", "ok", "12668ms", "ref=main", "sha=26e1a21d7082")
 	writeCheck(w, "daemon", "status", "ok", "200 OK")
 	if err := w.Flush(); err != nil {
 		t.Fatal(err)
@@ -126,38 +126,38 @@ func TestTabWriterAlignsCheckRows(t *testing.T) {
 	if strings.Contains(got, "\t") {
 		t.Fatalf("expected tabwriter to expand tabs, got %q", got)
 	}
-	if !strings.Contains(got, "sillyface-games  deploy") {
+	if !strings.Contains(got, "arcade-games  deploy") {
 		t.Fatalf("expected first row aligned, got:\n%s", got)
 	}
-	if !strings.Contains(got, "daemon           status") {
+	if !strings.Contains(got, "daemon        status") {
 		t.Fatalf("expected second row aligned, got:\n%s", got)
 	}
 }
 
 func TestDisplayAppOverrides(t *testing.T) {
 	app := AppConfig{
-		Repo:        "dvassallo/fullsend",
-		Name:        "fullsend",
+		Repo:        "acme/scoreboard",
+		Name:        "scoreboard",
 		Branch:      "master",
-		Hosts:       []string{"fullsend.game", "fullsend.assetstacks.com"},
-		Healthcheck: "https://fullsend.game/up",
+		Hosts:       []string{"scoreboard.example.com", "scoreboard-alt.example.com"},
+		Healthcheck: "https://scoreboard.example.com/up",
 	}
 
 	if got := displayBranch(app); got != "master" {
 		t.Fatalf("unexpected branch display: %q", got)
 	}
-	if got := displayHosts(app); got != "fullsend.game,fullsend.assetstacks.com" {
+	if got := displayHosts(app); got != "scoreboard.example.com,scoreboard-alt.example.com" {
 		t.Fatalf("unexpected hosts display: %q", got)
 	}
-	if got := displayHealthcheck(app); got != "https://fullsend.game/up" {
+	if got := displayHealthcheck(app); got != "https://scoreboard.example.com/up" {
 		t.Fatalf("unexpected healthcheck display: %q", got)
 	}
 }
 
 func TestAppRuntimeStatus(t *testing.T) {
-	app := AppConfig{Repo: "dvassallo/fullsend", Name: "fullsend"}
+	app := AppConfig{Repo: "acme/scoreboard", Name: "scoreboard"}
 
-	if got := appRuntimeStatus(app, map[string]string{"fullsend-web-123": "fullsend-web-123"}, nil); got != "running:fullsend-web-123" {
+	if got := appRuntimeStatus(app, map[string]string{"scoreboard-web-123": "scoreboard-web-123"}, nil); got != "running:scoreboard-web-123" {
 		t.Fatalf("unexpected running status: %q", got)
 	}
 	if got := appRuntimeStatus(app, map[string]string{"other": "other"}, nil); got != "stopped" {
@@ -170,12 +170,12 @@ func TestAppRuntimeStatus(t *testing.T) {
 
 func TestContainerForApp(t *testing.T) {
 	containers := map[string]string{
-		"fullsend-web-123":  "fullsend-web-123",
-		"sillyface-games-1": "sillyface-games-1",
+		"scoreboard-web-123":  "scoreboard-web-123",
+		"arcade-games-1": "arcade-games-1",
 	}
 
-	if got, ok := containerForApp("fullsend", containers); !ok || got != "fullsend-web-123" {
-		t.Fatalf("expected fullsend container, got %q ok=%v", got, ok)
+	if got, ok := containerForApp("scoreboard", containers); !ok || got != "scoreboard-web-123" {
+		t.Fatalf("expected scoreboard container, got %q ok=%v", got, ok)
 	}
 	if _, ok := containerForApp("missing", containers); ok {
 		t.Fatal("expected missing app to have no container")
@@ -183,16 +183,16 @@ func TestContainerForApp(t *testing.T) {
 }
 
 func TestAppSummaryStatusWithoutHealthcheck(t *testing.T) {
-	app := AppConfig{Repo: "dvassallo/fullsend", Name: "fullsend"}
+	app := AppConfig{Repo: "acme/scoreboard", Name: "scoreboard"}
 
-	if got := appSummaryStatus(app, map[string]string{"fullsend-web-123": "fullsend-web-123"}, nil, ""); got != "running" {
+	if got := appSummaryStatus(app, map[string]string{"scoreboard-web-123": "scoreboard-web-123"}, nil, ""); got != "running" {
 		t.Fatalf("unexpected running summary: %q", got)
 	}
 	if got := appSummaryStatus(app, map[string]string{}, nil, ""); got != "stopped" {
 		t.Fatalf("unexpected stopped summary: %q", got)
 	}
-	journal := "[deploy:fullsend-123] failed after 42ms: boom"
-	if got := appSummaryStatus(app, map[string]string{"fullsend-web-123": "fullsend-web-123"}, nil, journal); got != "failed" {
+	journal := "[deploy:scoreboard-123] failed after 42ms: boom"
+	if got := appSummaryStatus(app, map[string]string{"scoreboard-web-123": "scoreboard-web-123"}, nil, journal); got != "failed" {
 		t.Fatalf("unexpected failed summary: %q", got)
 	}
 }
@@ -205,11 +205,11 @@ func TestDeployOutputHelpers(t *testing.T) {
 		t.Fatalf("unexpected short sha: %q", got)
 	}
 
-	app := AppConfig{Repo: "dvassallo/fullsend", Name: "fullsend", Hosts: []string{"fullsend.nobrainer.host"}}
-	if got := appLiveURL(app); got != "https://fullsend.nobrainer.host" {
+	app := AppConfig{Repo: "acme/scoreboard", Name: "scoreboard", Hosts: []string{"scoreboard.example.net"}}
+	if got := appLiveURL(app); got != "https://scoreboard.example.net" {
 		t.Fatalf("unexpected live URL: %q", got)
 	}
-	if got := appLiveURL(AppConfig{Repo: "dvassallo/fullsend", Name: "fullsend"}); got != "" {
+	if got := appLiveURL(AppConfig{Repo: "acme/scoreboard", Name: "scoreboard"}); got != "" {
 		t.Fatalf("expected no live URL, got %q", got)
 	}
 }
@@ -219,15 +219,15 @@ func TestInspectIncludesServerSideEnvSecrets(t *testing.T) {
 	configPath := filepath.Join(dir, "apps.yml")
 	t.Setenv("SINGLESERVER_CONFIG", configPath)
 	t.Setenv("SINGLESERVER_STATE_DIR", dir)
-	if err := os.WriteFile(configPath, []byte("apps:\n  - dvassallo/fullsend\n"), 0600); err != nil {
+	if err := os.WriteFile(configPath, []byte("apps:\n  - acme/scoreboard\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := writeAppEnv("fullsend", map[string]string{"DATABASE_URL": "sqlite:///storage/app.db"}); err != nil {
+	if err := writeAppEnv("scoreboard", map[string]string{"DATABASE_URL": "sqlite:///storage/app.db"}); err != nil {
 		t.Fatal(err)
 	}
 
 	var out bytes.Buffer
-	if err := cliInspect([]string{"fullsend"}, &out); err != nil {
+	if err := cliInspect([]string{"scoreboard"}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "secret:\n    - DATABASE_URL") {
@@ -238,8 +238,8 @@ func TestInspectIncludesServerSideEnvSecrets(t *testing.T) {
 func TestFilterJournalLogLinesDefaultsToDeployLogs(t *testing.T) {
 	journal := strings.Join([]string{
 		"2026-06-08T10:00:00 [server] Single Server listening",
-		"2026-06-08T10:00:01 [deploy:fullsend-123] start dvassallo/fullsend@abc",
-		"2026-06-08T10:00:02 [deploy:userbase-homepage-456] success total_ms=42",
+		"2026-06-08T10:00:01 [deploy:scoreboard-123] start acme/scoreboard@abc",
+		"2026-06-08T10:00:02 [deploy:marketing-site-456] success total_ms=42",
 		"2026-06-08T10:00:03 [webhook:delivery] ping",
 	}, "\n")
 
@@ -247,9 +247,9 @@ func TestFilterJournalLogLinesDefaultsToDeployLogs(t *testing.T) {
 	if len(allDeploys) != 2 {
 		t.Fatalf("expected two deploy lines, got %#v", allDeploys)
 	}
-	fullsendDeploys := filterJournalLogLines(journal, "fullsend", false)
-	if len(fullsendDeploys) != 1 || !strings.Contains(fullsendDeploys[0], "[deploy:fullsend-123]") {
-		t.Fatalf("expected fullsend deploy line, got %#v", fullsendDeploys)
+	scoreboardDeploys := filterJournalLogLines(journal, "scoreboard", false)
+	if len(scoreboardDeploys) != 1 || !strings.Contains(scoreboardDeploys[0], "[deploy:scoreboard-123]") {
+		t.Fatalf("expected scoreboard deploy line, got %#v", scoreboardDeploys)
 	}
 	daemonLines := filterJournalLogLines(journal, "", true)
 	if len(daemonLines) != 4 {

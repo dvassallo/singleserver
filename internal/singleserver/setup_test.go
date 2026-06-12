@@ -62,7 +62,7 @@ func TestTailscaleConnectStoresHostname(t *testing.T) {
 		case "version":
 			return "1.84.0", nil
 		case "status --json":
-			return `{"BackendState":"Running","Self":{"DNSName":"assetstacks.example.ts.net.","HostName":"assetstacks"}}`, nil
+			return `{"BackendState":"Running","Self":{"DNSName":"singleserver.example.ts.net.","HostName":"singleserver"}}`, nil
 		default:
 			t.Fatalf("unexpected tailscale output args: %s", strings.Join(args, " "))
 		}
@@ -92,23 +92,23 @@ func TestTailscaleConnectStoresHostname(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(body), `"hostname": "assetstacks.example.ts.net"`) {
+	if !strings.Contains(string(body), `"hostname": "singleserver.example.ts.net"`) {
 		t.Fatalf("hostname not stored:\n%s", body)
 	}
-	if !strings.Contains(string(body), `"funnel_url": "https://assetstacks.example.ts.net"`) {
+	if !strings.Contains(string(body), `"funnel_url": "https://singleserver.example.ts.net"`) {
 		t.Fatalf("funnel URL not stored:\n%s", body)
 	}
 	envBody, err := os.ReadFile(filepath.Join(dir, "singleserver.env"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(envBody), "SINGLESERVER_PUBLIC_URL='https://assetstacks.example.ts.net'") {
+	if !strings.Contains(string(envBody), "SINGLESERVER_PUBLIC_URL='https://singleserver.example.ts.net'") {
 		t.Fatalf("public URL not stored in env:\n%s", envBody)
 	}
 	if !strings.Contains(strings.Join(writerCommands, "\n"), "tailscale funnel --bg --yes 8787") {
 		t.Fatalf("expected funnel command: %#v", writerCommands)
 	}
-	if strings.Join(readyChecks, "\n") != "https://assetstacks.example.ts.net" {
+	if strings.Join(readyChecks, "\n") != "https://singleserver.example.ts.net" {
 		t.Fatalf("expected Funnel readiness check: %#v", readyChecks)
 	}
 	if !strings.Contains(out.String(), "tailscale\tssh\tok") {
@@ -117,7 +117,7 @@ func TestTailscaleConnectStoresHostname(t *testing.T) {
 	if !strings.Contains(out.String(), "tailscale\tfunnel\tstarting\t127.0.0.1:8787") {
 		t.Fatalf("funnel starting output missing:\n%s", out.String())
 	}
-	if !strings.Contains(out.String(), "tailscale\tfunnel\tok\thttps://assetstacks.example.ts.net\ttarget=127.0.0.1:8787") {
+	if !strings.Contains(out.String(), "tailscale\tfunnel\tok\thttps://singleserver.example.ts.net\ttarget=127.0.0.1:8787") {
 		t.Fatalf("funnel output missing:\n%s", out.String())
 	}
 }
@@ -132,7 +132,7 @@ func setBaseDirsForTest(t *testing.T, dir string) {
 func TestSetupGitHubAppManifestIsPublic(t *testing.T) {
 	t.Setenv("SINGLESERVER_GITHUB_APP_NAME", "Single Server test-host")
 	server := &Server{
-		publicURL:  "https://assetstacks.example.ts.net",
+		publicURL:  "https://singleserver.example.ts.net",
 		setupToken: "setup-token",
 	}
 	req := httptest.NewRequest("GET", "/setup/github-app?token=setup-token", nil)
@@ -157,7 +157,7 @@ func TestSetupGitHubAppManifestCanBePrivate(t *testing.T) {
 	t.Setenv("SINGLESERVER_GITHUB_APP_NAME", "Single Server E2E")
 	t.Setenv("SINGLESERVER_GITHUB_APP_PUBLIC", "false")
 	server := &Server{
-		publicURL:  "https://assetstacks.example.ts.net",
+		publicURL:  "https://singleserver.example.ts.net",
 		setupToken: "setup-token",
 	}
 	req := httptest.NewRequest("GET", "/setup/github-app?token=setup-token", nil)

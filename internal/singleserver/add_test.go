@@ -13,7 +13,7 @@ import (
 
 func TestParseAddArgsAllowsFlagsAfterRepo(t *testing.T) {
 	opts, err := parseAddArgs([]string{
-		"smallbets/userbase-homepage",
+		"acme/marketing-site",
 		"--no-deploy",
 		"--app-port", "8080",
 		"--runtime", "node",
@@ -25,7 +25,7 @@ func TestParseAddArgsAllowsFlagsAfterRepo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if opts.repo != "smallbets/userbase-homepage" {
+	if opts.repo != "acme/marketing-site" {
 		t.Fatalf("unexpected repo: %s", opts.repo)
 	}
 	if !opts.noDeploy {
@@ -53,7 +53,7 @@ func TestParseAddArgsUsageMentionsOptions(t *testing.T) {
 }
 
 func TestParseAddArgsRejectsRemovedYesFlag(t *testing.T) {
-	_, err := parseAddArgs([]string{"https://github.com/smallbets/userbase-homepage", "--yes"}, io.Discard)
+	_, err := parseAddArgs([]string{"https://github.com/acme/marketing-site", "--yes"}, io.Discard)
 	if err == nil || !strings.Contains(err.Error(), "--yes has been removed") {
 		t.Fatalf("expected removed --yes error, got %v", err)
 	}
@@ -64,9 +64,9 @@ func TestParseAddArgsAcceptsGitHubURL(t *testing.T) {
 		arg  string
 		want string
 	}{
-		{"https://github.com/smallbets/userbase-homepage", "smallbets/userbase-homepage"},
-		{"https://github.com/smallbets/userbase-homepage.git", "smallbets/userbase-homepage"},
-		{"https://github.com/smallbets/userbase-homepage/", "smallbets/userbase-homepage"},
+		{"https://github.com/acme/marketing-site", "acme/marketing-site"},
+		{"https://github.com/acme/marketing-site.git", "acme/marketing-site"},
+		{"https://github.com/acme/marketing-site/", "acme/marketing-site"},
 	}
 
 	for _, tt := range tests {
@@ -81,7 +81,7 @@ func TestParseAddArgsAcceptsGitHubURL(t *testing.T) {
 }
 
 func TestParseAddArgsRejectsNonGitHubURL(t *testing.T) {
-	_, err := parseAddArgs([]string{"https://example.com/smallbets/userbase-homepage"}, io.Discard)
+	_, err := parseAddArgs([]string{"https://example.com/acme/marketing-site"}, io.Discard)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -118,7 +118,7 @@ func TestEnsureGitHubSetupReadyExplainsIncompleteSetup(t *testing.T) {
 }
 
 func TestPromptAddOptionsUsesDockerfileDefaults(t *testing.T) {
-	opts := addOptions{repo: "smallbets/app"}
+	opts := addOptions{repo: "acme/app"}
 	var out bytes.Buffer
 	got, err := promptAddOptions(opts, strings.NewReader("\n\n\n\n"), &out, addPromptContext{
 		hasDockerfile: true,
@@ -149,7 +149,7 @@ func TestPromptAddOptionsUsesDockerfileDefaults(t *testing.T) {
 }
 
 func TestPromptAddOptionsFlushesBeforeReading(t *testing.T) {
-	opts := addOptions{repo: "smallbets/app"}
+	opts := addOptions{repo: "acme/app"}
 	out := &flushCountingWriter{}
 	_, err := promptAddOptions(opts, strings.NewReader("\n\n\n\n"), out, addPromptContext{
 		hasDockerfile: true,
@@ -185,7 +185,7 @@ func TestPromptAddOptionsGeneratedNodeStaticBuild(t *testing.T) {
 		"n",
 	}, "\n") + "\n"
 	var out bytes.Buffer
-	got, err := promptAddOptions(addOptions{repo: "smallbets/site"}, strings.NewReader(input), &out, addPromptContext{
+	got, err := promptAddOptions(addOptions{repo: "acme/site"}, strings.NewReader(input), &out, addPromptContext{
 		hasDockerfile: false,
 		targetBranch:  "main",
 	})
@@ -222,7 +222,7 @@ func TestPromptAddOptionsGeneratedBunDynamicApp(t *testing.T) {
 		"y",
 	}, "\n") + "\n"
 	var out bytes.Buffer
-	got, err := promptAddOptions(addOptions{repo: "smallbets/app"}, strings.NewReader(input), &out, addPromptContext{
+	got, err := promptAddOptions(addOptions{repo: "acme/app"}, strings.NewReader(input), &out, addPromptContext{
 		hasDockerfile: false,
 		targetBranch:  "main",
 	})
@@ -250,25 +250,25 @@ func TestPromptAddOptionsGeneratedBunDynamicApp(t *testing.T) {
 }
 
 func TestAddOptionsUseExplicitDomains(t *testing.T) {
-	opts := addOptions{repo: "dvassallo/fullsend", hosts: []string{"fullsend.game", "www.fullsend.game"}}
+	opts := addOptions{repo: "acme/scoreboard", hosts: []string{"scoreboard.example.com", "www.scoreboard.example.com"}}
 	app, entry, err := opts.app()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if len(app.Hosts) != 2 || app.Hosts[0] != "fullsend.game" || app.Hosts[1] != "www.fullsend.game" {
+	if len(app.Hosts) != 2 || app.Hosts[0] != "scoreboard.example.com" || app.Hosts[1] != "www.scoreboard.example.com" {
 		t.Fatalf("unexpected hosts: %#v", app.Hosts)
 	}
-	if len(entry.hosts) != 2 || entry.hosts[0] != "fullsend.game" || entry.hosts[1] != "www.fullsend.game" {
+	if len(entry.hosts) != 2 || entry.hosts[0] != "scoreboard.example.com" || entry.hosts[1] != "www.scoreboard.example.com" {
 		t.Fatalf("unexpected entry hosts: %#v", entry.hosts)
 	}
 }
 
 func TestParseAddArgsAcceptsRepeatedDomains(t *testing.T) {
 	opts, err := parseAddArgs([]string{
-		"https://github.com/dvassallo/fullsend",
-		"--domain", "fullsend.game",
-		"--domain", "www.fullsend.game",
+		"https://github.com/acme/scoreboard",
+		"--domain", "scoreboard.example.com",
+		"--domain", "www.scoreboard.example.com",
 	}, io.Discard)
 	if err != nil {
 		t.Fatal(err)
@@ -276,19 +276,19 @@ func TestParseAddArgsAcceptsRepeatedDomains(t *testing.T) {
 	if !opts.hostsSet {
 		t.Fatal("expected hostsSet")
 	}
-	if len(opts.hosts) != 2 || opts.hosts[0] != "fullsend.game" || opts.hosts[1] != "www.fullsend.game" {
+	if len(opts.hosts) != 2 || opts.hosts[0] != "scoreboard.example.com" || opts.hosts[1] != "www.scoreboard.example.com" {
 		t.Fatalf("unexpected domains: %#v", opts.hosts)
 	}
 }
 
 func TestAppendAppToConfigYAML(t *testing.T) {
 	body := []byte(`apps:
-  - dvassallo/fullsend
+  - acme/scoreboard
 `)
 	updated, err := appendAppToConfigYAML(body, addAppEntry{
-		repo:            "smallbets/userbase-homepage",
-		hosts:           []string{"userbase.com", "www.userbase.com"},
-		healthcheck:     "https://userbase.com/up",
+		repo:            "acme/marketing-site",
+		hosts:           []string{"marketing.example.com", "www.marketing.example.com"},
+		healthcheck:     "https://marketing.example.com/up",
 		healthcheckPath: "/up",
 		runtime:         "node",
 		installCommand:  "npm ci",
@@ -309,10 +309,10 @@ func TestAppendAppToConfigYAML(t *testing.T) {
 		t.Fatalf("expected 2 apps, got %d", len(config.Apps))
 	}
 	app := config.Apps[1]
-	if app.Repo != "smallbets/userbase-homepage" {
+	if app.Repo != "acme/marketing-site" {
 		t.Fatalf("unexpected repo: %s", app.Repo)
 	}
-	if app.Healthcheck != "https://userbase.com/up" {
+	if app.Healthcheck != "https://marketing.example.com/up" {
 		t.Fatalf("unexpected healthcheck: %s", app.Healthcheck)
 	}
 	if app.AppPort != 8080 {
@@ -328,7 +328,7 @@ func TestAppendAppToConfigYAML(t *testing.T) {
 
 func TestAppendAppToConfigYAMLWritesStaticRuntime(t *testing.T) {
 	updated, err := appendAppToConfigYAML(nil, addAppEntry{
-		repo:      "smallbets/homepage",
+		repo:      "acme/homepage",
 		runtime:   "static",
 		staticDir: ".",
 	})
@@ -346,7 +346,7 @@ func TestAppendAppToConfigYAMLWritesStaticRuntime(t *testing.T) {
 
 func TestParseAddArgsStaticDir(t *testing.T) {
 	opts, err := parseAddArgs([]string{
-		"https://github.com/smallbets/userbase-homepage",
+		"https://github.com/acme/marketing-site",
 		"--runtime", "bun",
 		"--install", "bun install --frozen-lockfile",
 		"--build", "bun run build",
@@ -368,11 +368,11 @@ func TestParseAddArgsStaticDir(t *testing.T) {
 }
 
 func TestAppendAppToConfigYAMLUsesScalarForRepoOnly(t *testing.T) {
-	updated, err := appendAppToConfigYAML(nil, addAppEntry{repo: "dvassallo/sillyface-games"})
+	updated, err := appendAppToConfigYAML(nil, addAppEntry{repo: "acme/arcade-games"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(updated) != "apps:\n  - dvassallo/sillyface-games\n" {
+	if string(updated) != "apps:\n  - acme/arcade-games\n" {
 		t.Fatalf("unexpected yaml:\n%s", updated)
 	}
 }

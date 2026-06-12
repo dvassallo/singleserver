@@ -6,7 +6,7 @@ import (
 )
 
 func TestGeneratedDockerfileEmptyWhenRuntimeUnset(t *testing.T) {
-	files, err := GeneratedDockerfile(AppConfig{Repo: "smallbets/homepage"})
+	files, err := GeneratedDockerfile(AppConfig{Repo: "acme/homepage"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -17,7 +17,7 @@ func TestGeneratedDockerfileEmptyWhenRuntimeUnset(t *testing.T) {
 
 func TestGeneratedStaticDockerfile(t *testing.T) {
 	files, err := GeneratedDockerfile(AppConfig{
-		Repo:      "smallbets/homepage",
+		Repo:      "acme/homepage",
 		Runtime:   "static",
 		StaticDir: "dist",
 	})
@@ -44,7 +44,7 @@ func TestGeneratedStaticDockerfile(t *testing.T) {
 
 func TestGeneratedNodeDynamicDockerfile(t *testing.T) {
 	files, err := GeneratedDockerfile(AppConfig{
-		Repo:           "smallbets/api",
+		Repo:           "acme/api",
 		Runtime:        "node",
 		InstallCommand: "npm ci",
 		BuildCommand:   "npm run build",
@@ -74,7 +74,7 @@ func TestGeneratedNodeDynamicDockerfile(t *testing.T) {
 
 func TestGeneratedBunStaticBuildDockerfile(t *testing.T) {
 	files, err := GeneratedDockerfile(AppConfig{
-		Repo:           "smallbets/homepage",
+		Repo:           "acme/homepage",
 		Runtime:        "bun",
 		InstallCommand: "bun install --frozen-lockfile",
 		BuildCommand:   "bun run build",

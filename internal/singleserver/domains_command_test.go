@@ -17,17 +17,17 @@ func TestDomainsRemoveSupportsNoDeployFlagAfterDomain(t *testing.T) {
 	configPath := filepath.Join(dir, "apps.yml")
 	t.Setenv("SINGLESERVER_CONFIG", configPath)
 	if err := os.WriteFile(configPath, []byte(`apps:
-  - repo: dvassallo/fullsend
+  - repo: acme/scoreboard
     hosts:
-      - play.nobrainer.host
-    healthcheck: https://play.nobrainer.host/up
+      - play.example.com
+    healthcheck: https://play.example.com/up
 `), 0600); err != nil {
 		t.Fatal(err)
 	}
 
 	var out bytes.Buffer
 	logger := log.New(io.Discard, "", 0)
-	if err := cliDomains([]string{"remove", "fullsend", "play.nobrainer.host", "--no-deploy"}, &out, logger); err != nil {
+	if err := cliDomains([]string{"remove", "scoreboard", "play.example.com", "--no-deploy"}, &out, logger); err != nil {
 		t.Fatal(err)
 	}
 
@@ -48,17 +48,17 @@ func TestDomainsAddRejectsHostUsedByAnotherApp(t *testing.T) {
 	configPath := filepath.Join(dir, "apps.yml")
 	t.Setenv("SINGLESERVER_CONFIG", configPath)
 	if err := os.WriteFile(configPath, []byte(`apps:
-  - repo: dvassallo/fullsend
+  - repo: acme/scoreboard
     hosts:
-      - play.nobrainer.host
-  - repo: dvassallo/sillyface-games
+      - play.example.com
+  - repo: acme/arcade-games
 `), 0600); err != nil {
 		t.Fatal(err)
 	}
 
 	var out bytes.Buffer
 	logger := log.New(io.Discard, "", 0)
-	err := cliDomains([]string{"add", "sillyface-games", "play.nobrainer.host", "--no-deploy"}, &out, logger)
+	err := cliDomains([]string{"add", "arcade-games", "play.example.com", "--no-deploy"}, &out, logger)
 	if err == nil {
 		t.Fatal("expected duplicate host error")
 	}
@@ -74,7 +74,7 @@ func TestDomainsAddKeepsConfigWhenCloudflareFails(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "apps.yml")
 	t.Setenv("SINGLESERVER_CONFIG", configPath)
-	if err := os.WriteFile(configPath, []byte("apps:\n  - dvassallo/fullsend\n"), 0600); err != nil {
+	if err := os.WriteFile(configPath, []byte("apps:\n  - acme/scoreboard\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -86,7 +86,7 @@ func TestDomainsAddKeepsConfigWhenCloudflareFails(t *testing.T) {
 
 	var out bytes.Buffer
 	logger := log.New(io.Discard, "", 0)
-	err := cliDomains([]string{"add", "fullsend", "play.nobrainer.host", "--no-deploy"}, &out, logger)
+	err := cliDomains([]string{"add", "scoreboard", "play.example.com", "--no-deploy"}, &out, logger)
 	if err == nil {
 		t.Fatal("expected Cloudflare error")
 	}
@@ -114,9 +114,9 @@ func TestDomainsRemoveRejectsHostNotConfiguredForApp(t *testing.T) {
 	configPath := filepath.Join(dir, "apps.yml")
 	t.Setenv("SINGLESERVER_CONFIG", configPath)
 	if err := os.WriteFile(configPath, []byte(`apps:
-  - repo: dvassallo/fullsend
+  - repo: acme/scoreboard
     hosts:
-      - play.nobrainer.host
+      - play.example.com
 `), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -131,11 +131,11 @@ func TestDomainsRemoveRejectsHostNotConfiguredForApp(t *testing.T) {
 
 	var out bytes.Buffer
 	logger := log.New(io.Discard, "", 0)
-	err := cliDomains([]string{"remove", "fullsend", "other.nobrainer.host", "--no-deploy"}, &out, logger)
+	err := cliDomains([]string{"remove", "scoreboard", "other.example.com", "--no-deploy"}, &out, logger)
 	if err == nil {
 		t.Fatal("expected unowned host error")
 	}
-	if !strings.Contains(err.Error(), "other.nobrainer.host is not configured for fullsend") {
+	if !strings.Contains(err.Error(), "other.example.com is not configured for scoreboard") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if syncCalled {
@@ -151,7 +151,7 @@ func TestDomainsVerifyDoesNotRequireTunnelRoute(t *testing.T) {
 	t.Setenv("SINGLESERVER_STATE_DIR", dir)
 	stubCommandRun(t)
 	if err := os.WriteFile(configPath, []byte(`apps:
-  - repo: dvassallo/fullsend
+  - repo: acme/scoreboard
     hosts:
       - localhost
 `), 0600); err != nil {
@@ -169,13 +169,13 @@ func TestDomainsVerifyDoesNotRequireTunnelRoute(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := cliDomains([]string{"verify", "fullsend"}, &out, log.New(io.Discard, "", 0)); err != nil {
+	if err := cliDomains([]string{"verify", "scoreboard"}, &out, log.New(io.Discard, "", 0)); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(out.String(), "tunnel_route") {
 		t.Fatalf("domains verify should not inspect tunnel routes, got:\n%s", out.String())
 	}
-	if !strings.Contains(out.String(), "fullsend\tdns\tok\tlocalhost") {
+	if !strings.Contains(out.String(), "scoreboard\tdns\tok\tlocalhost") {
 		t.Fatalf("expected resolver DNS ok output, got:\n%s", out.String())
 	}
 }
@@ -186,7 +186,7 @@ func TestDomainsVerifyChecksCloudflareDNSRecord(t *testing.T) {
 	t.Setenv("SINGLESERVER_CONFIG", configPath)
 	t.Setenv("SINGLESERVER_STATE_DIR", dir)
 	if err := os.WriteFile(configPath, []byte(`apps:
-  - repo: dvassallo/fullsend
+  - repo: acme/scoreboard
     hosts:
       - localhost
 `), 0600); err != nil {
@@ -207,10 +207,10 @@ func TestDomainsVerifyChecksCloudflareDNSRecord(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := cliDomains([]string{"verify", "fullsend"}, &out, log.New(io.Discard, "", 0)); err != nil {
+	if err := cliDomains([]string{"verify", "scoreboard"}, &out, log.New(io.Discard, "", 0)); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "fullsend\tcloudflare_dns\tok\tlocalhost\ttarget=tunnel.cfargotunnel.com") {
+	if !strings.Contains(out.String(), "scoreboard\tcloudflare_dns\tok\tlocalhost\ttarget=tunnel.cfargotunnel.com") {
 		t.Fatalf("expected Cloudflare DNS ok output, got:\n%s", out.String())
 	}
 }
@@ -221,7 +221,7 @@ func TestDomainsVerifySkipsResolverDNSWhenCloudflareDNSRecordIsChecked(t *testin
 	t.Setenv("SINGLESERVER_CONFIG", configPath)
 	t.Setenv("SINGLESERVER_STATE_DIR", dir)
 	if err := os.WriteFile(configPath, []byte(`apps:
-  - repo: dvassallo/fullsend
+  - repo: acme/scoreboard
     hosts:
       - app.example.com
 `), 0600); err != nil {
@@ -246,13 +246,13 @@ func TestDomainsVerifySkipsResolverDNSWhenCloudflareDNSRecordIsChecked(t *testin
 	}
 
 	var out bytes.Buffer
-	if err := cliDomains([]string{"verify", "fullsend"}, &out, log.New(io.Discard, "", 0)); err != nil {
+	if err := cliDomains([]string{"verify", "scoreboard"}, &out, log.New(io.Discard, "", 0)); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(out.String(), "\tdns\t") {
 		t.Fatalf("expected resolver DNS output to be skipped, got:\n%s", out.String())
 	}
-	if !strings.Contains(out.String(), "fullsend\tcloudflare_dns\tok\tapp.example.com\ttarget=tunnel.cfargotunnel.com") {
+	if !strings.Contains(out.String(), "scoreboard\tcloudflare_dns\tok\tapp.example.com\ttarget=tunnel.cfargotunnel.com") {
 		t.Fatalf("expected Cloudflare DNS ok output, got:\n%s", out.String())
 	}
 }
@@ -263,7 +263,7 @@ func TestDomainsVerifyFailsWhenCloudflareDNSRecordDoesNotMatch(t *testing.T) {
 	t.Setenv("SINGLESERVER_CONFIG", configPath)
 	t.Setenv("SINGLESERVER_STATE_DIR", dir)
 	if err := os.WriteFile(configPath, []byte(`apps:
-  - repo: dvassallo/fullsend
+  - repo: acme/scoreboard
     hosts:
       - localhost
 `), 0600); err != nil {
@@ -281,11 +281,11 @@ func TestDomainsVerifyFailsWhenCloudflareDNSRecordDoesNotMatch(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	err := cliDomains([]string{"verify", "fullsend"}, &out, log.New(io.Discard, "", 0))
+	err := cliDomains([]string{"verify", "scoreboard"}, &out, log.New(io.Discard, "", 0))
 	if err == nil {
 		t.Fatal("expected Cloudflare DNS verification error")
 	}
-	if !strings.Contains(out.String(), "fullsend\tcloudflare_dns\tfailed\tlocalhost\tmissing CNAME") {
+	if !strings.Contains(out.String(), "scoreboard\tcloudflare_dns\tfailed\tlocalhost\tmissing CNAME") {
 		t.Fatalf("expected Cloudflare DNS failed output, got:\n%s", out.String())
 	}
 }
@@ -298,7 +298,7 @@ func TestDomainsVerifyIgnoresMissingLegacyTunnelRoute(t *testing.T) {
 	t.Setenv("SINGLESERVER_STATE_DIR", dir)
 	stubCommandRun(t)
 	if err := os.WriteFile(configPath, []byte(`apps:
-  - repo: dvassallo/fullsend
+  - repo: acme/scoreboard
     hosts:
       - localhost
 `), 0600); err != nil {
@@ -314,7 +314,7 @@ func TestDomainsVerifyIgnoresMissingLegacyTunnelRoute(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := cliDomains([]string{"verify", "fullsend"}, &out, log.New(io.Discard, "", 0)); err != nil {
+	if err := cliDomains([]string{"verify", "scoreboard"}, &out, log.New(io.Discard, "", 0)); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(out.String(), "tunnel_route") {
@@ -329,9 +329,9 @@ func TestDomainsVerifyUsesCommandRunFuncForResolverDNS(t *testing.T) {
 	t.Setenv("SINGLESERVER_CONFIG", configPath)
 	t.Setenv("SINGLESERVER_STATE_DIR", dir)
 	if err := os.WriteFile(configPath, []byte(`apps:
-  - repo: dvassallo/fullsend
+  - repo: acme/scoreboard
     hosts:
-      - app.nobrainer.host
+      - app.example.net
 `), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -339,7 +339,7 @@ func TestDomainsVerifyUsesCommandRunFuncForResolverDNS(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(tunnelConfigPath, []byte(`ingress:
-  - hostname: app.nobrainer.host
+  - hostname: app.example.net
     service: http://127.0.0.1:80
   - service: http_status:404
 `), 0600); err != nil {
@@ -356,11 +356,11 @@ func TestDomainsVerifyUsesCommandRunFuncForResolverDNS(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	err := cliDomains([]string{"verify", "fullsend"}, &out, log.New(io.Discard, "", 0))
+	err := cliDomains([]string{"verify", "scoreboard"}, &out, log.New(io.Discard, "", 0))
 	if err == nil {
 		t.Fatal("expected resolver DNS error")
 	}
-	if !strings.Contains(out.String(), "fullsend\tdns\tfailed\tapp.nobrainer.host\tresolver unavailable") {
+	if !strings.Contains(out.String(), "scoreboard\tdns\tfailed\tapp.example.net\tresolver unavailable") {
 		t.Fatalf("expected resolver DNS failure output, got:\n%s", out.String())
 	}
 }
