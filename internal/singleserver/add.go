@@ -298,8 +298,8 @@ func promptAddOptions(opts addOptions, input io.Reader, w io.Writer, ctx addProm
 		}
 	}
 	if !opts.healthcheckPathSet {
-		defaultPath := promptReadinessDefault(opts.runtime, opts.staticDir)
-		value, err := p.askDefault("Readiness path", defaultPath)
+		defaultPath := promptHealthcheckPathDefault(opts.runtime, opts.staticDir)
+		value, err := p.askDefault("Healthcheck path", defaultPath)
 		if err != nil {
 			return addOptions{}, err
 		}
@@ -382,7 +382,7 @@ func promptGeneratedDockerfileOptions(opts *addOptions, p addPrompter) error {
 	return nil
 }
 
-func promptReadinessDefault(runtime, staticDir string) string {
+func promptHealthcheckPathDefault(runtime, staticDir string) string {
 	if strings.EqualFold(runtime, "static") || strings.TrimSpace(staticDir) != "" {
 		return "/up"
 	}

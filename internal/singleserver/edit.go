@@ -211,13 +211,13 @@ func promptEditOptions(app AppConfig, opts editOptions, input io.Reader, w io.Wr
 
 	currentPath := strings.TrimSpace(app.HealthcheckPath)
 	if currentPath == "" {
-		currentPath = promptReadinessDefault(opts.runtime, opts.staticDir)
+		currentPath = promptHealthcheckPathDefault(opts.runtime, opts.staticDir)
 	}
-	readinessPath, err := p.askDefault("Readiness path", currentPath)
+	healthcheckPath, err := p.askDefault("Healthcheck path", currentPath)
 	if err != nil {
 		return editOptions{}, err
 	}
-	opts.healthcheckPath = readinessPath
+	opts.healthcheckPath = healthcheckPath
 	opts.healthcheckPathSet = true
 
 	healthcheck, cleared, err := p.askOptionalEdit("External healthcheck URL", app.Healthcheck)

@@ -88,7 +88,7 @@
             </div>
         </div>
 
-        <p>The installer puts Docker, Kamal, Tailscale, cloudflared, and the <code>singleserver</code> binary on the box, then walks you through three connections: a Tailscale login, a Cloudflare API token, and a one-click GitHub App setup page. Each prompt explains itself, and the installer is safe to rerun if you bail halfway.</p>
+        <p>The installer puts Docker, Kamal, Tailscale, cloudflared, and the singleserver binary on the box, then walks you through three connections: a Tailscale login, a Cloudflare API token, and a one-click GitHub App setup page. Each prompt explains itself, and the installer is safe to rerun if you bail halfway.</p>
         <p>From here on, every push to the configured branch deploys automatically. That was the whole setup.</p>
     </section>
 
@@ -99,19 +99,19 @@
         <div class="idea-list">
             <div>
                 <strong>Your server is the platform.</strong>
-                <p>The daemon, the CLI, Docker, Kamal, the git checkouts, app config, secrets, persistent storage, backups, and logs all live on one machine. There is no control plane in somebody else's cloud and no dashboard to host. When you want to know what's going on, you SSH in and ask.</p>
+                <p>The daemon, the CLI, Docker, Kamal, the git checkouts, app config, secrets, persistent storage, backups, and logs all live on one machine. When you want to know what's going on, you SSH in and ask.</p>
             </div>
             <div>
                 <strong>One binary, two jobs.</strong>
-                <p>The <code>singleserver</code> binary runs as a systemd daemon that deploys your apps, and doubles as the CLI you use over SSH. Both read and write the same server-side state, so the CLI always reflects what the daemon actually did.</p>
+                <p>The singleserver binary runs as a systemd daemon that deploys your apps, and doubles as the CLI you use over SSH. Both read and write the same server-side state, so the CLI always reflects what the daemon actually did.</p>
+            </div>
+            <div>
+                <strong>GitHub triggers, your server deploys.</strong>
+                <p>During setup, Single Server creates a GitHub App for you. That's GitHub's own mechanism for giving Single Server limited, revocable access to your repos: you install it once on your account, and it covers every repo you choose. The app sends signed push events, hands the daemon short-lived tokens to fetch the pushed commit, and lets the daemon mark each commit as pending, deployed, or failed. No deploy keys, no GitHub Actions secrets, no per-repo webhooks.</p>
             </div>
             <div>
                 <strong>apps.yml is the allowlist.</strong>
                 <p>Installing the GitHub App on a repository only grants access. Nothing deploys unless the repo is listed in <code>/etc/singleserver/apps.yml</code>, and pushes deploy only when they land on the app's configured branch. Everything else GitHub sends gets politely ignored.</p>
-            </div>
-            <div>
-                <strong>GitHub triggers, your server deploys.</strong>
-                <p>During setup, Single Server creates a GitHub App for you. That's GitHub's own mechanism for giving Single Server limited, revocable access to your repos: it sends signed push events, hands the daemon short-lived tokens to fetch the pushed commit, and lets the daemon mark each commit as pending, deployed, or failed. No deploy keys, no GitHub Actions secrets, no per-repo webhooks.</p>
             </div>
             <div>
                 <strong>Tailscale is the private way in.</strong>
@@ -119,18 +119,18 @@
             </div>
             <div>
                 <strong>Cloudflare is the public way in.</strong>
-                <p>App domains point at Cloudflare, not at your server. Single Server creates proxied DNS records and a Cloudflare Tunnel, so visitors get TLS, CDN, and DDoS protection at Cloudflare's edge while traffic reaches your apps through the tunnel. Kamal's proxy binds to loopback only, and your server's IP stays hidden.</p>
+                <p>App domains point at Cloudflare, not at your server. Single Server creates proxied DNS records and a Cloudflare Tunnel, so visitors get TLS, CDN, and DDoS protection at Cloudflare's edge while traffic reaches your apps through the tunnel. The tunnel is an outbound connection from your server, and Kamal's proxy binds to loopback only, so once setup is complete you can block all inbound traffic at the firewall. From then on, the box does not even need a public IP.</p>
             </div>
             <div>
                 <strong>Docker and Kamal do the heavy lifting.</strong>
-                <p>Every app runs in its own container, built on the server and pushed through a local registry. Kamal starts the container with the new release and flips traffic over once it's healthy, so deploys land with zero downtime and one app's dependency mess can't leak into another.</p>
+                <p>Every app runs in its own container, built on the server. The image never leaves the box. Kamal starts the container with the new release and flips traffic over once it's healthy, so deploys land with zero downtime and one app's dependency mess can't leak into another.</p>
             </div>
         </div>
     </section>
 
     <section id="deploys">
         <h2>What a push does</h2>
-        <p>This is the loop you'll trigger hundreds of times without thinking about it. For a small app, the whole chain lands in under 5 seconds.</p>
+        <p>This is the loop you'll trigger hundreds of times without thinking about it. For an app without a heavy build step, the whole chain lands in under 5 seconds.</p>
 
         <div class="flow-box">
             <div class="flow-row">
@@ -151,12 +151,12 @@
             <div class="flow-row">
                 <span class="pill">build</span>
                 <span class="connector">&rarr;</span>
-                <span class="result">Docker builds the container image on the server and ships it through the local registry.</span>
+                <span class="result">Docker builds the container image on the server. The image never leaves the box.</span>
             </div>
             <div class="flow-row">
                 <span class="pill">live</span>
                 <span class="connector">&rarr;</span>
-                <span class="result">Kamal starts the new container and flips traffic once it passes the readiness path.</span>
+                <span class="result">Kamal starts the new container and flips traffic once it passes its healthcheck.</span>
             </div>
             <div class="flow-row">
                 <span class="pill">report</span>
@@ -165,7 +165,7 @@
             </div>
         </div>
 
-        <p>A few details worth knowing. Deploys for the same app run one at a time, in order, so rapid pushes queue up instead of racing. The first deploy of an app runs <code>kamal setup</code>; every deploy after that runs <code>kamal redeploy</code>. A deploy that exceeds 2 minutes is killed and reported as failed. And if the app has an external healthcheck URL configured, Single Server polls it after the rollout and fails the deploy if it never comes up.</p>
+        <p>Deploys for the same app run one at a time, in order, so rapid pushes queue up. The first deploy of an app runs <code>kamal setup</code>; every deploy after that runs <code>kamal redeploy</code>. A deploy that exceeds 2 minutes is killed and reported as failed. And if the app has an external healthcheck URL configured, Single Server polls it after the rollout and fails the deploy if it never comes up.</p>
         <p>Manual deploys go through exactly the same path. <code>singleserver deploy</code> exists for redeploys, rollbacks, and staged changes, not as a separate mechanism.</p>
     </section>
 
@@ -222,7 +222,7 @@
                 <div class="code-wrapper">
                     <pre class="code-block">curl -fsSL <span class="accent">https://singleserver.com/install.sh</span> | sh</pre>
                 </div>
-                <p>Installs Docker, Kamal, Tailscale, cloudflared, sqlite3, the <code>singleserver</code> binary, the systemd daemon, a local Docker registry, and a <code>deploy</code> user for Kamal. Then it runs first-run setup: connecting Tailscale, Cloudflare, and GitHub, and finishing with <code>doctor</code>. Rerunning it is safe; it skips what is already done.</p>
+                <p>Installs Docker, Kamal, Tailscale, cloudflared, sqlite3, the singleserver binary, the systemd daemon, a local Docker registry, and a deploy user for Kamal. Then it runs first-run setup: connecting Tailscale, Cloudflare, and GitHub, and finishing with doctor. Rerunning it is safe; it skips what is already done.</p>
                 <ul class="option-list">
                     <li><code>TAILSCALE_AUTHKEY</code><span>Set for unattended installs so Tailscale joins without a browser login.</span></li>
                     <li><code>CLOUDFLARE_API_TOKEN</code><span>Set for unattended installs so Cloudflare connects without a prompt. The token needs DNS and tunnel permissions.</span></li>
@@ -244,7 +244,7 @@ singleserver connect github</pre>
                     <li><code>--hostname &lt;name&gt;</code><span>Set the Tailscale machine name. Defaults to the server hostname.</span></li>
                     <li><code>--non-interactive</code><span>Never prompt. Missing provider input is reported as pending or failed.</span></li>
                 </ul>
-                <p><code>connect cloudflare</code> creates or reuses a Cloudflare Tunnel, stores its credentials, installs the <code>cloudflared</code> systemd service, and prunes tunnel routes for domains that no longer belong to any app. After this, every domain you attach to an app gets a proxied CNAME to the tunnel automatically.</p>
+                <p><code>connect cloudflare</code> creates or reuses a Cloudflare Tunnel, stores its credentials, installs the cloudflared systemd service, and prunes tunnel routes for domains that no longer belong to any app. After this, every domain you attach to an app gets a proxied CNAME to the tunnel automatically.</p>
                 <ul class="option-list">
                     <li><code>--account &lt;id&gt;</code><span>Cloudflare account id. Only needed if the token can access more than one account.</span></li>
                     <li><code>--tunnel &lt;name&gt;</code><span>Cloudflare Tunnel name. Defaults to a name based on the server hostname.</span></li>
@@ -258,7 +258,7 @@ singleserver connect github</pre>
                 <div class="code-wrapper">
                     <pre class="code-block">singleserver upgrade [--non-interactive]</pre>
                 </div>
-                <p>Reruns the installer, restarts the daemon, and finishes with <code>doctor</code> so you know the upgrade landed cleanly. Running apps are not touched. In an interactive SSH session, it asks before starting.</p>
+                <p>Reruns the installer, restarts the daemon, and finishes with doctor so you know the upgrade landed cleanly. Running apps are not touched. In an interactive SSH session, it asks before starting.</p>
             </div>
 
             <div class="command" id="cmd-version">
@@ -277,7 +277,7 @@ singleserver connect github</pre>
                 <div class="code-wrapper">
                     <pre class="code-block">singleserver add <span class="accent">https://github.com/owner/repo</span> [options]</pre>
                 </div>
-                <p>Adds a repository, verifies the GitHub App can reach it, writes the entry to <code>apps.yml</code>, wires up any domains, deploys the current branch tip, and runs <code>doctor</code>. In an interactive session it asks only the questions it cannot answer itself, then prints the equivalent flag-based command with <code>--non-interactive</code>.</p>
+                <p>Adds a repository, verifies the GitHub App can reach it, writes the entry to <code>apps.yml</code>, wires up any domains, deploys the current branch tip, and runs doctor. In an interactive session it asks only the questions it cannot answer itself, then prints the equivalent flag-based command with <code>--non-interactive</code>.</p>
                 <ul class="option-list">
                     <li><code>--domain &lt;host&gt;</code><span>Public hostname for the app, like <code>app.example.com</code>. Repeat the flag for more than one.</span></li>
                     <li><code>--branch &lt;name&gt;</code> <span class="opt-badge">Default: repo default branch</span><span>Deploy only pushes to this branch.</span></li>
@@ -287,7 +287,7 @@ singleserver connect github</pre>
                     <li><code>--start &lt;cmd&gt;</code> / <code>--app-port &lt;port&gt;</code> <span class="opt-badge req">Required for processes</span><span>Start command and listening port for a generated Node or Bun web process.</span></li>
                     <li><code>--static-dir &lt;dir&gt;</code> <span class="opt-badge">Default: .</span><span>Directory of static files to serve with nginx, relative to the repo.</span></li>
                     <li><code>--healthcheck-path &lt;path&gt;</code> <span class="opt-badge">Default: / (static: /up)</span><span>Path Kamal polls to decide the new container is ready.</span></li>
-                    <li><code>--healthcheck &lt;url&gt;</code><span>Optional public URL checked after each deploy and by <code>status</code> and <code>doctor</code>.</span></li>
+                    <li><code>--healthcheck &lt;url&gt;</code><span>Optional public URL checked after each deploy and by status and doctor.</span></li>
                     <li><code>--no-deploy</code><span>Write the config but wait for the next push or a manual deploy.</span></li>
                     <li><code>--non-interactive</code><span>Never prompt. Required values must be supplied as arguments or flags.</span></li>
                 </ul>
@@ -303,7 +303,7 @@ singleserver connect github</pre>
                     <li><code>--dockerfile</code><span>Switch back to the repository Dockerfile and clear any generated runtime settings.</span></li>
                     <li><code>--runtime static|node|bun</code><span>Switch to a generated Dockerfile, with the same companion flags as <code>add</code>.</span></li>
                     <li><code>--branch &lt;name&gt;</code><span>Change which branch deploys automatically.</span></li>
-                    <li><code>--healthcheck-path &lt;path&gt;</code><span>Change the container readiness path.</span></li>
+                    <li><code>--healthcheck-path &lt;path&gt;</code><span>Change the container healthcheck path.</span></li>
                     <li><code>--healthcheck &lt;url&gt;</code> / <code>--no-healthcheck</code><span>Set or clear the optional external healthcheck URL.</span></li>
                     <li><code>--no-deploy</code><span>Write the config change without applying it to the running app yet.</span></li>
                     <li><code>--non-interactive</code><span>Never open the editor. Missing settings are an error.</span></li>
@@ -485,7 +485,7 @@ singleserver env unset &lt;app&gt; KEY [--non-interactive]</pre>
             <li><strong><code>static_dir</code></strong><span class="default">Default: <code>.</code> for <code>runtime: static</code>.</span> Directory served by nginx, relative to the repo. For Node/Bun builds, the build output directory.</li>
             <li><strong><code>app_port</code></strong><span class="default">Default: <code>80</code>.</span> The container port that receives traffic. Required for generated Node/Bun processes; always <code>80</code> for static output.</li>
             <li><strong><code>healthcheck_path</code></strong><span class="default">Default: <code>/</code>, or <code>/up</code> for generated static output.</span> The path Kamal polls before flipping traffic to a new container.</li>
-            <li><strong><code>healthcheck</code></strong><span class="default">Default: absent.</span> Optional external URL checked after deploys and by <code>status</code> and <code>doctor</code>. When absent, the external check is reported as assumed rather than failed.</li>
+            <li><strong><code>healthcheck</code></strong><span class="default">Default: absent.</span> Optional external URL checked after deploys and by status and doctor. When absent, the external check is reported as assumed rather than failed.</li>
             <li><strong><code>storage</code></strong><span class="default">Default: absent until enabled.</span> Persistent storage mapping, with optional <code>path</code> (host, default <code>/srv/storage/&lt;name&gt;</code>) and <code>mount</code> (container, default <code>/storage</code>).</li>
         </ul>
 
@@ -506,17 +506,17 @@ singleserver add <span class="accent">https://github.com/you/app</span> --runtim
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
             </button>
         </div>
-        <p>Static output gets an nginx image with sensible behavior: an <code>/up</code> endpoint that answers the readiness check, single-page-app fallback to <code>index.html</code>, and dotfiles blocked. Generated processes run on <code>node:20-alpine</code> or <code>oven/bun:1-alpine</code>, with <code>PORT</code> set to your app port and, for Node, <code>NODE_ENV=production</code>.</p>
+        <p>Static output gets an nginx image with sensible behavior: an <code>/up</code> endpoint that answers the healthcheck, single-page-app fallback to <code>index.html</code>, and dotfiles blocked. Generated processes run on <code>node:20-alpine</code> or <code>oven/bun:1-alpine</code>, with <code>PORT</code> set to your app port and, for Node, <code>NODE_ENV=production</code>.</p>
 
         <h3 id="kamal-defaults">Generated Kamal defaults</h3>
         <p>Repos don't need a Kamal config. If a repo tracks <code>config/deploy.yml</code>, that file wins. Otherwise Single Server writes one for the deploy and removes it after Kamal exits. <code>inspect</code> shows you exactly what it generates, and these are the defaults inside it.</p>
         <ul class="settings-list">
             <li><strong>Service and image</strong><span class="default">The app name.</span> One name everywhere makes containers, images, and logs easy to find.</li>
-            <li><strong>Server</strong><span class="default"><code>127.0.0.1</code>, via the <code>deploy</code> user.</span> Kamal keeps its normal SSH deploy model; it just happens to SSH into the same machine.</li>
+            <li><strong>Server</strong><span class="default"><code>127.0.0.1</code>, via the deploy user.</span> Kamal keeps its normal SSH deploy model; it just happens to SSH into the same machine.</li>
             <li><strong>Registry</strong><span class="default"><code>127.0.0.1:5555</code>.</span> A local registry container, so images never leave the box.</li>
             <li><strong>Builder</strong><span class="default">Local Docker builder, server architecture.</span> No cross-compilation, no remote builders.</li>
             <li><strong>Proxy</strong><span class="default"><code>ssl: false</code>, forwarded headers on, bound to loopback.</span> Cloudflare terminates TLS at the edge; the tunnel delivers plain HTTP to Kamal's proxy, which is not reachable from the public internet.</li>
-            <li><strong>Readiness</strong><span class="default">Poll the healthcheck path every second, 1s timeout.</span> Tight intervals keep zero-downtime swaps fast for small apps.</li>
+            <li><strong>Healthcheck</strong><span class="default">Poll the healthcheck path every second, 1s timeout.</span> Tight intervals keep zero-downtime swaps fast for small apps.</li>
             <li><strong>Timeouts</strong><span class="default">Deploy 10s, drain 1s.</span> Tuned for small containers that boot fast. A repo-level <code>config/deploy.yml</code> is the escape hatch for apps that need different numbers.</li>
         </ul>
     </section>
@@ -541,9 +541,9 @@ singleserver add <span class="accent">https://github.com/you/app</span> --runtim
                 <span class="result">Need files that outlive deploys? Write under the mount from <code>singleserver storage</code>.</span>
             </div>
             <div class="flow-row">
-                <span class="pill">readiness</span>
+                <span class="pill">healthcheck</span>
                 <span class="connector">&rarr;</span>
-                <span class="result">Want smarter swaps? Serve a readiness path and point <code>--healthcheck-path</code> at it.</span>
+                <span class="result">Want smarter swaps? Serve a healthcheck path and point <code>--healthcheck-path</code> at it.</span>
             </div>
         </div>
         <p>Notably absent: GitHub Actions workflows, deploy keys, repo secrets, webhook setup, Kamal config, and TLS certificates. Apps stay application code.</p>
@@ -614,7 +614,7 @@ singleserver add <span class="accent">https://github.com/you/app</span> --runtim
             </div>
             <div>
                 <strong>A deploy failed.</strong>
-                <p>A failed deploy does not take your app down: Kamal only moves traffic after the new container passes its readiness check, so the previous version keeps serving. The commit on GitHub carries the failure status and reason. On the server, <code>singleserver logs &lt;app&gt;</code> has the full build and rollout output, and <code>singleserver logs &lt;app&gt; --runtime</code> shows your app's own output if the container started and then failed readiness. Once the cause is fixed, push again or run <code>singleserver deploy &lt;app&gt;</code>. To return to a known good release immediately, deploy its commit directly: <code>singleserver deploy &lt;app&gt; &lt;sha&gt;</code>.</p>
+                <p>A failed deploy does not take your app down: Kamal only moves traffic after the new container passes its healthcheck, so the previous version keeps serving. The commit on GitHub carries the failure status and reason. On the server, <code>singleserver logs &lt;app&gt;</code> has the full build and rollout output, and <code>singleserver logs &lt;app&gt; --runtime</code> shows your app's own output if the container started and then failed its healthcheck. Once the cause is fixed, push again or run <code>singleserver deploy &lt;app&gt;</code>. To return to a known good release immediately, deploy its commit directly: <code>singleserver deploy &lt;app&gt; &lt;sha&gt;</code>.</p>
             </div>
             <div>
                 <strong>An app is unhealthy.</strong>
