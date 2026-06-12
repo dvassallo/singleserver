@@ -23,23 +23,13 @@ var (
 )
 
 type addOptions struct {
-	repo               string
-	name               string
-	branch             string
-	hosts              []string
-	healthcheck        string
-	healthcheckPath    string
-	runtime            string
-	installCommand     string
-	buildCommand       string
-	startCommand       string
-	staticDir          string
-	appPort            int
-	noDeploy           bool
-	nonInteractive     bool
-	hostsSet           bool
-	healthcheckPathSet bool
-	appPortSet         bool
+	appSettings
+	repo           string
+	name           string
+	hosts          []string
+	noDeploy       bool
+	nonInteractive bool
+	hostsSet       bool
 }
 
 const addUsage = "usage: singleserver add <github-url> [options]"
@@ -232,18 +222,10 @@ func parseAddArgs(args []string, w io.Writer) (addOptions, error) {
 	fs := flag.NewFlagSet("add", flag.ContinueOnError)
 	fs.SetOutput(w)
 	fs.StringVar(&opts.name, "name", "", "app name override")
-	fs.StringVar(&opts.branch, "branch", "", "branch override")
 	fs.Var((*stringListFlag)(&opts.hosts), "domain", "app domain")
-	fs.StringVar(&opts.healthcheck, "healthcheck", "", "external healthcheck URL")
-	fs.StringVar(&opts.healthcheckPath, "healthcheck-path", "", "container healthcheck path for generated Kamal config")
-	fs.StringVar(&opts.runtime, "runtime", "", "generated Dockerfile runtime: static, node, or bun")
-	fs.StringVar(&opts.installCommand, "install", "", "install command for generated Node/Bun Dockerfile")
-	fs.StringVar(&opts.buildCommand, "build", "", "build command for generated Node/Bun Dockerfile")
-	fs.StringVar(&opts.startCommand, "start", "", "start command for generated Node/Bun Dockerfile")
-	fs.StringVar(&opts.staticDir, "static-dir", "", "static output directory for generated Dockerfile")
 	fs.BoolVar(&opts.noDeploy, "no-deploy", false, "configure without deploying immediately")
 
-	appPort := fs.Int("app-port", 0, "container app port for generated Kamal config")
+	appPort := bindAppSettingsFlags(fs, &opts.appSettings)
 	if err := fs.Parse(normalizeAddArgs(args)); err != nil {
 		return addOptions{}, err
 	}
@@ -252,10 +234,8 @@ func parseAddArgs(args []string, w io.Writer) (addOptions, error) {
 		switch f.Name {
 		case "domain":
 			opts.hostsSet = true
-		case "healthcheck-path":
-			opts.healthcheckPathSet = true
-		case "app-port":
-			opts.appPortSet = true
+		default:
+			noteAppSettingsFlag(&opts.appSettings, f.Name)
 		}
 	})
 
@@ -318,7 +298,7 @@ func promptAddOptions(opts addOptions, input io.Reader, w io.Writer, ctx addProm
 		}
 	}
 	if !opts.healthcheckPathSet {
-		defaultPath := promptReadinessDefault(opts)
+		defaultPath := promptReadinessDefault(opts.runtime, opts.staticDir)
 		value, err := p.askDefault("Readiness path", defaultPath)
 		if err != nil {
 			return addOptions{}, err
@@ -402,8 +382,8 @@ func promptGeneratedDockerfileOptions(opts *addOptions, p addPrompter) error {
 	return nil
 }
 
-func promptReadinessDefault(opts addOptions) string {
-	if strings.EqualFold(opts.runtime, "static") || strings.TrimSpace(opts.staticDir) != "" {
+func promptReadinessDefault(runtime, staticDir string) string {
+	if strings.EqualFold(runtime, "static") || strings.TrimSpace(staticDir) != "" {
 		return "/up"
 	}
 	return "/"
@@ -517,24 +497,10 @@ func addEquivalentCommand(opts addOptions) string {
 	}
 
 	appendFlagValue("--name", opts.name)
-	appendFlagValue("--branch", opts.branch)
 	for _, host := range opts.hosts {
 		appendFlagValue("--domain", host)
 	}
-	appendFlagValue("--runtime", opts.runtime)
-	appendFlagValue("--install", opts.installCommand)
-	appendFlagValue("--build", opts.buildCommand)
-	appendFlagValue("--start", opts.startCommand)
-	if shouldWriteStaticDir(opts.runtime, opts.staticDir) {
-		appendFlagValue("--static-dir", opts.staticDir)
-	}
-	if opts.appPortSet {
-		appendFlagValue("--app-port", strconv.Itoa(opts.appPort))
-	}
-	if opts.healthcheckPathSet {
-		appendFlagValue("--healthcheck-path", opts.healthcheckPath)
-	}
-	appendFlagValue("--healthcheck", opts.healthcheck)
+	parts = appendAppSettingsFlags(parts, opts.appSettings, false)
 	if opts.noDeploy {
 		parts = append(parts, "--no-deploy")
 	}
@@ -812,9 +778,9 @@ func addFlagTakesValue(arg string) bool {
 		name = before
 	}
 	switch name {
-	case "name", "branch", "domain", "healthcheck", "healthcheck-path", "app-port", "runtime", "install", "build", "start", "static-dir":
+	case "name", "domain":
 		return true
 	default:
-		return false
+		return appSettingsFlagTakesValue(arg)
 	}
 }

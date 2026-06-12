@@ -699,9 +699,10 @@ func verifyDomains(args []string, w io.Writer) error {
 		writeCheck(w, "cloudflare", "setup", "skipped", "-", "connect Cloudflare with `singleserver connect cloudflare` to verify DNS and tunnel routes")
 	}
 
+	verifyResolverDNS := cloudflareClient == nil
 	for _, app := range apps {
 		for _, host := range app.Hosts {
-			if !doctorHostResolves(w, app.Name, "dns", host) {
+			if verifyResolverDNS && !doctorHostResolves(w, app.Name, "dns", host) {
 				failed = true
 			}
 			if cloudflareClient != nil {

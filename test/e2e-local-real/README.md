@@ -46,6 +46,19 @@ and `python3`.
 The local `.env`, generated work directory, and Tailscale state cache are
 ignored by git.
 
+## Structure
+
+The E2E harness is split by responsibility:
+
+- `run.sh` loads configuration, validates local tools, starts the artifact
+  server, and runs the distro matrix.
+- `lib/providers.sh` contains GitHub App, Cloudflare, Tailscale, JSON, and
+  assertion helpers.
+- `lib/host.sh` owns disposable host lifecycle, installer checks, provider
+  connection, and cleanup.
+- `lib/cases.sh` creates the test apps and exercises app deploy, webhook,
+  command, domain, env, storage, backup, restore, and remove flows.
+
 ## Tailscale OAuth Setup
 
 Create a Tailscale OAuth client with the `auth_keys` scope and the tag used by

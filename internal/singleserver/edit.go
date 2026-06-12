@@ -17,30 +17,13 @@ var (
 )
 
 type editOptions struct {
+	appSettings
 	appName string
 
-	branch             string
-	healthcheck        string
-	healthcheckPath    string
-	runtime            string
-	installCommand     string
-	buildCommand       string
-	startCommand       string
-	staticDir          string
-	appPort            int
-	dockerfile         bool
-	noHealthcheck      bool
-	noDeploy           bool
-	branchSet          bool
-	healthcheckSet     bool
-	healthcheckPathSet bool
-	runtimeSet         bool
-	installSet         bool
-	buildSet           bool
-	startSet           bool
-	staticDirSet       bool
-	appPortSet         bool
-	nonInteractive     bool
+	dockerfile     bool
+	noHealthcheck  bool
+	noDeploy       bool
+	nonInteractive bool
 }
 
 type editPromptContext struct {
@@ -124,44 +107,17 @@ func parseEditArgs(args []string, w io.Writer) (editOptions, error) {
 
 	fs := flag.NewFlagSet("edit", flag.ContinueOnError)
 	fs.SetOutput(w)
-	fs.StringVar(&opts.branch, "branch", "", "branch override")
-	fs.StringVar(&opts.healthcheck, "healthcheck", "", "external healthcheck URL")
 	fs.BoolVar(&opts.noHealthcheck, "no-healthcheck", false, "clear external healthcheck URL")
-	fs.StringVar(&opts.healthcheckPath, "healthcheck-path", "", "container readiness path for generated Kamal config")
 	fs.BoolVar(&opts.dockerfile, "dockerfile", false, "use the repository Dockerfile and clear generated runtime settings")
-	fs.StringVar(&opts.runtime, "runtime", "", "generated Dockerfile runtime: static, node, or bun")
-	fs.StringVar(&opts.installCommand, "install", "", "install command for generated Node/Bun Dockerfile")
-	fs.StringVar(&opts.buildCommand, "build", "", "build command for generated Node/Bun Dockerfile")
-	fs.StringVar(&opts.startCommand, "start", "", "start command for generated Node/Bun Dockerfile")
-	fs.StringVar(&opts.staticDir, "static-dir", "", "static output directory for generated Dockerfile")
 	fs.BoolVar(&opts.noDeploy, "no-deploy", false, "update config without deploying")
 
-	appPort := fs.Int("app-port", 0, "container app port for generated Kamal config")
+	appPort := bindAppSettingsFlags(fs, &opts.appSettings)
 	if err := fs.Parse(normalizeFlagArgs(args, editFlagTakesValue)); err != nil {
 		return editOptions{}, err
 	}
 	opts.appPort = *appPort
 	fs.Visit(func(f *flag.Flag) {
-		switch f.Name {
-		case "branch":
-			opts.branchSet = true
-		case "healthcheck":
-			opts.healthcheckSet = true
-		case "healthcheck-path":
-			opts.healthcheckPathSet = true
-		case "runtime":
-			opts.runtimeSet = true
-		case "install":
-			opts.installSet = true
-		case "build":
-			opts.buildSet = true
-		case "start":
-			opts.startSet = true
-		case "static-dir":
-			opts.staticDirSet = true
-		case "app-port":
-			opts.appPortSet = true
-		}
+		noteAppSettingsFlag(&opts.appSettings, f.Name)
 	})
 
 	if fs.NArg() != 1 {
@@ -182,16 +138,7 @@ func parseEditArgs(args []string, w io.Writer) (editOptions, error) {
 }
 
 func editFlagTakesValue(arg string) bool {
-	name := strings.TrimLeft(arg, "-")
-	if before, _, ok := strings.Cut(name, "="); ok {
-		name = before
-	}
-	switch name {
-	case "branch", "healthcheck", "healthcheck-path", "runtime", "install", "build", "start", "static-dir", "app-port":
-		return true
-	default:
-		return false
-	}
+	return appSettingsFlagTakesValue(arg)
 }
 
 func (o editOptions) hasSettingFlags() bool {
@@ -209,63 +156,7 @@ func (o editOptions) hasSettingFlags() bool {
 }
 
 func applyEditOptions(app AppConfig, opts editOptions) (AppConfig, error) {
-	if opts.branchSet {
-		app.Branch = opts.branch
-	}
-	if opts.dockerfile {
-		clearGeneratedRuntime(&app)
-		if !opts.healthcheckPathSet {
-			app.HealthcheckPath = ""
-		}
-	}
-	if opts.runtimeSet {
-		clearGeneratedRuntime(&app)
-		app.Runtime = opts.runtime
-		if !opts.healthcheckPathSet {
-			app.HealthcheckPath = ""
-		}
-	}
-	if opts.installSet {
-		app.InstallCommand = opts.installCommand
-	}
-	if opts.buildSet {
-		app.BuildCommand = opts.buildCommand
-	}
-	if opts.startSet {
-		app.StartCommand = opts.startCommand
-	}
-	if opts.staticDirSet {
-		app.StaticDir = opts.staticDir
-	}
-	if opts.appPortSet {
-		app.AppPort = opts.appPort
-		app.AppPortSet = true
-	}
-	if app.Runtime != "" && (app.Runtime == "static" || app.StaticDir != "") && !opts.appPortSet {
-		app.AppPort = 80
-		app.AppPortSet = false
-	}
-	if opts.healthcheckPathSet {
-		app.HealthcheckPath = opts.healthcheckPath
-	}
-	if opts.noHealthcheck {
-		app.Healthcheck = ""
-	}
-	if opts.healthcheckSet {
-		app.Healthcheck = opts.healthcheck
-	}
-	if err := app.Normalize(); err != nil {
-		return AppConfig{}, err
-	}
-	return app, nil
-}
-
-func clearGeneratedRuntime(app *AppConfig) {
-	app.Runtime = ""
-	app.InstallCommand = ""
-	app.BuildCommand = ""
-	app.StartCommand = ""
-	app.StaticDir = ""
+	return applyAppSettings(app, opts.appSettings, opts.dockerfile, opts.noHealthcheck)
 }
 
 func inspectEditRepo(app AppConfig) (editPromptContext, error) {
@@ -320,7 +211,7 @@ func promptEditOptions(app AppConfig, opts editOptions, input io.Reader, w io.Wr
 
 	currentPath := strings.TrimSpace(app.HealthcheckPath)
 	if currentPath == "" {
-		currentPath = promptReadinessDefault(addOptions{runtime: opts.runtime, staticDir: opts.staticDir})
+		currentPath = promptReadinessDefault(opts.runtime, opts.staticDir)
 	}
 	readinessPath, err := p.askDefault("Readiness path", currentPath)
 	if err != nil {
@@ -519,43 +410,13 @@ func (p addPrompter) askPortDefault(label string, current int) (int, error) {
 
 func editEquivalentCommand(appName string, opts editOptions) string {
 	parts := []string{"singleserver", "edit", shellQuote(appName)}
-	appendFlagValue := func(name, value string) {
-		if strings.TrimSpace(value) != "" {
-			parts = append(parts, name, shellQuote(value))
-		}
-	}
 
-	if opts.branchSet {
-		appendFlagValue("--branch", opts.branch)
-	}
 	if opts.dockerfile {
 		parts = append(parts, "--dockerfile")
 	}
-	if opts.runtimeSet {
-		appendFlagValue("--runtime", opts.runtime)
-	}
-	if opts.installSet {
-		appendFlagValue("--install", opts.installCommand)
-	}
-	if opts.buildSet {
-		appendFlagValue("--build", opts.buildCommand)
-	}
-	if opts.startSet {
-		appendFlagValue("--start", opts.startCommand)
-	}
-	if opts.staticDirSet && shouldWriteStaticDir(opts.runtime, opts.staticDir) {
-		appendFlagValue("--static-dir", opts.staticDir)
-	}
-	if opts.appPortSet {
-		appendFlagValue("--app-port", strconv.Itoa(opts.appPort))
-	}
-	if opts.healthcheckPathSet {
-		appendFlagValue("--healthcheck-path", opts.healthcheckPath)
-	}
+	parts = appendAppSettingsFlags(parts, opts.appSettings, true)
 	if opts.noHealthcheck {
 		parts = append(parts, "--no-healthcheck")
-	} else if opts.healthcheckSet {
-		appendFlagValue("--healthcheck", opts.healthcheck)
 	}
 	if opts.noDeploy {
 		parts = append(parts, "--no-deploy")

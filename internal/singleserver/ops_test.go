@@ -328,6 +328,48 @@ func TestDomainsVerifyChecksCloudflareDNSRecord(t *testing.T) {
 	}
 }
 
+func TestDomainsVerifySkipsResolverDNSWhenCloudflareDNSRecordIsChecked(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "apps.yml")
+	t.Setenv("SINGLESERVER_CONFIG", configPath)
+	t.Setenv("SINGLESERVER_STATE_DIR", dir)
+	if err := os.WriteFile(configPath, []byte(`apps:
+  - repo: dvassallo/fullsend
+    hosts:
+      - app.example.com
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "cloudflare.json"), []byte(`{"api_token":"token","account_id":"account","tunnel_id":"tunnel"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	originalRun := commandRunFunc
+	t.Cleanup(func() { commandRunFunc = originalRun })
+	commandRunFunc = func(timeout time.Duration, name string, args ...string) error {
+		if name == "getent" {
+			t.Fatalf("domains verify should not call resolver DNS when Cloudflare DNS can be checked")
+		}
+		return nil
+	}
+	originalVerify := verifyCloudflareDNSRecordFunc
+	t.Cleanup(func() { verifyCloudflareDNSRecordFunc = originalVerify })
+	verifyCloudflareDNSRecordFunc = func(host string, state *CloudflareState, client *CloudflareClient) (string, error) {
+		return state.TunnelID + ".cfargotunnel.com", nil
+	}
+
+	var out bytes.Buffer
+	if err := cliDomains([]string{"verify", "fullsend"}, &out, log.New(io.Discard, "", 0)); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), "\tdns\t") {
+		t.Fatalf("expected resolver DNS output to be skipped, got:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "fullsend\tcloudflare_dns\tok\tapp.example.com\ttarget=tunnel.cfargotunnel.com") {
+		t.Fatalf("expected Cloudflare DNS ok output, got:\n%s", out.String())
+	}
+}
+
 func TestDomainsVerifyFailsWhenCloudflareDNSRecordDoesNotMatch(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "apps.yml")
