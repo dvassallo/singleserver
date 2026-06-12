@@ -165,7 +165,7 @@
             </div>
         </div>
 
-        <p>Deploys for the same app run one at a time, in order, so rapid pushes queue up. The first deploy of an app runs <code>kamal setup</code>; every deploy after that runs <code>kamal redeploy</code>. A deploy that exceeds 2 minutes is killed and reported as failed. And if the app has an external healthcheck URL configured, Single Server polls it after the rollout and fails the deploy if it never comes up.</p>
+        <p>Deploys for the same app run one at a time, in order, so rapid pushes queue up. The first deploy of an app runs <code>kamal setup</code>; every deploy after that runs <code>kamal redeploy</code>. A deploy that exceeds 10 minutes is killed and reported as failed. And if the app has an external healthcheck URL configured, Single Server polls it after the rollout and fails the deploy if it never comes up.</p>
         <p>Manual deploys go through exactly the same path. <code>singleserver deploy</code> exists for redeploys, rollbacks, and staged changes, not as a separate mechanism.</p>
     </section>
 

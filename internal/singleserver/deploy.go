@@ -118,7 +118,7 @@ func (m *DeployManager) runKamal(req DeployRequest, token string) (DeployTiming,
 		return DeployTiming{}, err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
 	command := exec.CommandContext(ctx, "bash", "-lc", kamalDeployScript)
