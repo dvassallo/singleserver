@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -35,6 +36,10 @@ type CloudflareState struct {
 type CloudflareClient struct {
 	token      string
 	httpClient *http.Client
+
+	zonesOnce sync.Once
+	zonesList []cloudflareZone
+	zonesErr  error
 }
 
 type cloudflareZone struct {
@@ -133,12 +138,19 @@ func (c *CloudflareClient) zones(name string) ([]cloudflareZone, error) {
 	return out.Result, nil
 }
 
+func (c *CloudflareClient) allZones() ([]cloudflareZone, error) {
+	c.zonesOnce.Do(func() {
+		c.zonesList, c.zonesErr = c.zones("")
+	})
+	return c.zonesList, c.zonesErr
+}
+
 func (c *CloudflareClient) zoneForHostname(hostname string) (*cloudflareZone, error) {
 	hostname = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(hostname)), ".")
 	if hostname == "" {
 		return nil, errors.New("hostname is required")
 	}
-	zones, err := c.zones("")
+	zones, err := c.allZones()
 	if err != nil {
 		return nil, err
 	}

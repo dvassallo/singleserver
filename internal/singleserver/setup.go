@@ -252,7 +252,7 @@ func selectCloudflareAccount(client *CloudflareClient, accountID string, interac
 	if accountID != "" {
 		return accountID, nil
 	}
-	zones, err := client.zones("")
+	zones, err := client.allZones()
 	if err != nil {
 		return "", err
 	}
