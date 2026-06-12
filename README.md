@@ -47,6 +47,8 @@ go build ./...
 go test ./...
 ```
 
+The unit tests are plain `go test` with no setup, no network, and no build tags. They also run inside the site's Docker build, so a deploy fails before it ships if a test fails.
+
 `go run ./cmd/singleserverd help` prints the CLI. Most commands expect to run on a configured server, so for real behavior use the E2E harness or a throwaway VPS.
 
 ## End-to-end tests

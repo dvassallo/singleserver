@@ -11,6 +11,10 @@ COPY . .
 
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go test ./...
+
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
     set -eux; \
     mkdir -p /out/www/bin; \
     cp -R www/. /out/www/; \
