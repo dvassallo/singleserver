@@ -15,6 +15,7 @@
     <link rel="preload" href="../fonts/space-grotesk.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="../style.css">
     <script src="../script.js" defer></script>
+    <script data-collect-dnt="true" async src="https://scripts.simpleanalyticscdn.com/latest.js"></script>
 </head>
 <body class="page-docs">
 
@@ -41,7 +42,6 @@
             <a href="#contract">The app contract</a>
             <a href="#files">Files on your server</a>
             <a href="#troubleshooting">When something breaks</a>
-            <a href="#faq">FAQ</a>
         </nav>
         <p class="lede">Single Server turns one Linux box into the place where all your apps live. This page covers everything it does on your behalf and every command you might use. The commands are few and the conventions are predictable, so most of this you'll read once and never need again.</p>
     </header>
@@ -166,14 +166,14 @@
             </div>
         </div>
 
-        <p>Deploys for the same app run one at a time, in order, so rapid pushes queue up. The first deploy of an app runs <code>kamal setup</code>; every deploy after that runs <code>kamal redeploy</code>. A deploy that runs past its timeout, 10 minutes by default, is killed and reported as failed; apps with heavier builds can raise <code>deploy_timeout</code>. And if the app has an external healthcheck URL configured, Single Server polls it after the rollout and fails the deploy if it never comes up.</p>
+        <p>Deploys for the same app run one at a time, in order, so rapid pushes queue up. The first deploy of an app runs <code>kamal setup</code>, and every deploy after that runs <code>kamal redeploy</code>. A deploy that runs past its timeout, 10 minutes by default, is killed and reported as failed. Apps with heavier builds can raise <code>deploy_timeout</code>. And if the app has an external healthcheck URL configured, Single Server polls it after the rollout and fails the deploy if it never comes up.</p>
         <p>Manual deploys go through exactly the same path. <code>singleserver deploy</code> exists for redeploys, rollbacks, and staged changes, not as a separate mechanism.</p>
     </section>
 
     <section id="commands">
         <h2>Commands</h2>
         <p>Everything is a subcommand of <code>singleserver</code>, run on the server over SSH. Commands print aligned check lines as they work, so you can see each step succeed or fail. In the usage lines, <code>&lt;angle brackets&gt;</code> mean required and <code>[square brackets]</code> mean optional.</p>
-        <p>Commands that change the server are interactive by default when they have a terminal. If a value is missing, Single Server asks for it. For scripts, pass <code>--non-interactive</code> or set <code>SINGLESERVER_NON_INTERACTIVE=1</code>, and provide every value as an argument, flag, or environment variable. Destructive scope is explicit in the command itself, such as <code>--delete-storage</code>; there is no separate <code>--yes</code> flag.</p>
+        <p>Commands that change the server are interactive when run in a terminal, prompting for anything missing. In scripts, pass <code>--non-interactive</code> or set <code>SINGLESERVER_NON_INTERACTIVE=1</code> and provide every value up front. Missing input becomes an error instead of a prompt.</p>
 
         <nav class="command-index" aria-label="Command index">
             <div class="command-index-group">
@@ -223,7 +223,7 @@
                 <div class="code-wrapper">
                     <pre class="code-block">curl -fsSL <span class="accent">https://singleserver.com/install.sh</span> | sh</pre>
                 </div>
-                <p>Installs Docker, Kamal, Tailscale, cloudflared, sqlite3, the singleserver binary, the systemd daemon, a local Docker registry, and a deploy user for Kamal. Then it runs first-run setup: connecting Tailscale, Cloudflare, and GitHub, and finishing with doctor. Rerunning it is safe; it skips what is already done.</p>
+                <p>Installs Docker, Kamal, Tailscale, cloudflared, sqlite3, the singleserver binary, the systemd daemon, a local Docker registry, and a deploy user for Kamal. Then it runs first-run setup: connecting Tailscale, Cloudflare, and GitHub, and finishing with doctor. Rerunning it is safe, since it skips what is already done.</p>
                 <ul class="option-list">
                     <li><code>TAILSCALE_AUTHKEY</code><span>Set for unattended installs so Tailscale joins without a browser login.</span></li>
                     <li><code>CLOUDFLARE_API_TOKEN</code><span>Set for unattended installs so Cloudflare connects without a prompt. The token needs DNS and tunnel permissions.</span></li>
@@ -238,7 +238,7 @@
 singleserver connect cloudflare [--account &lt;id&gt;] [--tunnel &lt;name&gt;]
 singleserver connect github</pre>
                 </div>
-                <p>One command wires up each outside service, and rerunning it repairs that service without touching the others. The installer runs all three for you; you only need them again if a connection breaks or you skipped a step.</p>
+                <p>One command wires up each outside service, and rerunning it repairs that service without touching the others. The installer runs all three for you, so you only need them again if a connection breaks or you skipped a step.</p>
                 <p><code>connect tailscale</code> brings up Tailscale, enables Tailscale SSH, and starts Tailscale Funnel for the daemon's local port. The resulting <code>https://&lt;host&gt;.&lt;tailnet&gt;.ts.net</code> URL becomes the public address GitHub uses for the setup page and webhooks.</p>
                 <ul class="option-list">
                     <li><code>--auth-key &lt;key&gt;</code><span>Use a Tailscale auth key instead of browser login.</span></li>
@@ -284,8 +284,10 @@ singleserver connect github</pre>
                     <li><code>--branch &lt;name&gt;</code> <span class="opt-badge">Default: repo default branch</span><span>Deploy only pushes to this branch.</span></li>
                     <li><code>--name &lt;app&gt;</code> <span class="opt-badge">Default: repo name, lowercased</span><span>Override the app name. Names must be unique on the server.</span></li>
                     <li><code>--runtime static|node|bun</code> <span class="opt-badge req">Required without a Dockerfile</span><span>Generate a temporary Dockerfile during deploys. Repos with their own Dockerfile must omit this.</span></li>
-                    <li><code>--install &lt;cmd&gt;</code> / <code>--build &lt;cmd&gt;</code><span>Optional install and build commands for generated Node and Bun Dockerfiles.</span></li>
-                    <li><code>--start &lt;cmd&gt;</code> / <code>--app-port &lt;port&gt;</code> <span class="opt-badge req">Required for processes</span><span>Start command and listening port for a generated Node or Bun web process.</span></li>
+                    <li><code>--install &lt;cmd&gt;</code><span>Optional install command for generated Node and Bun Dockerfiles, such as <code>npm ci</code>.</span></li>
+                    <li><code>--build &lt;cmd&gt;</code><span>Optional build command for generated Node and Bun Dockerfiles, such as <code>npm run build</code>.</span></li>
+                    <li><code>--start &lt;cmd&gt;</code> <span class="opt-badge req">Required for processes</span><span>Start command for a generated Node or Bun web process. Not used for static output.</span></li>
+                    <li><code>--app-port &lt;port&gt;</code> <span class="opt-badge req">Required for processes</span><span>Port the process listens on. Static output always serves on <code>80</code>.</span></li>
                     <li><code>--static-dir &lt;dir&gt;</code> <span class="opt-badge">Default: .</span><span>Directory of static files to serve with nginx, relative to the repo.</span></li>
                     <li><code>--healthcheck-path &lt;path&gt;</code> <span class="opt-badge">Default: / (static: /up)</span><span>Path Kamal polls to decide the new container is ready.</span></li>
                     <li><code>--healthcheck &lt;url&gt;</code><span>Optional public URL checked after each deploy and by status and doctor.</span></li>
@@ -307,7 +309,8 @@ singleserver connect github</pre>
                     <li><code>--branch &lt;name&gt;</code><span>Change which branch deploys automatically.</span></li>
                     <li><code>--healthcheck-path &lt;path&gt;</code><span>Change the container healthcheck path.</span></li>
                     <li><code>--deploy-timeout &lt;duration&gt;</code> <span class="opt-badge">Default: 10m</span><span>Raise or lower the deploy timeout for this app.</span></li>
-                    <li><code>--healthcheck &lt;url&gt;</code> / <code>--no-healthcheck</code><span>Set or clear the optional external healthcheck URL.</span></li>
+                    <li><code>--healthcheck &lt;url&gt;</code><span>Set the optional external healthcheck URL.</span></li>
+                    <li><code>--no-healthcheck</code><span>Clear the external healthcheck URL. The container healthcheck still runs during deploys.</span></li>
                     <li><code>--no-deploy</code><span>Write the config change without applying it to the running app yet.</span></li>
                     <li><code>--non-interactive</code><span>Never open the editor. Missing settings are an error.</span></li>
                 </ul>
@@ -413,7 +416,7 @@ singleserver env unset &lt;app&gt; KEY [--non-interactive]</pre>
                 <div class="code-wrapper">
                     <pre class="code-block">singleserver storage enable &lt;app&gt; [--mount /storage] [--path /srv/storage/&lt;app&gt;] [--no-deploy] [--non-interactive]</pre>
                 </div>
-                <p>Containers are disposable; storage is not. This creates a host directory and mounts it into the container at <code>/storage</code>, surviving every deploy.</p>
+                <p>Containers are disposable. Storage is not. This creates a host directory and mounts it into the container at <code>/storage</code>, surviving every deploy.</p>
                 <ul class="option-list">
                     <li><code>--mount &lt;path&gt;</code> <span class="opt-badge">Default: /storage</span><span>Where the directory appears inside the container.</span></li>
                     <li><code>--path &lt;path&gt;</code> <span class="opt-badge">Default: /srv/storage/&lt;app&gt;</span><span>Where the directory lives on the host.</span></li>
@@ -483,10 +486,11 @@ singleserver env unset &lt;app&gt; KEY [--non-interactive]</pre>
             <li><strong><code>path</code></strong><span class="default">Default: <code>/srv/repos/&lt;name&gt;</code>.</span> Where the server keeps the checkout.</li>
             <li><strong><code>hosts</code></strong><span class="default">Default: none.</span> Public hostnames. Each one becomes a Kamal proxy host, a proxied Cloudflare CNAME, and a tunnel route. A hostname can belong to one app at a time.</li>
             <li><strong><code>runtime</code></strong><span class="default">Default: absent.</span> <code>static</code>, <code>node</code>, or <code>bun</code>. Set only when the repo has no Dockerfile and Single Server should generate one during deploys.</li>
-            <li><strong><code>install</code> / <code>build</code></strong><span class="default">Default: absent.</span> Optional commands for generated Node and Bun Dockerfiles. Exactly what you write is what runs.</li>
+            <li><strong><code>install</code></strong><span class="default">Default: absent.</span> Optional install command for generated Node and Bun Dockerfiles. Exactly what you write is what runs.</li>
+            <li><strong><code>build</code></strong><span class="default">Default: absent.</span> Optional build command for generated Node and Bun Dockerfiles, run after <code>install</code>.</li>
             <li><strong><code>start</code></strong><span class="default">Default: absent.</span> Start command for a generated Node or Bun web process. Required when <code>runtime</code> is <code>node</code> or <code>bun</code> and there's no <code>static_dir</code>.</li>
             <li><strong><code>static_dir</code></strong><span class="default">Default: <code>.</code> for <code>runtime: static</code>.</span> Directory served by nginx, relative to the repo. For Node/Bun builds, the build output directory.</li>
-            <li><strong><code>app_port</code></strong><span class="default">Default: <code>80</code>.</span> The container port that receives traffic. Required for generated Node/Bun processes; always <code>80</code> for static output.</li>
+            <li><strong><code>app_port</code></strong><span class="default">Default: <code>80</code>.</span> The container port that receives traffic. Required for generated Node/Bun processes, and always <code>80</code> for static output.</li>
             <li><strong><code>healthcheck_path</code></strong><span class="default">Default: <code>/</code>, or <code>/up</code> for generated static output.</span> The path Kamal polls before flipping traffic to a new container.</li>
             <li><strong><code>healthcheck</code></strong><span class="default">Default: absent.</span> Optional external URL checked after deploys and by status and doctor. When absent, the external check is reported as assumed rather than failed.</li>
             <li><strong><code>deploy_timeout</code></strong><span class="default">Default: 10m.</span> How long a deploy may run before it is killed and reported as failed. A Go duration such as <code>20m</code> or <code>90s</code>.</li>
@@ -494,21 +498,37 @@ singleserver env unset &lt;app&gt; KEY [--non-interactive]</pre>
         </ul>
 
         <h3 id="dockerfiles">Generated Dockerfiles</h3>
-        <p>A repo with a Dockerfile is always used as-is, no questions asked. For everything else, Single Server generates a Dockerfile from your explicit settings at deploy time, uses it for the build, and deletes it afterward. Nothing is committed to your repo. Three shapes are supported.</p>
-        <div class="code-wrapper">
-            <pre class="code-block"><span class="muted"># Static files, already built. nginx serves them.</span>
-singleserver add <span class="accent">https://github.com/you/site</span> --runtime static --static-dir dist
-
-<span class="muted"># A build step that outputs static files. Build with Node, serve with nginx.</span>
-singleserver add <span class="accent">https://github.com/you/site</span> --runtime node --install "npm ci" \
-  --build "npm run build" --static-dir dist
-
-<span class="muted"># A long-running web process.</span>
-singleserver add <span class="accent">https://github.com/you/app</span> --runtime bun --install "bun install" \
+        <p>A repo with a Dockerfile is always used as-is, no questions asked. For everything else, Single Server generates a Dockerfile from your explicit settings at deploy time, uses it for the build, and deletes it afterward. Nothing is committed to your repo. Three types are available.</p>
+        <div class="step-list">
+            <div>
+                <p class="step-title">Static files, already built. nginx serves them.</p>
+                <div class="code-wrapper">
+                    <pre class="code-block">singleserver add <span class="accent">https://github.com/you/site</span> --runtime static --static-dir dist</pre>
+                    <button class="copy-btn" aria-label="Copy to clipboard">
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                    </button>
+                </div>
+            </div>
+            <div>
+                <p class="step-title">A build step that outputs static files. Build with Node, serve with nginx.</p>
+                <div class="code-wrapper">
+                    <pre class="code-block">singleserver add <span class="accent">https://github.com/you/site</span> --runtime node --install "npm ci" \
+  --build "npm run build" --static-dir dist</pre>
+                    <button class="copy-btn" aria-label="Copy to clipboard">
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                    </button>
+                </div>
+            </div>
+            <div>
+                <p class="step-title">A long-running web process.</p>
+                <div class="code-wrapper">
+                    <pre class="code-block">singleserver add <span class="accent">https://github.com/you/app</span> --runtime bun --install "bun install" \
   --start "bun run start" --app-port 3000</pre>
-            <button class="copy-btn" aria-label="Copy to clipboard">
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
-            </button>
+                    <button class="copy-btn" aria-label="Copy to clipboard">
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                    </button>
+                </div>
+            </div>
         </div>
         <p>Static output gets an nginx image with sensible behavior: an <code>/up</code> endpoint that answers the healthcheck, single-page-app fallback to <code>index.html</code>, and dotfiles blocked. Generated processes run on <code>node:20-alpine</code> or <code>oven/bun:1-alpine</code>, with <code>PORT</code> set to your app port and, for Node, <code>NODE_ENV=production</code>.</p>
 
@@ -516,10 +536,10 @@ singleserver add <span class="accent">https://github.com/you/app</span> --runtim
         <p>Repos don't need a Kamal config. If a repo tracks <code>config/deploy.yml</code>, that file wins. Otherwise Single Server writes one for the deploy and removes it after Kamal exits. <code>inspect</code> shows you exactly what it generates, and these are the defaults inside it.</p>
         <ul class="settings-list">
             <li><strong>Service and image</strong><span class="default">The app name.</span> One name everywhere makes containers, images, and logs easy to find.</li>
-            <li><strong>Server</strong><span class="default"><code>127.0.0.1</code>, via the deploy user.</span> Kamal keeps its normal SSH deploy model; it just happens to SSH into the same machine.</li>
+            <li><strong>Server</strong><span class="default"><code>127.0.0.1</code>, via the deploy user.</span> Kamal keeps its normal SSH deploy model. It just happens to SSH into the same machine.</li>
             <li><strong>Registry</strong><span class="default"><code>127.0.0.1:5555</code>.</span> A local registry container, so images never leave the box.</li>
             <li><strong>Builder</strong><span class="default">Local Docker builder, server architecture.</span> No cross-compilation, no remote builders.</li>
-            <li><strong>Proxy</strong><span class="default"><code>ssl: false</code>, forwarded headers on, bound to loopback.</span> Cloudflare terminates TLS at the edge; the tunnel delivers plain HTTP to Kamal's proxy, which is not reachable from the public internet.</li>
+            <li><strong>Proxy</strong><span class="default"><code>ssl: false</code>, forwarded headers on, bound to loopback.</span> Cloudflare terminates TLS at the edge, and the tunnel delivers plain HTTP to Kamal's proxy, which is not reachable from the public internet.</li>
             <li><strong>Healthcheck</strong><span class="default">Poll the healthcheck path every second, 1s timeout.</span> Tight intervals keep zero-downtime swaps fast for small apps.</li>
             <li><strong>Timeouts</strong><span class="default">Deploy 10s, drain 1s.</span> Tuned for small containers that boot fast. A repo-level <code>config/deploy.yml</code> is the escape hatch for apps that need different numbers.</li>
         </ul>
@@ -621,6 +641,10 @@ singleserver add <span class="accent">https://github.com/you/app</span> --runtim
                 <p>A failed deploy does not take your app down: Kamal only moves traffic after the new container passes its healthcheck, so the previous version keeps serving. The commit on GitHub carries the failure status and reason. On the server, <code>singleserver logs &lt;app&gt;</code> has the full build and rollout output, and <code>singleserver logs &lt;app&gt; --runtime</code> shows your app's own output if the container started and then failed its healthcheck. Once the cause is fixed, push again or run <code>singleserver deploy &lt;app&gt;</code>. To return to a known good release immediately, deploy its commit directly: <code>singleserver deploy &lt;app&gt; &lt;sha&gt;</code>.</p>
             </div>
             <div>
+                <strong>A deploy timed out.</strong>
+                <p>Deploys may run for 10 minutes by default, covering the fetch, the image build, and the rollout. Past the limit the deploy is killed and reported as failed, and the running version keeps serving. Apps with heavier builds can raise the limit: set <code>deploy_timeout</code> in <code>apps.yml</code> to a Go duration such as <code>20m</code>, or pass <code>--deploy-timeout</code> to <code>add</code> or <code>edit</code>.</p>
+            </div>
+            <div>
                 <strong>An app is unhealthy.</strong>
                 <p><code>singleserver status</code> shows each app's container state, last deploy outcome, and healthcheck result. <code>singleserver logs &lt;app&gt; --runtime --follow</code> streams the container's output live. If the app needs a restart rather than a code fix, redeploying the current commit with <code>singleserver deploy &lt;app&gt;</code> replaces the container with zero downtime.</p>
             </div>
@@ -631,16 +655,6 @@ singleserver add <span class="accent">https://github.com/you/app</span> --runtim
             <div>
                 <strong>Going deeper.</strong>
                 <p>Everything underneath is standard and inspectable: <code>docker ps</code> for containers, <code>journalctl -u singleserver.service</code> for the daemon, and the tailscaled and cloudflared services log through systemd as usual. Whatever you find, you are debugging well-documented tools on a machine you fully control.</p>
-            </div>
-        </div>
-    </section>
-
-    <section id="faq">
-        <h2>FAQ</h2>
-        <div class="idea-list">
-            <div>
-                <strong>How long can a deploy take?</strong>
-                <p>10 minutes by default, covering the fetch, the image build, and the rollout. A deploy that runs past the limit is killed and reported as failed, and the running version keeps serving. Apps with heavier builds can raise it: set <code>deploy_timeout</code> in <code>apps.yml</code> to a Go duration such as <code>20m</code>, or pass <code>--deploy-timeout</code> to <code>add</code> or <code>edit</code>.</p>
             </div>
         </div>
     </section>
