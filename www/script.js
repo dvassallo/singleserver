@@ -41,6 +41,15 @@ if (sloganBadge) {
     schedule();
 }
 
+document.querySelectorAll('.brand-link').forEach((link) => {
+    link.addEventListener('mouseenter', () => {
+        link.classList.add('is-hopping');
+    });
+    link.addEventListener('animationend', () => {
+        link.classList.remove('is-hopping');
+    });
+});
+
 document.querySelectorAll('.copy-btn').forEach((btn) => {
     btn.addEventListener('click', async () => {
         const codeBlock = btn.previousElementSibling;

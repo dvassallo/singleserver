@@ -107,9 +107,10 @@ h1 {
     transition: color 0.15s;
 }
 
-.brand-link:hover { color: var(--primary); }
+.brand-link:hover,
+.brand-link.is-hopping { color: var(--primary); }
 
-.brand-link:hover .brand-icon {
+.brand-link.is-hopping .brand-icon {
     animation: logo-wiggle 750ms cubic-bezier(.2, 1.2, .2, 1);
 }
 
@@ -777,7 +778,7 @@ footer a:hover { border-color: var(--secondary); }
     .tagline,
     .tagline.is-changing,
     .tagline.is-changing .tagline-text,
-    .brand-link:hover .brand-icon {
+    .brand-link.is-hopping .brand-icon {
         animation: none;
     }
 }
