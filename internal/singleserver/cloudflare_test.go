@@ -114,10 +114,42 @@ func TestZoneForHostnameFromListChoosesMostSpecificZone(t *testing.T) {
 	}
 }
 
+func TestZoneForHostnameFromListNormalizesCaseAndTrailingDots(t *testing.T) {
+	zones := []cloudflareZone{
+		{ID: "example", Name: "Example.COM."},
+	}
+
+	zone, err := zoneForHostnameFromList("WWW.EXAMPLE.COM.", zones)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if zone.ID != "example" {
+		t.Fatalf("expected normalized zone match, got %#v", zone)
+	}
+}
+
 func TestZoneForHostnameFromListRequiresMatchingZone(t *testing.T) {
 	_, err := zoneForHostnameFromList("app.other.com", []cloudflareZone{{ID: "example", Name: "example.com"}})
 	if err == nil || !strings.Contains(err.Error(), "cannot access a zone") {
 		t.Fatalf("expected missing zone error, got %v", err)
+	}
+}
+
+func TestCloudflareTokenFromEnvOrState(t *testing.T) {
+	t.Setenv("CLOUDFLARE_API_TOKEN", "")
+
+	if got := cloudflareTokenFromEnvOrState(nil); got != "" {
+		t.Fatalf("expected empty token, got %q", got)
+	}
+
+	state := &CloudflareState{APIToken: " state-token "}
+	if got := cloudflareTokenFromEnvOrState(state); got != "state-token" {
+		t.Fatalf("expected state token, got %q", got)
+	}
+
+	t.Setenv("CLOUDFLARE_API_TOKEN", " env-token ")
+	if got := cloudflareTokenFromEnvOrState(state); got != "env-token" {
+		t.Fatalf("expected env token to win, got %q", got)
 	}
 }
 

@@ -288,6 +288,106 @@ func TestAccountIDFromZonesRejectsMultipleAccounts(t *testing.T) {
 	}
 }
 
+func TestTailscaleStatusNameFallbacks(t *testing.T) {
+	tests := []struct {
+		name   string
+		status *tailscaleStatus
+		want   string
+	}{
+		{name: "nil", status: nil, want: "-"},
+		{name: "nil self", status: &tailscaleStatus{}, want: "-"},
+		{name: "dns name", status: testTailscaleStatus(" server.tailnet.ts.net. ", "server"), want: "server.tailnet.ts.net"},
+		{name: "hostname fallback", status: testTailscaleStatus("", " server "), want: "server"},
+		{name: "blank", status: testTailscaleStatus(" ", " "), want: "-"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := tailscaleStatusName(test.status); got != test.want {
+				t.Fatalf("tailscaleStatusName() = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestTailscaleFunnelURLRequiresTsNetHostname(t *testing.T) {
+	tests := []struct {
+		name   string
+		status *tailscaleStatus
+		want   string
+	}{
+		{name: "ts net dns", status: testTailscaleStatus("server.tailnet.ts.net.", ""), want: "https://server.tailnet.ts.net"},
+		{name: "non ts net hostname", status: testTailscaleStatus("", "server.example.com"), want: ""},
+		{name: "missing status", status: nil, want: ""},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := tailscaleFunnelURL(test.status); got != test.want {
+				t.Fatalf("tailscaleFunnelURL() = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestLoadTailscaleState(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("SINGLESERVER_STATE_DIR", dir)
+
+	missing, err := loadTailscaleState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if missing.Hostname != "" || missing.FunnelURL != "" {
+		t.Fatalf("expected empty missing state, got %#v", missing)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "tailscale.json"), []byte(`{"hostname":"server.tailnet.ts.net","funnel_url":"https://server.tailnet.ts.net"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := loadTailscaleState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Hostname != "server.tailnet.ts.net" || loaded.FunnelURL != "https://server.tailnet.ts.net" {
+		t.Fatalf("unexpected loaded state: %#v", loaded)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "tailscale.json"), []byte(`{`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadTailscaleState(); err == nil {
+		t.Fatal("expected invalid JSON error")
+	}
+}
+
+func TestSetupFlagTakesValue(t *testing.T) {
+	tests := []struct {
+		name string
+		fn   func(string) bool
+		arg  string
+		want bool
+	}{
+		{name: "cloudflare account", fn: cloudflareFlagTakesValue, arg: "--account", want: true},
+		{name: "cloudflare account equals", fn: cloudflareFlagTakesValue, arg: "--account=abc", want: true},
+		{name: "cloudflare tunnel", fn: cloudflareFlagTakesValue, arg: "--tunnel", want: true},
+		{name: "cloudflare non interactive", fn: cloudflareFlagTakesValue, arg: "--non-interactive", want: false},
+		{name: "github has no value flags", fn: githubFlagTakesValue, arg: "--setup-token", want: false},
+		{name: "tailscale auth key", fn: tailscaleFlagTakesValue, arg: "--auth-key", want: true},
+		{name: "tailscale auth key equals", fn: tailscaleFlagTakesValue, arg: "--auth-key=tskey", want: true},
+		{name: "tailscale hostname", fn: tailscaleFlagTakesValue, arg: "--hostname", want: true},
+		{name: "tailscale non interactive", fn: tailscaleFlagTakesValue, arg: "--non-interactive", want: false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := test.fn(test.arg); got != test.want {
+				t.Fatalf("flag takes value = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
 func setupManifestFromBody(t *testing.T, body string) map[string]any {
 	t.Helper()
 	const prefix = `name="manifest" value="`
@@ -315,5 +415,19 @@ func stubCommandRun(t *testing.T) {
 	t.Cleanup(func() { commandRunFunc = original })
 	commandRunFunc = func(timeout time.Duration, name string, args ...string) error {
 		return nil
+	}
+}
+
+func testTailscaleStatus(dnsName, hostName string) *tailscaleStatus {
+	return &tailscaleStatus{
+		BackendState: "Running",
+		Self: &struct {
+			DNSName      string   `json:"DNSName"`
+			HostName     string   `json:"HostName"`
+			TailscaleIPs []string `json:"TailscaleIPs"`
+		}{
+			DNSName:  dnsName,
+			HostName: hostName,
+		},
 	}
 }

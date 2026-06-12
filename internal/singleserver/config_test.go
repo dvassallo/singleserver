@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLoadConfigSupportsStringAndMapApps(t *testing.T) {
@@ -299,5 +300,48 @@ func TestLoadConfigTracksExplicitAppPortForGeneratedRuntime(t *testing.T) {
 	}
 	if !config.Apps[0].AppPortSet {
 		t.Fatal("expected explicit app_port to be tracked")
+	}
+}
+
+func TestDeployTimeoutDurationDefaultsAndOverrides(t *testing.T) {
+	tests := []struct {
+		name string
+		app  AppConfig
+		want time.Duration
+	}{
+		{name: "default", app: AppConfig{Repo: "acme/scoreboard"}, want: defaultDeployTimeout},
+		{name: "custom", app: AppConfig{Repo: "acme/scoreboard", DeployTimeout: "45s"}, want: 45 * time.Second},
+		{name: "invalid falls back", app: AppConfig{Repo: "acme/scoreboard", DeployTimeout: "not-a-duration"}, want: defaultDeployTimeout},
+		{name: "zero falls back", app: AppConfig{Repo: "acme/scoreboard", DeployTimeout: "0s"}, want: defaultDeployTimeout},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := test.app.DeployTimeoutDuration(); got != test.want {
+				t.Fatalf("DeployTimeoutDuration() = %s, want %s", got, test.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeRejectsInvalidDeployTimeout(t *testing.T) {
+	tests := []struct {
+		name    string
+		timeout string
+		want    string
+	}{
+		{name: "invalid", timeout: "eventually", want: "invalid deploy_timeout"},
+		{name: "zero", timeout: "0s", want: "must be positive"},
+		{name: "negative", timeout: "-1s", want: "must be positive"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			app := AppConfig{Repo: "acme/scoreboard", DeployTimeout: test.timeout}
+			err := app.Normalize()
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("expected %q error, got %v", test.want, err)
+			}
+		})
 	}
 }

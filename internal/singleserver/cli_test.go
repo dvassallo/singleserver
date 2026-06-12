@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"text/tabwriter"
@@ -62,6 +63,110 @@ func TestUsageMentionsVersionCommand(t *testing.T) {
 	}
 	if strings.Contains(got, "singleserver init") || strings.Contains(got, "init           ") {
 		t.Fatalf("did not expect init command in usage, got:\n%s", got)
+	}
+}
+
+func TestParseRootCLIMode(t *testing.T) {
+	tests := []struct {
+		name               string
+		args               []string
+		envNonInteractive  string
+		wantNonInteractive bool
+		wantArgs           []string
+		wantErr            string
+	}{
+		{
+			name:               "root flag before command",
+			args:               []string{"--non-interactive", "status"},
+			wantNonInteractive: true,
+			wantArgs:           []string{"status"},
+		},
+		{
+			name:               "root parser stops at command",
+			args:               []string{"status", "--non-interactive"},
+			wantArgs:           []string{"status", "--non-interactive"},
+			wantErr:            "",
+			wantNonInteractive: false,
+		},
+		{
+			name:               "environment enables non interactive",
+			args:               []string{"status"},
+			envNonInteractive:  "true",
+			wantNonInteractive: true,
+			wantArgs:           []string{"status"},
+		},
+		{
+			name:    "yes is removed",
+			args:    []string{"--yes", "status"},
+			wantErr: "--yes has been removed",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if test.envNonInteractive != "" {
+				t.Setenv("SINGLESERVER_NON_INTERACTIVE", test.envNonInteractive)
+			}
+			mode, args, err := parseRootCLIMode(test.args)
+			if test.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+					t.Fatalf("expected %q error, got %v", test.wantErr, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if mode.NonInteractive != test.wantNonInteractive {
+				t.Fatalf("NonInteractive = %v, want %v", mode.NonInteractive, test.wantNonInteractive)
+			}
+			if !reflect.DeepEqual(args, test.wantArgs) {
+				t.Fatalf("args = %#v, want %#v", args, test.wantArgs)
+			}
+		})
+	}
+}
+
+func TestCommandModeFromArgsStripsNonInteractiveWithoutEatingFlagValues(t *testing.T) {
+	mode, args, err := commandModeFromArgs(
+		[]string{"app-name", "--healthcheck-path", "/ready", "--non-interactive", "--host=app.example.com"},
+		func(arg string) bool {
+			name := strings.TrimLeft(arg, "-")
+			name, _, _ = strings.Cut(name, "=")
+			return name == "healthcheck-path" || name == "host"
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !mode.NonInteractive {
+		t.Fatal("expected non-interactive mode")
+	}
+	want := []string{"app-name", "--healthcheck-path", "/ready", "--host=app.example.com"}
+	if !reflect.DeepEqual(args, want) {
+		t.Fatalf("args = %#v, want %#v", args, want)
+	}
+}
+
+func TestCommandModeFromArgsRejectsRemovedYesFlag(t *testing.T) {
+	_, _, err := commandModeFromArgs([]string{"--yes", "app-name"}, noFlagValues)
+	if err == nil || !strings.Contains(err.Error(), "--yes has been removed") {
+		t.Fatalf("expected removed --yes error, got %v", err)
+	}
+}
+
+func TestNormalizeFlagArgsMovesFlagsBeforePositionals(t *testing.T) {
+	got := normalizeFlagArgs(
+		[]string{"app-name", "--host", "app.example.com", "--runtime=static", "--", "--literal"},
+		func(arg string) bool {
+			name := strings.TrimLeft(arg, "-")
+			name, _, _ = strings.Cut(name, "=")
+			return name == "host" || name == "runtime"
+		},
+	)
+	want := []string{"--host", "app.example.com", "--runtime=static", "app-name", "--literal"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("normalizeFlagArgs() = %#v, want %#v", got, want)
 	}
 }
 
@@ -170,8 +275,8 @@ func TestAppRuntimeStatus(t *testing.T) {
 
 func TestContainerForApp(t *testing.T) {
 	containers := map[string]string{
-		"scoreboard-web-123":  "scoreboard-web-123",
-		"arcade-games-1": "arcade-games-1",
+		"scoreboard-web-123": "scoreboard-web-123",
+		"arcade-games-1":     "arcade-games-1",
 	}
 
 	if got, ok := containerForApp("scoreboard", containers); !ok || got != "scoreboard-web-123" {
