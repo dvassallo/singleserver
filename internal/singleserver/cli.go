@@ -21,10 +21,6 @@ var (
 )
 
 func RunCLI(args []string, logger *log.Logger) error {
-	if len(args) == 0 {
-		return Run(logger)
-	}
-
 	jsonOut, args, err := extractOutputFlag(args)
 	if err != nil {
 		return err
