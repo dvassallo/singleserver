@@ -14,7 +14,7 @@ run it also sweeps old, disconnected E2E tunnels whose names start with
 dead tunnels in Cloudflare.
 
 Tailscale is the one deliberately reused provider state. The runner keeps a
-small Tailscale state directory per distro under `test/e2e-local-real/state/`
+small Tailscale state directory per distro under `test/e2e/state/`
 so repeated local runs keep the same `.ts.net` name and cached Funnel
 certificate state instead of asking Let's Encrypt for a new identity every run.
 
@@ -23,8 +23,8 @@ certificate state instead of asking Let's Encrypt for a new identity every run.
 Copy the example env file and fill it with real test credentials:
 
 ```sh
-cp test/e2e-local-real/.env.example test/e2e-local-real/.env
-chmod 600 test/e2e-local-real/.env
+cp test/e2e/.env.example test/e2e/.env
+chmod 600 test/e2e/.env
 ```
 
 Required values:
@@ -56,7 +56,7 @@ and `python3`.
 The local `.env`, generated work directory, and Tailscale state cache are
 ignored by git. To keep credentials outside the repo, set `E2E_ENV_FILE` to an
 absolute path and the runner loads that file instead of
-`test/e2e-local-real/.env`.
+`test/e2e/.env`.
 
 ## Structure
 
@@ -106,18 +106,18 @@ to request a new Funnel certificate.
 If you do not have test GitHub App credentials yet, run:
 
 ```sh
-test/e2e-local-real/bootstrap-github-app.sh
+test/e2e/bootstrap-github-app.sh
 ```
 
 The helper starts a temporary Single Server container, exposes setup through
 Tailscale Funnel, and opens the GitHub App manifest flow. GitHub still requires
 a browser approval step. Install the app on the test repository, then copy the
-printed values into `test/e2e-local-real/.env`.
+printed values into `test/e2e/.env`.
 
 ## Run
 
 ```sh
-test/e2e-local-real/run.sh
+test/e2e/run.sh
 ```
 
 By default this runs the Ubuntu, Debian, Amazon Linux 2023, and Rocky Linux 9
@@ -132,7 +132,7 @@ E2E_CASES="dockerfile static static-build node"
 fast slice:
 
 ```sh
-E2E_DISTROS=amazonlinux E2E_CASES=node test/e2e-local-real/run.sh
+E2E_DISTROS=amazonlinux E2E_CASES=node test/e2e/run.sh
 ```
 
 The run verifies:
@@ -167,8 +167,8 @@ falls back to the same host/path through Kamal on the local test host. `doctor`
 still verifies the Cloudflare DNS record and Tunnel route through the real
 provider APIs.
 
-Supported distro images live in `test/e2e-local-real/images/`. To add another
-distro later, add `test/e2e-local-real/images/<name>.Dockerfile` and include
+Supported distro images live in `test/e2e/images/`. To add another
+distro later, add `test/e2e/images/<name>.Dockerfile` and include
 `<name>` in `E2E_DISTROS`.
 
 Set `SINGLESERVER_E2E_CLOUDFLARE_TUNNEL_CLEANUP_MIN_AGE_SECONDS` to change the

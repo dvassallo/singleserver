@@ -1,11 +1,11 @@
 .env
 .env.*
 !.env.example
-test/e2e-local-real/.env
-test/e2e-local-real/.env.*
-!test/e2e-local-real/.env.example
-test/e2e-local-real/state/
-test/e2e-local-real/work/
+test/e2e/.env
+test/e2e/.env.*
+!test/e2e/.env.example
+test/e2e/state/
+test/e2e/work/
 *.log
 tmp/
 dist/

@@ -35,7 +35,7 @@ Every push to the configured branch deploys from then on. The [docs](https://sin
 - `cmd/singleserverd` — entry point for the one Go binary, which runs as both the deploy daemon and the CLI.
 - `internal/singleserver` — all of the product: config, deploys, provider connections, and commands.
 - `www` — singleserver.com, including the docs page and `install.sh`. The site deploys as a Single Server app, and its `Dockerfile` builds the hosted binaries it serves at `/bin/`.
-- `test/e2e-local-real` — the real-dependency end-to-end harness.
+- `test/e2e` — the real-dependency end-to-end harness.
 - `config/apps.example.yml` — an example app config.
 
 ## Build and test
@@ -53,10 +53,10 @@ The unit tests are plain `go test` with no setup, no network, and no build tags.
 
 ## End-to-end tests
 
-The E2E harness spins up disposable Linux hosts in Docker Desktop and runs the real installer against real Tailscale, Cloudflare, and GitHub. It is serial, stateful, and needs Docker plus a local `.env` of test credentials. [test/e2e-local-real/README.md](test/e2e-local-real/README.md) covers the `.env` and setup, then:
+The E2E harness spins up disposable Linux hosts in Docker Desktop and runs the real installer against real Tailscale, Cloudflare, and GitHub. It is serial, stateful, and needs Docker plus a local `.env` of test credentials. [test/e2e/README.md](test/e2e/README.md) covers the `.env` and setup, then:
 
 ```sh
-test/e2e-local-real/run.sh
+test/e2e/run.sh
 ```
 
 ---

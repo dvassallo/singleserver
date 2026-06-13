@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-E2E_DIR="$ROOT_DIR/test/e2e-local-real"
+E2E_DIR="$ROOT_DIR/test/e2e"
 ENV_FILE="${E2E_ENV_FILE:-$E2E_DIR/.env}"
 
 if [ ! -f "$ENV_FILE" ]; then
