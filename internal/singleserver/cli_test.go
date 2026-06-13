@@ -39,13 +39,13 @@ func TestPrintVersionUsesStampedBuildValues(t *testing.T) {
 	printVersion(&out)
 
 	got := out.String()
-	if !strings.Contains(got, "singleserver\tversion\t1.2.3") {
+	if !strings.Contains(got, "singleserver 1.2.3") {
 		t.Fatalf("expected stamped version, got:\n%s", got)
 	}
-	if !strings.Contains(got, "commit=1234567890ab") {
+	if !strings.Contains(got, "commit 1234567890ab") {
 		t.Fatalf("expected short commit, got:\n%s", got)
 	}
-	if !strings.Contains(got, "built=2026-06-08T21:00:00Z") {
+	if !strings.Contains(got, "built  2026-06-08T21:00:00Z") {
 		t.Fatalf("expected build date, got:\n%s", got)
 	}
 }
@@ -184,8 +184,8 @@ func TestListShowsFirstAppHintWhenEmpty(t *testing.T) {
 	}
 
 	got := out.String()
-	if !strings.Contains(got, "apps\tcount\tok\t0") {
-		t.Fatalf("expected app count, got:\n%s", got)
+	if !strings.Contains(got, "No apps configured") {
+		t.Fatalf("expected empty-state message, got:\n%s", got)
 	}
 	if !strings.Contains(got, "singleserver add https://github.com/owner/repo") {
 		t.Fatalf("expected add hint, got:\n%s", got)
@@ -207,11 +207,14 @@ func TestStatusShowsConfigAndFirstAppHintWhenEmpty(t *testing.T) {
 	}
 
 	got := out.String()
-	if !strings.Contains(got, "config\tapps\tok\t"+configPath+"\tapps=0") {
-		t.Fatalf("expected config summary, got:\n%s", got)
+	if !strings.Contains(got, "daemon") {
+		t.Fatalf("expected daemon line, got:\n%s", got)
 	}
-	if !strings.Contains(got, "apps\tcount\tok\t0") {
+	if !strings.Contains(got, "0 apps") {
 		t.Fatalf("expected app count, got:\n%s", got)
+	}
+	if !strings.Contains(got, "No apps configured") {
+		t.Fatalf("expected empty-state message, got:\n%s", got)
 	}
 	if !strings.Contains(got, "singleserver add https://github.com/owner/repo") {
 		t.Fatalf("expected add hint, got:\n%s", got)

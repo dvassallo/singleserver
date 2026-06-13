@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -26,6 +27,7 @@ func RunCLI(args []string, logger *log.Logger) error {
 		return Run(logger)
 	}
 
+	enableColorForStdout()
 	out := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	err := runCLI(args, logger, out)
 	if flushErr := out.Flush(); err == nil && flushErr != nil {
@@ -208,7 +210,9 @@ func printVersion(w io.Writer) {
 	if strings.TrimSpace(buildDate) == "" {
 		buildDate = "unknown"
 	}
-	fmt.Fprintf(w, "singleserver\tversion\t%s\tcommit=%s\tbuilt=%s\n", version, commit, buildDate)
+	fmt.Fprintf(w, "singleserver %s\n", bold(version))
+	fmt.Fprintf(w, "%s %s\n", dim("commit"), commit)
+	fmt.Fprintf(w, "%s  %s\n", dim("built"), buildDate)
 }
 
 func cliList(w io.Writer) error {
@@ -223,58 +227,192 @@ func cliList(w io.Writer) error {
 	}
 	containers, containerErr := runningAppContainers()
 	journal, _ := recentSingleServerJournal()
+
+	rows := [][]tcell{{
+		plainCell(bold("APP")),
+		plainCell(bold("STATUS")),
+		plainCell(bold("DOMAIN")),
+		plainCell(bold("REPO")),
+	}}
 	for _, app := range config.Apps {
-		fmt.Fprintf(w, "%s\t%s\tbranch=%s\thosts=%s\tstatus=%s\thealthcheck=%s\n", app.Name, app.Repo, displayBranch(app), displayHosts(app), appSummaryStatus(app, containers, containerErr, journal), displayHealthcheck(app))
+		word := listStateWord(appSummaryStatus(app, containers, containerErr, journal))
+		st := listState(word)
+		rows = append(rows, []tcell{
+			plainCell(app.Name),
+			cell("● "+word, paint(stateColor(st), "● "+word)),
+			domainCell(app),
+			repoCell(app),
+		})
 	}
+	writeTable(w, rows, 2)
 	return nil
 }
 
-func cliStatus(w io.Writer) error {
-	port := envDefault("SINGLESERVER_PORT", "8787")
-	res, err := http.Get("http://127.0.0.1:" + port + "/health")
-	if err != nil {
-		writeCheck(w, "daemon", "status", "failed", err.Error())
-	} else {
-		_ = res.Body.Close()
-		writeCheck(w, "daemon", "status", "ok", res.Status)
+// listStateWord collapses the richer summary status into the four words the
+// list column shows, so the column reads consistently across apps.
+func listStateWord(summary string) string {
+	switch summary {
+	case "ok", "running":
+		return "running"
+	case "stopped":
+		return "stopped"
+	case "failed":
+		return "failed"
+	default:
+		return "unknown"
 	}
+}
 
+func listState(word string) stateKind {
+	switch word {
+	case "running":
+		return stateOK
+	case "stopped":
+		return stateWarn
+	case "failed":
+		return stateFail
+	default:
+		return stateMuted
+	}
+}
+
+func domainCell(app AppConfig) tcell {
+	if len(app.Hosts) == 0 {
+		return cell("–", dim("–"))
+	}
+	primary := app.Hosts[0]
+	if len(app.Hosts) == 1 {
+		return plainCell(primary)
+	}
+	extra := fmt.Sprintf(" +%d", len(app.Hosts)-1)
+	return cell(primary+extra, primary+dim(extra))
+}
+
+func repoCell(app AppConfig) tcell {
+	if strings.TrimSpace(app.Branch) == "" {
+		return plainCell(app.Repo)
+	}
+	suffix := " (" + app.Branch + ")"
+	return cell(app.Repo+suffix, app.Repo+dim(suffix))
+}
+
+func cliStatus(w io.Writer) error {
 	configPath := envDefault("SINGLESERVER_CONFIG", "/etc/singleserver/apps.yml")
 	config, err := LoadConfig(configPath)
 	if err != nil {
 		return err
 	}
-	writeCheck(w, "config", "apps", "ok", configPath, fmt.Sprintf("apps=%d", len(config.Apps)))
+
+	writeDaemonStatus(w, len(config.Apps))
+
 	if len(config.Apps) == 0 {
+		fmt.Fprintln(w)
 		printNoApps(w)
 		return nil
 	}
+
 	containers, containerErr := runningAppContainers()
 	journal, _ := recentSingleServerJournal()
+	nameWidth := 0
 	for _, app := range config.Apps {
-		runtime := appRuntimeStatus(app, containers, containerErr)
-		lastDeploy, lastDeployDetail := lastDeployStatusFromJournal(app.Name, journal)
-		prefix := fmt.Sprintf("%s\t%s\tbranch=%s\thosts=%s\tstatus=%s\truntime=%s\tlast_deploy=%s", app.Name, app.Repo, displayBranch(app), displayHosts(app), appSummaryStatus(app, containers, containerErr, journal), runtime, lastDeploy)
-		if lastDeployDetail != "" {
-			prefix += "\t" + lastDeployDetail
-		}
-		if app.Healthcheck == "" {
-			fmt.Fprintf(w, "%s\thealthcheck=assumed\tno external healthcheck configured\n", prefix)
-			continue
-		}
-		status := "ok"
-		detail := ""
-		if err := checkURL(app.Healthcheck); err != nil {
-			status = "failed"
-			detail = "\t" + err.Error()
-		}
-		fmt.Fprintf(w, "%s\thealthcheck=%s%s\n", prefix, status, detail)
+		nameWidth = max(nameWidth, len(app.Name))
+	}
+	for _, app := range config.Apps {
+		fmt.Fprintln(w)
+		runtimeState, runtimeWord := appRuntimeState(app, containers, containerErr)
+		fmt.Fprintf(w, "%s %s%s%s\n", dot(runtimeState), bold(app.Name), strings.Repeat(" ", nameWidth-len(app.Name)+3), dim(runtimeWord))
+
+		deployState, deployText := deployDetail(lastDeployStatusFromJournal(app.Name, journal))
+		fmt.Fprintf(w, "    %s   %s %s\n", dim("deploy"), mark(deployState), deployText)
+
+		healthState, healthText := healthDetail(app)
+		fmt.Fprintf(w, "    %s   %s %s\n", dim("health"), mark(healthState), healthText)
 	}
 	return nil
 }
 
+func writeDaemonStatus(w io.Writer, appCount int) {
+	port := envDefault("SINGLESERVER_PORT", "8787")
+	state, word := stateOK, "ok"
+	if res, err := http.Get("http://127.0.0.1:" + port + "/health"); err != nil {
+		state, word = stateFail, "unreachable"
+	} else {
+		_ = res.Body.Close()
+	}
+	count := fmt.Sprintf("%d apps", appCount)
+	if appCount == 1 {
+		count = "1 app"
+	}
+	fmt.Fprintf(w, "%s  %s %s%s\n", dim("daemon"), dot(state), word, dim("    "+count))
+}
+
+// appRuntimeState reports whether the app's container is up, for the status
+// header line. The full container name is intentionally omitted as noise.
+func appRuntimeState(app AppConfig, containers map[string]string, err error) (stateKind, string) {
+	if err != nil {
+		return stateMuted, "unknown"
+	}
+	if _, ok := containerForApp(app.Name, containers); ok {
+		return stateOK, "running"
+	}
+	return stateWarn, "stopped"
+}
+
+func deployDetail(state, detail string) (stateKind, string) {
+	switch state {
+	case "ok":
+		if ms := parseTotalMS(detail); ms > 0 {
+			return stateOK, "deployed in " + humanMS(ms)
+		}
+		return stateOK, "deployed"
+	case "failed":
+		return stateFail, "last deploy failed"
+	default:
+		return stateMuted, "no recent deploy"
+	}
+}
+
+func healthDetail(app AppConfig) (stateKind, string) {
+	if strings.TrimSpace(app.Healthcheck) == "" {
+		return stateMuted, "no external healthcheck"
+	}
+	if err := checkURL(app.Healthcheck); err != nil {
+		return stateFail, trimScheme(app.Healthcheck) + " unreachable"
+	}
+	return stateOK, trimScheme(app.Healthcheck)
+}
+
+func parseTotalMS(detail string) int64 {
+	const key = "total_ms="
+	idx := strings.Index(detail, key)
+	if idx < 0 {
+		return 0
+	}
+	rest := detail[idx+len(key):]
+	end := 0
+	for end < len(rest) && rest[end] >= '0' && rest[end] <= '9' {
+		end++
+	}
+	if end == 0 {
+		return 0
+	}
+	ms, err := strconv.ParseInt(rest[:end], 10, 64)
+	if err != nil {
+		return 0
+	}
+	return ms
+}
+
+func humanMS(ms int64) string {
+	if ms < 1000 {
+		return fmt.Sprintf("%dms", ms)
+	}
+	return fmt.Sprintf("%.1fs", float64(ms)/1000)
+}
+
 func printNoApps(w io.Writer) {
-	writeCheck(w, "apps", "count", "ok", "0", "add your first app with `singleserver add https://github.com/owner/repo`")
+	fmt.Fprintln(w, "No apps configured. Add your first one with:")
+	fmt.Fprintln(w, "  singleserver add https://github.com/owner/repo")
 }
 
 func appSummaryStatus(app AppConfig, containers map[string]string, containerErr error, journal string) string {
