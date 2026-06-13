@@ -173,6 +173,7 @@
     <section id="commands">
         <h2>Commands</h2>
         <p>Everything is a subcommand of <code>singleserver</code>, run on the server over SSH. Commands print aligned check lines as they work, so you can see each step succeed or fail. In the usage lines, <code>&lt;angle brackets&gt;</code> mean required and <code>[square brackets]</code> mean optional.</p>
+        <p>The same reference is built into the CLI. Run <code>singleserver help</code> for the grouped command list, and <code>singleserver help &lt;command&gt;</code> or <code>singleserver &lt;command&gt; --help</code> for a command's arguments and options.</p>
         <p>Commands that change the server are interactive when run in a terminal, prompting for anything missing. In scripts, pass <code>--non-interactive</code> or set <code>SINGLESERVER_NON_INTERACTIVE=1</code> and provide every value up front. Missing input becomes an error instead of a prompt.</p>
 
         <nav class="command-index" aria-label="Command index">

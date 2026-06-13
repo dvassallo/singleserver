@@ -98,62 +98,22 @@ func runCLI(args []string, logger *log.Logger, stdout io.Writer) error {
 		return err
 	}
 	if len(args) == 0 {
-		printUsage(stdout)
-		return nil
+		return renderHelp(stdout, nil)
 	}
 
 	return withCLIMode(mode, func() error {
-		switch args[0] {
-		case "help", "-h", "--help":
-			printUsage(stdout)
-			return nil
-		case "version", "--version":
-			return printVersion(stdout)
-		case "connect":
-			if len(args) >= 2 {
-				switch args[1] {
-				case "tailscale":
-					return cliTailscaleConnect(args[2:], stdout)
-				case "cloudflare":
-					return cliCloudflareConnect(args[2:], stdout)
-				case "github":
-					return cliGitHubConnect(args[2:], stdout)
-				}
-			}
-			return errors.New("usage: singleserver connect <tailscale|cloudflare|github> [options]")
-		case "list":
-			return cliList(stdout)
-		case "status":
-			return cliStatus(stdout)
-		case "add":
-			return cliAdd(args[1:], stdout, logger)
-		case "edit":
-			return cliEdit(args[1:], stdout, logger)
-		case "deploy":
-			return cliDeploy(args[1:], stdout, logger)
-		case "inspect":
-			return cliInspect(args[1:], stdout)
-		case "doctor":
-			return cliDoctor(args[1:], stdout)
-		case "logs":
-			return cliLogs(args[1:], stdout)
-		case "remove":
-			return cliRemove(args[1:], stdout)
-		case "domains":
-			return cliDomains(args[1:], stdout, logger)
-		case "env":
-			return cliEnv(args[1:], stdout)
-		case "storage":
-			return cliStorage(args[1:], stdout, logger)
-		case "backup":
-			return cliBackup(args[1:], stdout)
-		case "restore":
-			return cliRestore(args[1:], stdout)
-		case "upgrade":
-			return cliUpgrade(args[1:], stdout)
-		default:
-			return fmt.Errorf("unknown command %q", args[0])
+		if path, ok := helpRequest(args); ok {
+			return renderHelp(stdout, path)
 		}
+		name := args[0]
+		if name == "--version" {
+			name = "version"
+		}
+		cmd := lookupCommand(name)
+		if cmd == nil {
+			return fmt.Errorf("unknown command %q", name)
+		}
+		return cmd.Run(args[1:], stdout, logger)
 	})
 }
 
@@ -184,55 +144,6 @@ func nonEmptyStrings(values ...string) []string {
 		}
 	}
 	return nonEmpty
-}
-
-func printUsage(w io.Writer) {
-	fmt.Fprint(w, `Single Server
-
-Usage:
-  singleserver [--non-interactive] [--output json] <command> [args]
-
-Global options:
-  --non-interactive  Never prompt. Missing required input is an error.
-  --output json      Emit JSON instead of text.
-`)
-
-	groups := []struct {
-		title    string
-		commands [][2]string
-	}{
-		{"Setup", [][2]string{
-			{"connect <tailscale|cloudflare|github>", "Connect or repair a provider"},
-			{"upgrade", "Re-run the installer and restart Single Server"},
-			{"version", "Print the installed version"},
-		}},
-		{"Apps", [][2]string{
-			{"add <github-url> [options]", "Add and deploy a repository"},
-			{"edit <app> [options]", "Edit app config"},
-			{"deploy [app] [ref]", "Deploy a configured app"},
-			{"remove <app> [options]", "Remove an app, optionally its repo and storage"},
-		}},
-		{"Monitoring", [][2]string{
-			{"list", "Show configured apps"},
-			{"status", "Show daemon and app health"},
-			{"logs [app] [options]", "Show recent deploy or runtime logs"},
-			{"doctor [app]", "Run full diagnostic checks"},
-			{"inspect <app>", "Print the generated Kamal config"},
-		}},
-		{"Resources", [][2]string{
-			{"domains <add|remove|list|verify> ...", "Manage app domains"},
-			{"env <set|list|unset> ...", "Manage app env vars"},
-			{"storage <enable|disable> <app> [options]", "Enable or disable persistent storage"},
-			{"backup <app>", "Back up app storage"},
-			{"restore <app> <backup> [--no-restart]", "Restore app storage"},
-		}},
-	}
-	for _, group := range groups {
-		fmt.Fprintf(w, "\n%s\n", group.title)
-		for _, cmd := range group.commands {
-			fmt.Fprintf(w, "  %-40s %s\n", cmd[0], cmd[1])
-		}
-	}
 }
 
 func printVersion(w io.Writer) error {

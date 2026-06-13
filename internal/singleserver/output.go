@@ -22,6 +22,7 @@ type Output struct {
 	daemon  DaemonView
 	version VersionView
 	started bool
+	helped  bool
 }
 
 type outKind int
@@ -121,6 +122,11 @@ func (o *Output) statusReport(d DaemonView, a []AppView) {
 func (o *Output) versionInfo(v VersionView) { o.kind = kindVersion; o.version = v }
 
 func (o *Output) Flush() error {
+	// Help renders its own text directly through the raw writer, so there is
+	// nothing structured to flush (and no empty JSON object to emit).
+	if o.helped {
+		return nil
+	}
 	if o.json {
 		return o.renderJSON()
 	}
