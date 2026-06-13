@@ -28,9 +28,17 @@ func RunCLI(args []string, logger *log.Logger) error {
 	}
 
 	enableColorForStdout()
-	out := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	err := runCLI(args, logger, out)
-	if flushErr := out.Flush(); err == nil && flushErr != nil {
+	var w io.Writer
+	var flush func() error
+	if useColor {
+		renderer := newCheckRenderer(os.Stdout)
+		w, flush = renderer, renderer.Flush
+	} else {
+		tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		w, flush = tw, tw.Flush
+	}
+	err := runCLI(args, logger, w)
+	if flushErr := flush(); err == nil && flushErr != nil {
 		err = flushErr
 	}
 	return err
