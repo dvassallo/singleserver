@@ -53,31 +53,10 @@ The unit tests are plain `go test` with no setup, no network, and no build tags.
 
 ## End-to-end tests
 
-The E2E harness spins up disposable Linux hosts in Docker Desktop and runs the real installer against real Tailscale, Cloudflare, and GitHub. It is serial, stateful, and needs provider credentials in a local `.env`.
-
-Copy the template and fill it with real test credentials (the file is gitignored):
-
-```sh
-cp test/e2e-local-real/.env.example test/e2e-local-real/.env
-chmod 600 test/e2e-local-real/.env
-```
-
-The `.env` holds credentials for three providers, all of which should be dedicated to testing, never production:
-
-- **Cloudflare** — `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, plus a `TEST_ZONE` the tests create and delete temporary app domains in.
-- **Tailscale** — an OAuth client (`TAILSCALE_OAUTH_CLIENT_ID`, `TAILSCALE_OAUTH_CLIENT_SECRET`, `TAILSCALE_TAG`) used to mint short-lived auth keys, or a `TAILSCALE_AUTHKEY` fallback.
-- **GitHub** — a dedicated test App (`GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_WEBHOOK_SECRET`, `GITHUB_APP_PRIVATE_KEY_PATH`) installed on a throwaway `GITHUB_TEST_REPO`. The harness repoints the App's webhook, so do not use the production App. Commits push with your `gh` login unless you set `GITHUB_PUSH_TOKEN`.
-
-[test/e2e-local-real/README.md](test/e2e-local-real/README.md) explains how to obtain each, including a GitHub App bootstrap helper and the Tailscale tag policy. Then run:
+The E2E harness spins up disposable Linux hosts in Docker Desktop and runs the real installer against real Tailscale, Cloudflare, and GitHub. It is serial, stateful, and needs Docker plus a local `.env` of test credentials. [test/e2e-local-real/README.md](test/e2e-local-real/README.md) covers the `.env` and setup, then:
 
 ```sh
 test/e2e-local-real/run.sh
-```
-
-To keep secrets outside the repo, point the harness at a `.env` elsewhere:
-
-```sh
-E2E_ENV_FILE=~/secrets/singleserver-e2e.env test/e2e-local-real/run.sh
 ```
 
 ---
