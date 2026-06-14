@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="www/server-single-wordmark.svg" alt="single server" width="484">
+  <a href="https://singleserver.com"><img src="www/server-single-wordmark.svg" alt="single server" width="484"></a>
 </p>
 
 <p><strong>Git push to production in &lt;5 seconds.</strong></p>
