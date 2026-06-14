@@ -123,6 +123,10 @@ func (m *DeployManager) runKamal(req DeployRequest, token string) (DeployTiming,
 
 	command := exec.CommandContext(ctx, "bash", "-lc", kamalDeployScript)
 	command.Env = append(os.Environ(),
+		// The systemd unit runs the daemon without HOME set, so Kamal can't expand
+		// a ~/.ssh key path in a repo-provided deploy config and falls back to
+		// password auth. Pin HOME to root's home so ~ resolves like it does in the CLI.
+		"HOME=/root",
 		"SINGLESERVER_APP_NAME="+req.App.Name,
 		"SINGLESERVER_REPO_DIR="+req.App.RepoDir,
 		"SINGLESERVER_REPO="+req.Repo,
