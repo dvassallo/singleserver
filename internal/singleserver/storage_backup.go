@@ -78,10 +78,37 @@ func nextBackupPath(backupDir string, now time.Time) (string, error) {
 	return "", fmt.Errorf("could not allocate backup path for %s", backupID)
 }
 
+// scanSQLiteDatabases walks the storage tree and returns the set of SQLite
+// database files and the set of their transient sidecar files (-wal, -shm,
+// -journal). The sidecars are excluded from a backup: the online .backup of each
+// database already captures their committed contents, and a sidecar copied a
+// moment later would not match the snapshot and could corrupt a restore.
+func scanSQLiteDatabases(source string) (dbs map[string]bool, sidecars map[string]bool, err error) {
+	dbs = map[string]bool{}
+	sidecars = map[string]bool{}
+	err = filepath.WalkDir(source, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.Type().IsRegular() && isSQLiteDatabase(path) {
+			dbs[path] = true
+			for _, suffix := range []string{"-wal", "-shm", "-journal"} {
+				sidecars[path+suffix] = true
+			}
+		}
+		return nil
+	})
+	return dbs, sidecars, err
+}
+
 func snapshotStorage(source string, dest string, progress *backupProgress) (int, int, error) {
+	dbs, sidecars, err := scanSQLiteDatabases(source)
+	if err != nil {
+		return 0, 0, err
+	}
 	files := 0
 	sqliteFiles := 0
-	err := filepath.WalkDir(source, func(path string, entry os.DirEntry, walkErr error) error {
+	err = filepath.WalkDir(source, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -111,11 +138,16 @@ func snapshotStorage(source string, dest string, progress *backupProgress) (int,
 		case entry.IsDir():
 			return os.MkdirAll(target, info.Mode().Perm())
 		case info.Mode().IsRegular():
+			// Skip the transient sidecars of databases captured via .backup;
+			// copying them separately would risk a corrupt restore.
+			if sidecars[path] {
+				return nil
+			}
 			if err := os.MkdirAll(filepath.Dir(target), 0700); err != nil {
 				return err
 			}
 			files++
-			if isSQLiteDatabase(path) {
+			if dbs[path] {
 				sqliteFiles++
 				if err := backupSQLiteDatabase(path, target, info.Size(), progress); err != nil {
 					return err
