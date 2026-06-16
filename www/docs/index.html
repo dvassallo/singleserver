@@ -229,6 +229,7 @@
                     <li><code>TAILSCALE_AUTHKEY</code><span>Set for unattended installs so Tailscale joins without a browser login.</span></li>
                     <li><code>CLOUDFLARE_API_TOKEN</code><span>Set for unattended installs so Cloudflare connects without a prompt. The token needs DNS and tunnel permissions.</span></li>
                     <li><code>SINGLESERVER_INSTALL_SKIP_FIRST_RUN=1</code><span>Install the software but skip the guided setup, for when you want to run the connect commands yourself.</span></li>
+                    <li><code>SINGLESERVER_CHANNEL=edge</code><span>Install the latest build of <code>main</code> (the edge channel) instead of the latest release. The default, stable, installs the latest tagged release and verifies its checksum.</span></li>
                 </ul>
             </div>
 
@@ -258,9 +259,14 @@ singleserver connect github</pre>
             <div class="command" id="cmd-upgrade">
                 <h4>Upgrade Single Server</h4>
                 <div class="code-wrapper">
-                    <pre class="code-block">singleserver upgrade [--non-interactive]</pre>
+                    <pre class="code-block">singleserver upgrade [--edge] [--non-interactive]</pre>
                 </div>
                 <p>Reruns the installer, restarts the daemon, and finishes with doctor so you know the upgrade landed cleanly. Running apps are not touched. In an interactive SSH session, it asks before starting.</p>
+                <p>By default it installs the latest tagged release (the <strong>stable</strong> channel) and verifies its checksum. Pass <code>--edge</code> to track the latest build of <code>main</code> instead.</p>
+                <ul class="option-list">
+                    <li><code>--edge</code><span>Install the latest edge build from <code>main</code> instead of the latest release.</span></li>
+                    <li><code>--non-interactive</code><span>Never prompt. Upgrade without asking for confirmation.</span></li>
+                </ul>
             </div>
 
             <div class="command" id="cmd-version">

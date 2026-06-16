@@ -51,6 +51,17 @@ The unit tests are plain `go test` with no setup, no network, and no build tags.
 
 `go run ./cmd/singleserverd help` prints the CLI. Most commands expect to run on a configured server, so for real behavior use the E2E harness or a throwaway VPS.
 
+## Releases
+
+Distribution is release-gated with pre-1.0 SemVer (minor for features, patch for fixes). The **stable** channel is GitHub Releases: pushing a `vX.Y.Z` tag runs `.github/workflows/release.yml`, which cross-compiles the linux amd64/arm64 binaries, stamps the version, and publishes them as Release assets with a `checksums.txt` and generated notes. `install.sh` and `singleserver upgrade` default to the latest release and verify its checksum.
+
+```sh
+git tag -a v0.2.0 -m "…"
+git push origin v0.2.0      # the tag push (not a branch push) triggers the release
+```
+
+The **edge** channel is the latest build of `main`, which the site serves at `singleserver.com/bin` on every push; opt in with `singleserver upgrade --edge` or `SINGLESERVER_CHANNEL=edge`. `SINGLESERVER_DOWNLOAD_BASE_URL` overrides both (used by the E2E harness). CI (`.github/workflows/ci.yml`) runs build/vet/test on pull requests and `main`.
+
 ## End-to-end tests
 
 The E2E harness spins up disposable Linux hosts in Docker Desktop and runs the real installer against real Tailscale, Cloudflare, and GitHub. It is serial, stateful, and needs Docker plus a local `.env` of test credentials. [test/e2e/README.md](test/e2e/README.md) covers the `.env` and setup, then:
