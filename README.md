@@ -53,14 +53,17 @@ The unit tests are plain `go test` with no setup, no network, and no build tags.
 
 ## Releases
 
-Distribution is release-gated with pre-1.0 SemVer (minor for features, patch for fixes). The **stable** channel is GitHub Releases: pushing a `vX.Y.Z` tag runs `.github/workflows/release.yml`, which cross-compiles the linux amd64/arm64 binaries, stamps the version, and publishes them as Release assets with a `checksums.txt` and generated notes. `install.sh` and `singleserver upgrade` default to the latest release and verify its checksum.
+To cut a release, push a SemVer tag. That triggers `.github/workflows/release.yml`, which builds the binaries and publishes a GitHub Release with checksums and notes:
 
 ```sh
 git tag -a v0.2.0 -m "…"
-git push origin v0.2.0      # the tag push (not a branch push) triggers the release
+git push origin v0.2.0
 ```
 
-The **edge** channel is the latest build of `main`, which the site serves at `singleserver.com/bin` on every push; opt in with `singleserver upgrade --edge` or `SINGLESERVER_CHANNEL=edge`. `SINGLESERVER_DOWNLOAD_BASE_URL` overrides both (used by the E2E harness). CI (`.github/workflows/ci.yml`) runs build/vet/test on pull requests and `main`.
+`install.sh` and `singleserver upgrade` read two channels:
+
+- **stable** (default) — the latest tagged release, checksum-verified.
+- **edge** — the latest `main` build at `singleserver.com/bin`; opt in with `singleserver upgrade --edge`.
 
 ## End-to-end tests
 
