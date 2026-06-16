@@ -240,12 +240,36 @@ chmod 600 /home/deploy/.ssh/authorized_keys
 
 mkdir -p /srv/repos /srv/storage /srv/backups /etc/singleserver
 
+# install_binary fetches the singleserver binary for this host. It supports two
+# channels plus an explicit mirror override:
+#   - stable (default): the latest tagged GitHub release, verified against its
+#     published sha256 checksums.
+#   - edge (SINGLESERVER_CHANNEL=edge): the latest build of main from the site.
+#   - SINGLESERVER_DOWNLOAD_BASE_URL: an explicit <base>/bin mirror, which takes
+#     precedence over the channel (used by the e2e harness and self-host mirrors).
 install_binary() {
-  download_base_url="${SINGLESERVER_DOWNLOAD_BASE_URL:-https://singleserver.com}"
-  binary_url="${download_base_url%/}/bin/singleserver-linux-${binary_arch}"
+  channel="${SINGLESERVER_CHANNEL:-stable}"
   tmp_bin="/tmp/singleserver-linux-${binary_arch}"
 
-  curl -fsSL "$binary_url" -o "$tmp_bin"
+  if [ -n "${SINGLESERVER_DOWNLOAD_BASE_URL:-}" ]; then
+    curl -fsSL "${SINGLESERVER_DOWNLOAD_BASE_URL%/}/bin/singleserver-linux-${binary_arch}" -o "$tmp_bin"
+  elif [ "$channel" = "edge" ]; then
+    curl -fsSL "https://singleserver.com/bin/singleserver-linux-${binary_arch}" -o "$tmp_bin"
+  else
+    release_url="https://github.com/dvassallo/singleserver/releases/latest/download"
+    tmp_sums="/tmp/singleserver-checksums.txt"
+    curl -fsSL "${release_url}/singleserver-linux-${binary_arch}" -o "$tmp_bin"
+    curl -fsSL "${release_url}/checksums.txt" -o "$tmp_sums"
+    expected="$(grep "singleserver-linux-${binary_arch}" "$tmp_sums" | awk '{print $1}')"
+    actual="$(sha256sum "$tmp_bin" | awk '{print $1}')"
+    if [ -z "$expected" ] || [ "$expected" != "$actual" ]; then
+      echo "Single Server: checksum verification failed for singleserver-linux-${binary_arch}." >&2
+      rm -f "$tmp_bin" "$tmp_sums"
+      exit 1
+    fi
+    rm -f "$tmp_sums"
+  fi
+
   install -m 0755 "$tmp_bin" /usr/local/bin/singleserver
   rm -f "$tmp_bin"
 }

@@ -106,7 +106,11 @@ var cliCommands = []*command{
 		Name:    "upgrade",
 		Group:   "Setup",
 		Summary: "Re-run the installer and restart Single Server",
-		Long:    "Re-runs the installer to fetch the latest binary and restarts the service.",
+		Usage:   "[--edge]",
+		Long:    "Re-runs the installer to fetch the latest release and restarts the service. Use --edge to track the latest build of main instead of the latest tagged release.",
+		Flags: []flagSpec{
+			{"--edge", "Install the latest edge build from main instead of the latest release"},
+		},
 		Run: func(args []string, w io.Writer, logger *log.Logger) error {
 			return cliUpgrade(args, w)
 		},

@@ -20,7 +20,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     cp -R www/. /out/www/; \
     commit="$(git rev-parse HEAD 2>/dev/null || true)"; \
     build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; \
-    ldflags="-X github.com/dvassallo/singleserver/internal/singleserver.Commit=${commit} -X github.com/dvassallo/singleserver/internal/singleserver.BuildDate=${build_date}"; \
+    ldflags="-X github.com/dvassallo/singleserver/internal/singleserver.Version=0.0.0-edge -X github.com/dvassallo/singleserver/internal/singleserver.Commit=${commit} -X github.com/dvassallo/singleserver/internal/singleserver.BuildDate=${build_date}"; \
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -buildvcs=false -ldflags "$ldflags" -o /out/www/bin/singleserver-linux-amd64 ./cmd/singleserverd; \
     CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -buildvcs=false -ldflags "$ldflags" -o /out/www/bin/singleserver-linux-arm64 ./cmd/singleserverd
 

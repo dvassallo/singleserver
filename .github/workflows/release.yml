@@ -1,0 +1,41 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test ./...
+      - name: Build release binaries
+        run: |
+          set -eux
+          mkdir -p out
+          pkg=github.com/dvassallo/singleserver/internal/singleserver
+          version="${GITHUB_REF_NAME#v}"
+          ldflags="-X ${pkg}.Version=${version} -X ${pkg}.Commit=${GITHUB_SHA} -X ${pkg}.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath -ldflags "$ldflags" \
+              -o "out/singleserver-linux-${arch}" ./cmd/singleserverd
+          done
+          (cd out && sha256sum singleserver-linux-* > checksums.txt)
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            out/singleserver-linux-amd64 \
+            out/singleserver-linux-arm64 \
+            out/checksums.txt
