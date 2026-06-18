@@ -65,11 +65,16 @@ git push origin v0.2.0
 - **stable** (default) — the latest tagged release, checksum-verified.
 - **edge** — the latest `main` build at `singleserver.com/bin`.
 
-Both default to stable. To install or upgrade from edge instead, set the channel:
+Both default to stable. To use edge instead, install a fresh box with:
 
 ```sh
-curl -fsSL https://singleserver.com/install.sh | SINGLESERVER_CHANNEL=edge sh   # fresh box
-singleserver upgrade --edge   # existing box
+curl -fsSL https://singleserver.com/install.sh | SINGLESERVER_CHANNEL=edge sh
+```
+
+or switch an existing box with:
+
+```sh
+singleserver upgrade --edge
 ```
 
 ## End-to-end tests
