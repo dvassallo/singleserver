@@ -80,7 +80,10 @@ install_os_packages() {
     debian)
       export DEBIAN_FRONTEND=noninteractive
       apt-get update
-      apt-get install -y ca-certificates curl git build-essential ruby-full ruby-dev docker.io docker-buildx openssh-server sqlite3
+      apt-get install -y ca-certificates curl git build-essential ruby-full ruby-dev openssh-server sqlite3
+      if ! command -v docker >/dev/null 2>&1; then
+        apt-get install -y docker.io docker-buildx
+      fi
       ;;
     amazon)
       dnf install -y --setopt=install_weak_deps=False \
