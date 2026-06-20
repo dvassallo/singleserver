@@ -58,6 +58,15 @@ var appSettingsFlagHelp = []flagSpec{
 // and its help in one place.
 var cliCommands = []*command{
 	{
+		Name:    "setup",
+		Group:   "Setup",
+		Summary: "Guided first-run setup wizard",
+		Long:    "Walk through connecting Tailscale, Cloudflare, and GitHub. Prompts only where input is needed and is safe to rerun; it repairs whatever is not connected yet.",
+		Run: func(args []string, w io.Writer, logger *log.Logger) error {
+			return cliSetup(args, w)
+		},
+	},
+	{
 		Name:    "connect",
 		Group:   "Setup",
 		Summary: "Connect or repair a provider",

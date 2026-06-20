@@ -8,11 +8,235 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 )
+
+// tailscaleUpInteractiveFunc runs the browser login. It is a seam so tests can
+// stand in for the real `tailscale up`, which blocks on a human clicking a URL.
+var tailscaleUpInteractiveFunc = runTailscaleUpInteractive
+
+func runTailscaleUpInteractive() error {
+	cmd := exec.Command("tailscale", "up", "--ssh")
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// cliSetup is the guided first-run wizard. It connects Tailscale, Cloudflare,
+// and GitHub in turn, prompts only when a step needs input, and finishes with a
+// short summary instead of a full diagnostic dump. It is safe to rerun: each
+// step detects what is already connected and repairs the rest. Steps never abort
+// the wizard, so an unattended or partial run still prints how to finish.
+func cliSetup(args []string, w io.Writer) error {
+	mode, args, err := commandModeFromArgs(args, noFlagValues)
+	if err != nil {
+		return err
+	}
+	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
+	fs.SetOutput(w)
+	if err := fs.Parse(normalizeFlagArgs(args, noFlagValues)); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return errors.New("usage: singleserver setup")
+	}
+	if err := ensureBaseFiles(); err != nil {
+		return err
+	}
+
+	interactive := cliCanPrompt(mode)
+	p := interactivePrompter(w)
+
+	fmt.Fprintln(w, bold("Single Server setup")+dim(" · 3 steps"))
+
+	setupStepHeader(w, 1, "Tailscale", "joins this server to your tailnet and gives GitHub a public URL")
+	reportSetupStep(w, setupTailscale(w, p, interactive))
+
+	setupStepHeader(w, 2, "Cloudflare", "routes your domains through a tunnel with TLS")
+	reportSetupStep(w, setupCloudflare(w, p, interactive))
+
+	setupStepHeader(w, 3, "GitHub", "lets every git push deploy automatically")
+	reportSetupStep(w, setupGitHub(w, p, interactive))
+
+	setupSummary(w)
+	return nil
+}
+
+func setupStepHeader(w io.Writer, n int, title, why string) {
+	flushSetupChecks(w)
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "%s  %s %s\n", dim(fmt.Sprintf("%d/3", n)), bold(title), dim("— "+why))
+}
+
+// reportSetupStep surfaces a step's hard error as a note without aborting the
+// wizard, so later steps and the summary still run.
+func reportSetupStep(w io.Writer, err error) {
+	if err != nil {
+		fmt.Fprintln(w, dim("  note: ")+err.Error())
+	}
+}
+
+// flushSetupChecks renders any buffered checks immediately so they sit under the
+// step header that produced them. It clears the started flag first so the wizard
+// owns the blank lines between steps rather than the check renderer.
+func flushSetupChecks(w io.Writer) {
+	if o, ok := w.(*Output); ok {
+		o.started = false
+		o.flushChecks()
+	}
+}
+
+func setupTailscale(w io.Writer, p addPrompter, interactive bool) error {
+	env, _ := loadServiceEnv()
+	if hasTailscalePublicURL(env) || tailscaleAlreadyRunning() || defaultTailscaleAuthKey() != "" {
+		return cliTailscaleConnect(nil, w)
+	}
+	if !interactive {
+		writeCheck(w, "tailscale", "login", "pending", "run `tailscale up --ssh`, then `singleserver connect tailscale`")
+		return nil
+	}
+	yes, err := p.askYesNo("Connect Tailscale now?", true)
+	if err != nil {
+		return err
+	}
+	if !yes {
+		writeCheck(w, "tailscale", "login", "skipped", "run `singleserver connect tailscale` when ready")
+		return nil
+	}
+	if err := tailscaleUpInteractiveFunc(); err != nil {
+		writeCheck(w, "tailscale", "login", "pending", "run `tailscale up --ssh`, then `singleserver connect tailscale`")
+		return nil
+	}
+	return cliTailscaleConnect(nil, w)
+}
+
+func setupCloudflare(w io.Writer, p addPrompter, interactive bool) error {
+	state, _ := loadCloudflareState()
+	if cloudflareTokenFromEnvOrState(state) != "" {
+		return cliCloudflareConnect(nil, w)
+	}
+	if !interactive {
+		writeCheck(w, "cloudflare", "token", "pending", "set CLOUDFLARE_API_TOKEN, then `singleserver connect cloudflare`")
+		return nil
+	}
+	yes, err := p.askYesNo("Connect Cloudflare now?", true)
+	if err != nil {
+		return err
+	}
+	if !yes {
+		writeCheck(w, "cloudflare", "token", "skipped", "run `singleserver connect cloudflare` when ready")
+		return nil
+	}
+	// The token is echoed on purpose: over SSH a hidden paste gives no feedback
+	// on whether it landed, and seeing it is more reliable than guessing.
+	token, err := p.askOptional("Cloudflare API token")
+	if err != nil {
+		return err
+	}
+	token = strings.TrimSpace(token)
+	if token == "" {
+		writeCheck(w, "cloudflare", "token", "pending", "set CLOUDFLARE_API_TOKEN, then `singleserver connect cloudflare`")
+		return nil
+	}
+	if err := os.Setenv("CLOUDFLARE_API_TOKEN", token); err != nil {
+		return err
+	}
+	return cliCloudflareConnect(nil, w)
+}
+
+func setupGitHub(w io.Writer, p addPrompter, interactive bool) error {
+	if githubAppInstalled() {
+		writeCheck(w, "github", "app", "ok", "already installed")
+		return nil
+	}
+	env, _ := loadServiceEnv()
+	if publicURLValue(env) == "" {
+		writeCheck(w, "github", "app", "pending", "connect Tailscale first, then `singleserver connect github`")
+		return nil
+	}
+	if err := cliGitHubConnect(nil, w); err != nil {
+		return err
+	}
+	if !interactive {
+		return nil
+	}
+	flushSetupChecks(w)
+	fmt.Fprint(w, "After you install the GitHub App in your browser, press Enter to continue. ")
+	if f, ok := w.(flushWriter); ok {
+		_ = f.Flush()
+	}
+	if _, err := p.reader.ReadString('\n'); err != nil && !errors.Is(err, io.EOF) {
+		return err
+	}
+	if githubAppInstalled() {
+		writeCheck(w, "github", "app", "ok", "installed")
+	} else {
+		writeCheck(w, "github", "app", "pending", "finish at the URL above, then `singleserver connect github`")
+	}
+	return nil
+}
+
+func setupSummary(w io.Writer) {
+	flushSetupChecks(w)
+	env, _ := loadServiceEnv()
+	ts := hasTailscalePublicURL(env)
+	cf := cloudflareConfigured()
+	gh := githubAppInstalled()
+
+	fmt.Fprintln(w)
+	if ts && cf && gh {
+		fmt.Fprintf(w, "%s %s%s\n", mark(stateOK), bold("Setup complete"), dim(" — Tailscale, Cloudflare, and GitHub connected"))
+		fmt.Fprintln(w, dim("Deploy your first app:"))
+		fmt.Fprintln(w, "  singleserver add https://github.com/you/your-app")
+		return
+	}
+	fmt.Fprintf(w, "%s %s\n", mark(stateWarn), bold("Setup is not finished yet"))
+	if !ts {
+		fmt.Fprintln(w, "  Tailscale   "+dim("singleserver connect tailscale"))
+	}
+	if !cf {
+		fmt.Fprintln(w, "  Cloudflare  "+dim("singleserver connect cloudflare"))
+	}
+	if !gh {
+		fmt.Fprintln(w, "  GitHub      "+dim("singleserver connect github"))
+	}
+	fmt.Fprintln(w, dim("Rerun anytime with: singleserver setup"))
+}
+
+func publicURLValue(env map[string]string) string {
+	return strings.TrimSpace(env["SINGLESERVER_PUBLIC_URL"])
+}
+
+func hasTailscalePublicURL(env map[string]string) bool {
+	url := publicURLValue(env)
+	return strings.HasPrefix(url, "https://") && strings.Contains(url, ".ts.net")
+}
+
+func tailscaleAlreadyRunning() bool {
+	status, err := currentTailscaleStatus()
+	return err == nil && tailscaleRunning(status)
+}
+
+func cloudflareConfigured() bool {
+	state, err := loadCloudflareState()
+	return err == nil && state != nil && strings.TrimSpace(state.TunnelID) != ""
+}
+
+func githubAppInstalled() bool {
+	dir := envDefault("SINGLESERVER_STATE_DIR", "/etc/singleserver")
+	if _, err := os.Stat(filepath.Join(dir, "github.json")); err != nil {
+		return false
+	}
+	if _, err := os.Stat(filepath.Join(dir, "github.private-key.pem")); err != nil {
+		return false
+	}
+	return true
+}
 
 func cliGitHubConnect(args []string, w io.Writer) error {
 	_, args, err := commandModeFromArgs(args, githubFlagTakesValue)
