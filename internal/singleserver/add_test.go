@@ -120,7 +120,7 @@ func TestEnsureGitHubSetupReadyExplainsIncompleteSetup(t *testing.T) {
 func TestPromptAddOptionsUsesDockerfileDefaults(t *testing.T) {
 	opts := addOptions{repo: "acme/app"}
 	var out bytes.Buffer
-	got, err := promptAddOptions(opts, strings.NewReader("\n\n\n\n"), &out, addPromptContext{
+	got, err := promptAddOptions(opts, strings.NewReader("\n\n\n\n\n"), &out, addPromptContext{
 		hasDockerfile: true,
 		targetBranch:  "main",
 	})
@@ -151,7 +151,7 @@ func TestPromptAddOptionsUsesDockerfileDefaults(t *testing.T) {
 func TestPromptAddOptionsFlushesBeforeReading(t *testing.T) {
 	opts := addOptions{repo: "acme/app"}
 	out := &flushCountingWriter{}
-	_, err := promptAddOptions(opts, strings.NewReader("\n\n\n\n"), out, addPromptContext{
+	_, err := promptAddOptions(opts, strings.NewReader("\n\n\n\n\n"), out, addPromptContext{
 		hasDockerfile: true,
 		targetBranch:  "main",
 	})
@@ -179,6 +179,7 @@ func TestPromptAddOptionsGeneratedNodeStaticBuild(t *testing.T) {
 		"npm ci",
 		"npm run build",
 		"dist",
+		"",
 		"",
 		"",
 		"",
@@ -219,6 +220,7 @@ func TestPromptAddOptionsGeneratedBunDynamicApp(t *testing.T) {
 		"",
 		"/ready",
 		"https://app.example.com/ready",
+		"",
 		"y",
 	}, "\n") + "\n"
 	var out bytes.Buffer
@@ -394,5 +396,51 @@ func TestEscapeContentPath(t *testing.T) {
 	got := escapeContentPath("config/deploy.yml")
 	if got != "config/deploy.yml" {
 		t.Fatalf("unexpected path: %s", got)
+	}
+}
+
+func TestParseAddArgsCollectsEnvFlags(t *testing.T) {
+	opts, err := parseAddArgs([]string{"--env", "FOO=bar", "--env", "BAZ=qux qux", "acme/app"}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.env["FOO"] != "bar" || opts.env["BAZ"] != "qux qux" {
+		t.Fatalf("unexpected env from flags: %#v", opts.env)
+	}
+}
+
+func TestParseAddArgsRejectsEnvWithoutEquals(t *testing.T) {
+	if _, err := parseAddArgs([]string{"--env", "NOTKV", "acme/app"}, io.Discard); err == nil {
+		t.Fatal("expected error for --env without =")
+	}
+}
+
+func TestPromptAddOptionsCollectsEnv(t *testing.T) {
+	input := strings.Join([]string{
+		"",                      // app domain
+		"",                      // healthcheck path (default)
+		"",                      // external healthcheck URL
+		"SESSION_SECRET=s3cret", // env var
+		"bad-line",              // invalid, re-prompts
+		"PORT=8080",             // env var
+		"",                      // finish env
+		"n",                     // deploy now?
+	}, "\n") + "\n"
+	var out bytes.Buffer
+	got, err := promptAddOptions(addOptions{repo: "acme/app"}, strings.NewReader(input), &out, addPromptContext{
+		hasDockerfile: true,
+		targetBranch:  "main",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.env["SESSION_SECRET"] != "s3cret" || got.env["PORT"] != "8080" {
+		t.Fatalf("unexpected collected env: %#v", got.env)
+	}
+	if !strings.Contains(out.String(), "set SESSION_SECRET") {
+		t.Fatalf("expected confirmation that the var was set:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "--env 'SESSION_SECRET=s3cret'") {
+		t.Fatalf("expected env in the equivalent command:\n%s", out.String())
 	}
 }

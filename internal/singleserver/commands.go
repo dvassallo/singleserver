@@ -143,6 +143,7 @@ var cliCommands = []*command{
 		Flags: append([]flagSpec{
 			{"--name <name>", "App name override (default derived from the repo)"},
 			{"--domain <host>", "Public domain to route to the app; repeat for several"},
+			{"--env <KEY=value>", "Environment variable stored on the server and injected at deploy; repeat for several"},
 		}, append(appSettingsFlagHelp, flagSpec{"--no-deploy", "Configure without deploying immediately"})...),
 		Run: func(args []string, w io.Writer, logger *log.Logger) error {
 			return cliAdd(args, w, logger)

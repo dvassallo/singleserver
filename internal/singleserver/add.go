@@ -27,6 +27,7 @@ type addOptions struct {
 	repo           string
 	name           string
 	hosts          []string
+	env            map[string]string
 	noDeploy       bool
 	nonInteractive bool
 	hostsSet       bool
@@ -53,6 +54,27 @@ func (f *stringListFlag) Set(value string) error {
 	if value != "" {
 		*f = append(*f, value)
 	}
+	return nil
+}
+
+// envMapFlag collects repeated --env KEY=value flags into a map. The receiver is
+// a map (reference type), so Set mutates the shared backing map.
+type envMapFlag map[string]string
+
+func (f envMapFlag) String() string {
+	parts := make([]string, 0, len(f))
+	for _, key := range sortedEnvKeys(map[string]string(f)) {
+		parts = append(parts, key+"="+f[key])
+	}
+	return strings.Join(parts, ",")
+}
+
+func (f envMapFlag) Set(value string) error {
+	key, val, err := parseKeyValue(value)
+	if err != nil {
+		return err
+	}
+	f[key] = val
 	return nil
 }
 
@@ -190,6 +212,22 @@ func cliAdd(args []string, w io.Writer, logger *log.Logger) error {
 	}
 	writeCheck(w, app.Name, "config", "ok", configPath, "added")
 
+	if len(opts.env) > 0 {
+		values, err := loadAppEnv(app.Name)
+		if err != nil {
+			return err
+		}
+		for key, value := range opts.env {
+			values[key] = value
+		}
+		if err := writeAppEnv(app.Name, values); err != nil {
+			return err
+		}
+		for _, key := range sortedEnvKeys(opts.env) {
+			writeCheck(w, app.Name, "env", "ok", key, "set")
+		}
+	}
+
 	if !opts.noDeploy {
 		writeCheck(w, app.Name, "deploy", "start", targetBranch)
 		if err := cliDeploy([]string{opts.repo, targetBranch}, w, logger); err != nil {
@@ -224,6 +262,8 @@ func parseAddArgs(args []string, w io.Writer) (addOptions, error) {
 	fs.SetOutput(w)
 	fs.StringVar(&opts.name, "name", "", "app name override")
 	fs.Var((*stringListFlag)(&opts.hosts), "domain", "app domain")
+	opts.env = map[string]string{}
+	fs.Var(envMapFlag(opts.env), "env", "environment variable KEY=value (repeatable)")
 	fs.BoolVar(&opts.noDeploy, "no-deploy", false, "configure without deploying immediately")
 
 	appPort := bindAppSettingsFlags(fs, &opts.appSettings)
@@ -316,6 +356,12 @@ func promptAddOptions(opts addOptions, input io.Reader, w io.Writer, ctx addProm
 		}
 		opts.healthcheck = value
 	}
+	updatedEnv, err := promptEnvVars(p, w, opts.env)
+	if err != nil {
+		return addOptions{}, err
+	}
+	opts.env = updatedEnv
+
 	if !opts.noDeploy {
 		deploy, err := p.askYesNo("Deploy now?", true)
 		if err != nil {
@@ -328,6 +374,33 @@ func promptAddOptions(opts addOptions, input io.Reader, w io.Writer, ctx addProm
 
 	fmt.Fprintf(w, "Equivalent command:\n  %s\n", addEquivalentCommand(opts))
 	return opts, nil
+}
+
+// promptEnvVars collects KEY=value pairs until a blank line. Values are stored
+// on the server and injected at deploy, so a freshly added app that needs a
+// secret at boot gets it before its first deploy.
+func promptEnvVars(p addPrompter, w io.Writer, env map[string]string) (map[string]string, error) {
+	if env == nil {
+		env = map[string]string{}
+	}
+	fmt.Fprintln(w, "Environment variables (stored on the server, injected at deploy). Blank to finish.")
+	for {
+		entry, err := p.askOptional("Variable KEY=value")
+		if err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(entry) == "" {
+			break
+		}
+		key, value, err := parseKeyValue(entry)
+		if err != nil {
+			fmt.Fprintln(w, err.Error())
+			continue
+		}
+		env[key] = value
+		fmt.Fprintf(w, "  set %s\n", key)
+	}
+	return env, nil
 }
 
 func promptGeneratedDockerfileOptions(opts *addOptions, p addPrompter) error {
@@ -502,6 +575,9 @@ func addEquivalentCommand(opts addOptions) string {
 		appendFlagValue("--domain", host)
 	}
 	parts = appendAppSettingsFlags(parts, opts.appSettings, false)
+	for _, key := range sortedEnvKeys(opts.env) {
+		parts = append(parts, "--env", shellQuote(key+"="+opts.env[key]))
+	}
 	if opts.noDeploy {
 		parts = append(parts, "--no-deploy")
 	}
@@ -785,7 +861,7 @@ func addFlagTakesValue(arg string) bool {
 		name = before
 	}
 	switch name {
-	case "name", "domain":
+	case "name", "domain", "env":
 		return true
 	default:
 		return appSettingsFlagTakesValue(arg)
