@@ -316,7 +316,7 @@ singleserver connect github</pre>
                     <li><code>--static-dir &lt;dir&gt;</code> <span class="opt-badge">Default: .</span><span>Directory of static files to serve with nginx, relative to the repo.</span></li>
                     <li><code>--healthcheck-path &lt;path&gt;</code> <span class="opt-badge">Default: / (static: /up)</span><span>Path Kamal polls to decide the new container is ready.</span></li>
                     <li><code>--healthcheck &lt;url&gt;</code><span>Optional public URL checked after each deploy and by status and doctor.</span></li>
-                    <li><code>--env KEY=value</code><span>Set an environment variable, stored on the server and injected at deploy. Repeat for more than one. Never written to the repo.</span></li>
+                    <li><code>--env KEY=value</code><span>Set an environment variable, stored on the server and injected at deploy. Repeat for more than one.</span></li>
                     <li><code>--deploy-timeout &lt;duration&gt;</code> <span class="opt-badge">Default: 10m</span><span>How long the deploy may run before it is killed, as a Go duration such as <code>20m</code>.</span></li>
                     <li><code>--no-deploy</code><span>Write the config but wait for the next push or a manual deploy.</span></li>
                     <li><code>--non-interactive</code><span>Never prompt. Required values must be supplied as arguments or flags.</span></li>
