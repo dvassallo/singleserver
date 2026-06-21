@@ -241,7 +241,7 @@
 # or install the edge channel (latest main) instead of the latest release
 curl -fsSL <span class="accent">https://singleserver.com/install.sh</span> | SINGLESERVER_CHANNEL=edge sh</pre>
                 </div>
-                <p>Installs Docker, Kamal, Tailscale, cloudflared, sqlite3, the singleserver binary, the systemd daemon, a local Docker registry, and a deploy user for Kamal. Then it runs first-run setup: connecting Tailscale, Cloudflare, and GitHub, and finishing with doctor. Rerunning it is safe, since it skips what is already done.</p>
+                <p>Installs Docker, Kamal, Tailscale, cloudflared, sqlite3, the singleserver binary, the systemd daemon, a local Docker registry, and a deploy user for Kamal. Then it runs first-run setup: connecting Tailscale, Cloudflare, and GitHub, then printing a short summary of what connected and what is left. Rerunning it is safe, since it skips what is already done.</p>
                 <ul class="option-list">
                     <li><code>TAILSCALE_AUTHKEY</code><span>Set for unattended installs so Tailscale joins without a browser login.</span></li>
                     <li><code>CLOUDFLARE_API_TOKEN</code><span>Set for unattended installs so Cloudflare connects without a prompt. The token needs DNS and tunnel permissions.</span></li>
@@ -303,7 +303,7 @@ singleserver connect github</pre>
                 <div class="code-wrapper">
                     <pre class="code-block">singleserver add <span class="accent">https://github.com/owner/repo</span> [options]</pre>
                 </div>
-                <p>Adds a repository, verifies the GitHub App can reach it, writes the entry to <code>apps.yml</code>, wires up any domains, deploys the current branch tip, and runs doctor. In an interactive session it asks only the questions it cannot answer itself, then prints the equivalent flag-based command with <code>--non-interactive</code>.</p>
+                <p>Adds a repository, verifies the GitHub App can reach it, writes the entry to <code>apps.yml</code>, wires up any domains, stores any environment variables you set, deploys the current branch tip, and runs doctor. In an interactive session it asks only the questions it cannot answer itself, then prints the equivalent flag-based command with <code>--non-interactive</code>. Environment variables are written before that first deploy, so an app that reads a required secret at boot starts cleanly the first time.</p>
                 <ul class="option-list">
                     <li><code>--domain &lt;host&gt;</code><span>Public hostname for the app, like <code>app.example.com</code>. Repeat the flag for more than one.</span></li>
                     <li><code>--branch &lt;name&gt;</code> <span class="opt-badge">Default: repo default branch</span><span>Deploy only pushes to this branch.</span></li>
@@ -316,6 +316,7 @@ singleserver connect github</pre>
                     <li><code>--static-dir &lt;dir&gt;</code> <span class="opt-badge">Default: .</span><span>Directory of static files to serve with nginx, relative to the repo.</span></li>
                     <li><code>--healthcheck-path &lt;path&gt;</code> <span class="opt-badge">Default: / (static: /up)</span><span>Path Kamal polls to decide the new container is ready.</span></li>
                     <li><code>--healthcheck &lt;url&gt;</code><span>Optional public URL checked after each deploy and by status and doctor.</span></li>
+                    <li><code>--env KEY=value</code><span>Set an environment variable, stored on the server and injected at deploy. Repeat for more than one. Never written to the repo.</span></li>
                     <li><code>--deploy-timeout &lt;duration&gt;</code> <span class="opt-badge">Default: 10m</span><span>How long the deploy may run before it is killed, as a Go duration such as <code>20m</code>.</span></li>
                     <li><code>--no-deploy</code><span>Write the config but wait for the next push or a manual deploy.</span></li>
                     <li><code>--non-interactive</code><span>Never prompt. Required values must be supplied as arguments or flags.</span></li>
