@@ -351,6 +351,9 @@ func expectedGitHubWebhookURL() string {
 	if err != nil {
 		return ""
 	}
+	if webhookURL := strings.TrimRight(env["SINGLESERVER_GITHUB_WEBHOOK_URL"], "/"); webhookURL != "" {
+		return webhookURL
+	}
 	publicURL := strings.TrimRight(env["SINGLESERVER_PUBLIC_URL"], "/")
 	if publicURL == "" {
 		return ""
@@ -635,7 +638,7 @@ func gitRun(repoDir string, args ...string) error {
 
 func gitOutput(repoDir string, args ...string) (string, error) {
 	gitArgs := append([]string{"-c", "safe.directory=" + repoDir, "-C", repoDir}, args...)
-	return commandOutputFunc(3*time.Second, "git", gitArgs...)
+	return commandOutputFunc(10*time.Second, "git", gitArgs...)
 }
 
 var commandOutputFunc = commandOutput

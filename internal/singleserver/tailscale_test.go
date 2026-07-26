@@ -2,6 +2,7 @@ package singleserver
 
 import (
 	"bytes"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -34,5 +35,65 @@ func TestDoctorTailscaleKeyExpiry(t *testing.T) {
 	reportTailscaleKeyExpiry(&linkBuf, &tailscaleStatus{Self: &tailscaleSelf{KeyExpiry: soon, TailscaleIPs: []string{"100.64.0.1"}}})
 	if !strings.Contains(linkBuf.String(), "login.tailscale.com/admin/machines/100.64.0.1") {
 		t.Fatalf("expected admin deep link, got: %q", linkBuf.String())
+	}
+}
+
+func TestConnectTailscaleAppendsExtraUpArgsFromEnv(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("SINGLESERVER_STATE_DIR", dir)
+	t.Setenv("SINGLESERVER_CONFIG", dir+"/apps.yml")
+	t.Setenv("SINGLESERVER_REPOS_ROOT", dir+"/repos")
+	t.Setenv("SINGLESERVER_STORAGE_ROOT", dir+"/storage")
+	t.Setenv("SINGLESERVER_BACKUP_DIR", dir+"/backups")
+	t.Setenv("SINGLESERVER_TAILSCALE_UP_EXTRA_ARGS", "--accept-dns=false --timeout=30s")
+
+	originalOutput := commandOutputFunc
+	originalRun := commandRunFunc
+	originalRunToWriter := commandRunToWriterFunc
+	originalFunnelReady := tailscaleFunnelReadyFunc
+	t.Cleanup(func() {
+		commandOutputFunc = originalOutput
+		commandRunFunc = originalRun
+		commandRunToWriterFunc = originalRunToWriter
+		tailscaleFunnelReadyFunc = originalFunnelReady
+	})
+
+	running := false
+	var upArgs []string
+	commandOutputFunc = func(timeout time.Duration, name string, args ...string) (string, error) {
+		if name == "tailscale" && len(args) > 0 && args[0] == "version" {
+			return "1.0.0", nil
+		}
+		if name == "tailscale" && len(args) >= 2 && args[0] == "status" && args[1] == "--json" {
+			if running {
+				return `{"BackendState":"Running","Self":{"DNSName":"demo.ts.net.","HostName":"demo"}}`, nil
+			}
+			return `{"BackendState":"NeedsLogin"}`, nil
+		}
+		return "", nil
+	}
+	commandRunFunc = func(timeout time.Duration, name string, args ...string) error {
+		if name == "tailscale" && len(args) > 0 && args[0] == "up" {
+			upArgs = append([]string{}, args...)
+			running = true
+		}
+		return nil
+	}
+	commandRunToWriterFunc = func(w io.Writer, timeout time.Duration, name string, args ...string) error {
+		return nil
+	}
+	tailscaleFunnelReadyFunc = func(url string, timeout time.Duration) error {
+		return nil
+	}
+
+	var out bytes.Buffer
+	if err := cliTailscaleConnect([]string{"--auth-key", "tskey-auth-test", "--hostname", "demo"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Join(upArgs, " ")
+	for _, want := range []string{"up", "--ssh", "--auth-key=tskey-auth-test", "--hostname=demo", "--accept-dns=false", "--timeout=30s"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected tailscale up args to contain %q, got %q", want, got)
+		}
 	}
 }

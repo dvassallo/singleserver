@@ -70,6 +70,7 @@ func cliTailscaleConnect(args []string, w io.Writer) error {
 		if strings.TrimSpace(*hostname) != "" {
 			upArgs = append(upArgs, "--hostname="+strings.TrimSpace(*hostname))
 		}
+		upArgs = append(upArgs, strings.Fields(os.Getenv("SINGLESERVER_TAILSCALE_UP_EXTRA_ARGS"))...)
 		if err := commandRunFunc(2*time.Minute, "tailscale", upArgs...); err != nil {
 			return err
 		}
