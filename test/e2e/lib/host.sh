@@ -41,16 +41,26 @@ teardown_host() {
       APP_NAME=""
     fi
 
-    local state tunnel_id account_id
+    local state tunnel_id account_id zone_id record_id
     state="$(docker exec "$CONTAINER" cat /etc/singleserver/cloudflare.json 2>/dev/null || true)"
     tunnel_id="$(printf "%s" "$state" | json_field tunnel_id 2>/dev/null || true)"
     account_id="$(printf "%s" "$state" | json_field account_id 2>/dev/null || true)"
+    if [ -n "$DAEMON_DOMAIN" ]; then
+      zone_id="$(cf_api GET "/zones?name=$TEST_ZONE" | json_field result.0.id 2>/dev/null || true)"
+      if [ -n "$zone_id" ]; then
+        record_id="$(cf_api GET "/zones/$zone_id/dns_records?type=CNAME&name=$DAEMON_DOMAIN" | json_field result.0.id 2>/dev/null || true)"
+        if [ -n "$record_id" ]; then
+          cf_api DELETE "/zones/$zone_id/dns_records/$record_id" >/dev/null 2>&1 || true
+        fi
+      fi
+    fi
     if [ -n "$tunnel_id" ] && [ -n "$account_id" ]; then
       cf_api DELETE "/accounts/$account_id/cfd_tunnel/$tunnel_id" >/dev/null 2>&1 || true
     fi
 
     docker exec "$CONTAINER" tailscale logout >/dev/null 2>&1 || true
     if [ -n "$TAILSCALE_STATE_DIR" ]; then
+      docker exec "$CONTAINER" chown -R "$(id -u):$(id -g)" /var/lib/tailscale >/dev/null 2>&1 || true
       rm -rf "$TAILSCALE_STATE_DIR"
     fi
 
@@ -61,6 +71,7 @@ teardown_host() {
   CONTAINER=""
   TAILSCALE_HOSTNAME=""
   TAILSCALE_STATE_DIR=""
+  DAEMON_DOMAIN=""
   case "$old_opts" in
     *e*) set -e ;;
   esac
@@ -151,6 +162,7 @@ start_distro_host() {
     --hostname "$CONTAINER" \
     --privileged \
     --cgroupns=host \
+    --add-host host.docker.internal:host-gateway \
     -v /sys/fs/cgroup:/sys/fs/cgroup:rw \
     -v "$ROOT_DIR:/workspace:ro" \
     -v "$TAILSCALE_STATE_DIR:/var/lib/tailscale" \
@@ -259,8 +271,11 @@ connect_tailscale() {
   TAILSCALE_E2E_AUTHKEY="$(tailscale_e2e_authkey)"
   docker exec \
     -e TAILSCALE_AUTHKEY="$TAILSCALE_E2E_AUTHKEY" \
+    -e SINGLESERVER_TAILSCALE_UP_EXTRA_ARGS="--accept-dns=false" \
     "$CONTAINER" singleserver connect tailscale --hostname "$TAILSCALE_HOSTNAME"
   TAILSCALE_E2E_AUTHKEY=""
+  docker exec "$CONTAINER" tailscale set --accept-dns=false >/dev/null
+  docker exec "$CONTAINER" sh -c "printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > /etc/resolv.conf"
 
   FUNNEL_URL="$(container_bash ". /etc/singleserver/singleserver.env; printf '%s' \"\$SINGLESERVER_PUBLIC_URL\"")"
   if [ -z "$FUNNEL_URL" ]; then
@@ -313,6 +328,84 @@ connect_cloudflare() {
     "$CONTAINER" "${cloudflare_args[@]}"
 }
 
+expose_daemon_via_cloudflare() {
+  local distro="$1"
+  local state tunnel_id target zone_id dns_payload edge_ip body
+  DAEMON_DOMAIN="$(e2e_domain "run-$RUN_ID-$distro-daemon")"
+  log "Routing daemon webhook through Cloudflare at $DAEMON_DOMAIN"
+
+  state="$(docker exec "$CONTAINER" cat /etc/singleserver/cloudflare.json)"
+  tunnel_id="$(printf "%s" "$state" | json_field tunnel_id)"
+  target="$tunnel_id.cfargotunnel.com"
+  zone_id="$(cf_api GET "/zones?name=$TEST_ZONE" | json_field result.0.id)"
+  dns_payload="$(python3 - "$DAEMON_DOMAIN" "$target" <<'PY'
+import json
+import sys
+
+name, target = sys.argv[1:3]
+print(json.dumps({
+    "type": "CNAME",
+    "name": name,
+    "content": target,
+    "ttl": 1,
+    "proxied": True,
+}))
+PY
+)"
+  cf_api POST "/zones/$zone_id/dns_records" --data "$dns_payload" >/dev/null
+
+  docker exec -i "$CONTAINER" python3 - "$DAEMON_DOMAIN" <<'PY'
+import sys
+from pathlib import Path
+
+host = sys.argv[1]
+path = Path("/etc/cloudflared/singleserver.yml")
+body = path.read_text(encoding="utf-8")
+route = f"  - hostname: {host}\n    service: http://127.0.0.1:8787\n"
+fallback = "  - service: http_status:404"
+if route not in body:
+    if fallback in body:
+        body = body.replace(fallback, route + fallback, 1)
+    else:
+        body = body.rstrip() + "\ningress:\n" + route + fallback + "\n"
+path.write_text(body, encoding="utf-8")
+PY
+  docker exec "$CONTAINER" systemctl restart cloudflared-singleserver.service
+
+  for _ in $(seq 1 120); do
+    edge_ip="$(cloudflare_edge_ip_once "$DAEMON_DOMAIN" || true)"
+    if [ -n "$edge_ip" ]; then
+      body="$(curl -fsS --resolve "$DAEMON_DOMAIN:443:$edge_ip" "https://$DAEMON_DOMAIN/health" 2>/dev/null || true)"
+      if [ "$body" = "OK" ]; then
+        WEBHOOK_URL="https://$DAEMON_DOMAIN/github/webhook"
+        docker exec -i "$CONTAINER" python3 - "$WEBHOOK_URL" <<'PY'
+import shlex
+import sys
+from pathlib import Path
+
+webhook_url = sys.argv[1]
+path = Path("/etc/singleserver/singleserver.env")
+lines = path.read_text(encoding="utf-8").splitlines()
+out = []
+replaced = False
+for line in lines:
+    if line.startswith("SINGLESERVER_GITHUB_WEBHOOK_URL="):
+        out.append("SINGLESERVER_GITHUB_WEBHOOK_URL=" + shlex.quote(webhook_url))
+        replaced = True
+    else:
+        out.append(line)
+if not replaced:
+    out.append("SINGLESERVER_GITHUB_WEBHOOK_URL=" + shlex.quote(webhook_url))
+path.write_text("\n".join(out) + "\n", encoding="utf-8")
+PY
+        return 0
+      fi
+    fi
+    sleep 2
+  done
+  fail "Cloudflare daemon webhook route did not become healthy at https://$DAEMON_DOMAIN/health"
+}
+
 connect_github_app() {
   log "Writing GitHub App credentials for $CONTAINER"
   container_exec mkdir -p /etc/singleserver
@@ -326,7 +419,9 @@ app_id, slug, secret = sys.argv[1:4]
 print(json.dumps({"app_id": int(app_id), "slug": slug, "webhook_secret": secret}, indent=2))
 PY
   container_bash "chmod 600 /etc/singleserver/github.json && systemctl restart singleserver.service"
-  wait_for_funnel_health
+  if [ -z "${WEBHOOK_URL:-}" ]; then
+    wait_for_funnel_health
+  fi
 
   log "Updating GitHub App webhook URL"
   webhook_payload="$(python3 - "$WEBHOOK_URL" "$GITHUB_WEBHOOK_SECRET" <<'PY'

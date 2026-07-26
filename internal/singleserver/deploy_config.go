@@ -17,6 +17,7 @@ type kamalDeployConfig struct {
 	Proxy         kamalProxy             `yaml:"proxy"`
 	Env           *kamalEnv              `yaml:"env,omitempty"`
 	Volumes       []string               `yaml:"volumes,omitempty"`
+	HooksPath     string                 `yaml:"hooks_path"`
 	DeployTimeout int                    `yaml:"deploy_timeout"`
 	DrainTimeout  int                    `yaml:"drain_timeout"`
 }
@@ -98,6 +99,7 @@ func GeneratedDeployYAML(app AppConfig) ([]byte, error) {
 			Username: "dummy",
 			Password: "dummy",
 		},
+		HooksPath: ".singleserver-generated/hooks",
 		Builder: kamalBuilder{
 			Arch:    runtime.GOARCH,
 			Local:   true,

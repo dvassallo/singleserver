@@ -77,6 +77,15 @@ prepare_ops_case() {
   reset_case_repo
   (
     cd "$REPO_DIR"
+    mkdir -p .kamal/hooks
+    cat > .kamal/hooks/pre-deploy <<'EOF'
+#!/bin/sh
+printf 'pre-deploy:%s:%s\n' "${KAMAL_SERVICE:-unknown}" "${GITHUB_SHA:-unknown}" >> "/tmp/singleserver-hooks-${KAMAL_SERVICE:-unknown}.log"
+EOF
+    cat > .kamal/hooks/post-deploy <<'EOF'
+#!/bin/sh
+printf 'post-deploy:%s:%s\n' "${KAMAL_SERVICE:-unknown}" "${GITHUB_SHA:-unknown}" >> "/tmp/singleserver-hooks-${KAMAL_SERVICE:-unknown}.log"
+EOF
     cat > server.mjs <<EOF
 import fs from "node:fs";
 import http from "node:http";
@@ -381,7 +390,7 @@ run_app_case() {
   local domain public_path initial_marker changed_marker public_url initial_sha changed_sha
 
   APP_NAME="e2e-$RUN_ID-$distro-$case_name"
-  domain="run-$RUN_ID-$distro-$case_name.$TEST_ZONE"
+  domain="$(e2e_domain "run-$RUN_ID-$distro-$case_name")"
   public_path="$(case_public_path "$case_name")"
   public_url="https://$domain$public_path"
 
@@ -422,8 +431,8 @@ run_ops_scenario() {
   local out backup_path storage_path
 
   APP_NAME="e2e-$RUN_ID-$distro-ops"
-  domain="run-$RUN_ID-$distro-ops.$TEST_ZONE"
-  alias_domain="run-$RUN_ID-$distro-ops-alt.$TEST_ZONE"
+  domain="$(e2e_domain "run-$RUN_ID-$distro-ops")"
+  alias_domain="$(e2e_domain "run-$RUN_ID-$distro-ops-alt")"
   public_url="https://$domain/"
   stored_url="https://$domain/stored"
   storage_path="/srv/storage/$APP_NAME"
@@ -435,7 +444,7 @@ run_ops_scenario() {
   wait_for_github_push_delivery "$initial_sha" "$distro/ops initial push"
 
   log "Adding operational app on $distro"
-  container_exec singleserver add "https://github.com/$GITHUB_TEST_REPO" \
+  out="$(container_exec singleserver add "https://github.com/$GITHUB_TEST_REPO" \
     --name "$APP_NAME" \
     --branch main \
     --domain "$domain" \
@@ -443,7 +452,8 @@ run_ops_scenario() {
     --start "node server.mjs" \
     --app-port 3000 \
     --healthcheck-path /readyz \
-    --non-interactive
+    --non-interactive)"
+  assert_contains "$out" "hooks=pre-deploy,post-deploy" "$distro deploy hook detection logs"
   wait_for_app_marker "$public_url" "$initial_marker|" "$distro/ops initial deploy"
 
   log "Checking list, status, and inspect for $distro"
@@ -466,6 +476,9 @@ sys.exit(0 if app and app.get("state") == "running" else 1)' "$APP_NAME"; then
   assert_contains "$out" "path: /readyz" "$distro inspect"
   out="$(docker exec "$CONTAINER" singleserver logs "$APP_NAME" --runtime)"
   assert_contains "$out" "ops-runtime-log:$initial_marker" "$distro runtime logs"
+  out="$(docker exec "$CONTAINER" cat "/tmp/singleserver-hooks-$APP_NAME.log")"
+  assert_contains "$out" "pre-deploy:$APP_NAME:$initial_sha" "$distro pre-deploy hook"
+  assert_contains "$out" "post-deploy:$APP_NAME:$initial_sha" "$distro post-deploy hook"
 
   log "Checking env and edit commands for $distro"
   container_exec singleserver env set "$APP_NAME" E2E_GREETING=hello --non-interactive

@@ -11,6 +11,36 @@ ignore_checkout_path() {
   fi
 }
 
+prepare_kamal_hooks() {
+  hooks_dir=".kamal/hooks"
+  generated_hooks_dir=".singleserver-generated/hooks"
+  rm -rf "$generated_hooks_dir"
+  mkdir -p "$generated_hooks_dir"
+  ignore_checkout_path "/.singleserver-generated/"
+
+  found_hooks=""
+  if [ -d "$hooks_dir" ]; then
+    for hook in docker-setup pre-connect pre-build pre-deploy post-deploy pre-app-boot post-app-boot pre-proxy-reboot post-proxy-reboot; do
+      hook_path="$hooks_dir/$hook"
+      if [ -f "$hook_path" ]; then
+        cp "$hook_path" "$generated_hooks_dir/$hook"
+        chmod +x "$generated_hooks_dir/$hook"
+        if [ -z "$found_hooks" ]; then
+          found_hooks="$hook"
+        else
+          found_hooks="$found_hooks,$hook"
+        fi
+      fi
+    done
+  fi
+
+  if [ -z "$found_hooks" ]; then
+    echo "hooks=none"
+  else
+    echo "hooks=$found_hooks"
+  fi
+}
+
 start_ms=$(now_ms)
 repo_dir="$SINGLESERVER_REPO_DIR"
 repo="$SINGLESERVER_REPO"
@@ -22,6 +52,7 @@ generated_deploy_file=""
 generated_dockerfile_file=""
 generated_dockerignore_file=""
 dockerignore_backup_file=""
+generated_hooks_dir=""
 
 cleanup() {
   if [ -n "$generated_deploy_file" ]; then
@@ -36,6 +67,10 @@ cleanup() {
     rm -f "$dockerignore_backup_file"
   elif [ -n "$generated_dockerignore_file" ]; then
     rm -f "$generated_dockerignore_file"
+  fi
+  if [ -n "$generated_hooks_dir" ]; then
+    rm -rf "$generated_hooks_dir"
+    rmdir .singleserver-generated 2>/dev/null || true
   fi
 }
 trap cleanup EXIT
@@ -103,6 +138,8 @@ if [ -f "$env_file" ]; then
 else
   rm -f .kamal/secrets
 fi
+
+prepare_kamal_hooks
 
 if docker ps -a --format '{{.Names}}' | grep -Eq "^${app_name}-"; then
   kamal_command=redeploy

@@ -17,6 +17,13 @@ set +a
 
 : "${CLOUDFLARE_API_TOKEN:?CLOUDFLARE_API_TOKEN is required}"
 : "${TEST_ZONE:=singleserver.xyz}"
+E2E_DOMAIN_SUFFIX="${E2E_DOMAIN_SUFFIX:-$TEST_ZONE}"
+E2E_DOMAIN_LABEL_SUFFIX="${E2E_DOMAIN_LABEL_SUFFIX:-}"
+if [[ "$E2E_DOMAIN_SUFFIX" == *".$TEST_ZONE" ]]; then
+  E2E_DOMAIN_LABEL_SUFFIX="${E2E_DOMAIN_LABEL_SUFFIX:-${E2E_DOMAIN_SUFFIX%.$TEST_ZONE}}"
+  E2E_DOMAIN_LABEL_SUFFIX="$(printf "%s" "$E2E_DOMAIN_LABEL_SUFFIX" | tr '.' '-')"
+  E2E_DOMAIN_SUFFIX="$TEST_ZONE"
+fi
 : "${GITHUB_APP_ID:?GITHUB_APP_ID is required}"
 : "${GITHUB_WEBHOOK_SECRET:?GITHUB_WEBHOOK_SECRET is required}"
 : "${GITHUB_APP_PRIVATE_KEY_PATH:?GITHUB_APP_PRIVATE_KEY_PATH is required}"
@@ -44,6 +51,15 @@ require_command dig
 require_command openssl
 require_command python3
 
+e2e_domain() {
+  local label="$1"
+  if [ -n "$E2E_DOMAIN_LABEL_SUFFIX" ]; then
+    printf "%s-%s.%s\n" "$label" "$E2E_DOMAIN_LABEL_SUFFIX" "$E2E_DOMAIN_SUFFIX"
+  else
+    printf "%s.%s\n" "$label" "$E2E_DOMAIN_SUFFIX"
+  fi
+}
+
 docker info >/dev/null
 gh auth status >/dev/null
 
@@ -56,7 +72,7 @@ if [ -z "$RUN_ID" ]; then
 fi
 
 DISTROS="$(printf "%s" "${E2E_DISTROS:-ubuntu debian amazonlinux rocky}" | tr ',' ' ')"
-CASES="$(printf "%s" "${E2E_CASES:-dockerfile static static-build node}" | tr ',' ' ')"
+CASES="$(printf "%s" "${E2E_CASES-dockerfile static static-build node}" | tr ',' ' ')"
 COMMAND_COVERAGE="${E2E_COMMAND_COVERAGE:-1}"
 CLOUDFLARE_E2E_TUNNEL_PREFIX="${SINGLESERVER_E2E_CLOUDFLARE_TUNNEL_PREFIX:-singleserver-singleserver-e2e-}"
 CLOUDFLARE_E2E_TUNNEL_CLEANUP_MIN_AGE_SECONDS="${SINGLESERVER_E2E_CLOUDFLARE_TUNNEL_CLEANUP_MIN_AGE_SECONDS:-21600}"
@@ -74,6 +90,7 @@ APP_NAME=""
 DISTRO_IMAGE=""
 TAILSCALE_HOSTNAME=""
 TAILSCALE_STATE_DIR=""
+DAEMON_DOMAIN=""
 INSTALLER_POST_APP_IDEMPOTENCY_CHECKED=""
 
 mkdir -p "$WWW_DIR/bin"
@@ -93,6 +110,7 @@ run_distro() {
   verify_initial_installer_idempotency "$distro"
   connect_tailscale
   connect_cloudflare
+  expose_daemon_via_cloudflare "$distro"
   connect_github_app
   ensure_test_repo
   clone_test_repo

@@ -280,16 +280,30 @@ func TestExpectedCloudflaredHosts(t *testing.T) {
 }
 
 func TestStaleCloudflaredHosts(t *testing.T) {
+	t.Setenv("SINGLESERVER_PORT", "8787")
 	routes := map[string]string{
-		"app.example.com": "http://127.0.0.1:80",
-		"old.example.com": "http://127.0.0.1:80",
-		"z.example.com":   "http://127.0.0.1:80",
+		"admin.example.com": "http://127.0.0.1:8787",
+		"app.example.com":   "http://127.0.0.1:80",
+		"old.example.com":   "http://127.0.0.1:80",
+		"z.example.com":     "http://127.0.0.1:80",
 	}
 	expected := map[string]bool{"app.example.com": true}
 
 	got := staleCloudflaredHosts(routes, expected)
 	if len(got) != 2 || got[0] != "old.example.com" || got[1] != "z.example.com" {
 		t.Fatalf("unexpected stale hosts: %#v", got)
+	}
+}
+
+func TestExpectedGitHubWebhookURLUsesExplicitOverride(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("SINGLESERVER_STATE_DIR", dir)
+	if err := os.WriteFile(filepath.Join(dir, "singleserver.env"), []byte("SINGLESERVER_PUBLIC_URL='https://box.ts.net'\nSINGLESERVER_GITHUB_WEBHOOK_URL='https://admin.example.com/github/webhook'\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := expectedGitHubWebhookURL(); got != "https://admin.example.com/github/webhook" {
+		t.Fatalf("unexpected webhook URL: %q", got)
 	}
 }
 

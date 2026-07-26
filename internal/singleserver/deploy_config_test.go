@@ -31,6 +31,9 @@ func TestGeneratedDeployYAMLUsesConventionsAndOverrides(t *testing.T) {
 	if config["image"] != "marketing-site" {
 		t.Fatalf("unexpected image: %v", config["image"])
 	}
+	if config["hooks_path"] != ".singleserver-generated/hooks" {
+		t.Fatalf("unexpected hooks_path: %v", config["hooks_path"])
+	}
 	builder := config["builder"].(map[string]any)
 	if builder["arch"] != runtime.GOARCH {
 		t.Fatalf("unexpected builder arch: %v", builder["arch"])

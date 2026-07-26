@@ -180,7 +180,7 @@
             </div>
         </div>
 
-        <p>Deploys for the same app run one at a time, in order, so rapid pushes queue up. The first deploy of an app runs <code>kamal setup</code>, and every deploy after that runs <code>kamal redeploy</code>. A deploy that runs past its timeout, 10 minutes by default, is killed and reported as failed. Apps with heavier builds can raise <code>deploy_timeout</code>. And if the app has an external healthcheck URL configured, Single Server polls it after the rollout and fails the deploy if it never comes up.</p>
+        <p>Deploys for the same app run one at a time, in order, so rapid pushes queue up. The first deploy of an app runs <code>kamal setup</code>, and every deploy after that runs <code>kamal redeploy</code>. If the repo contains Kamal hooks under <code>.kamal/hooks</code>, Single Server detects the known hook files, copies executable versions into its generated deploy files, and lets Kamal run them. A deploy that runs past its timeout, 10 minutes by default, is killed and reported as failed. Apps with heavier builds can raise <code>deploy_timeout</code>. And if the app has an external healthcheck URL configured, Single Server polls it after the rollout and fails the deploy if it never comes up.</p>
         <p>Manual deploys go through exactly the same path. <code>singleserver deploy</code> exists for redeploys, rollbacks, and staged changes, not as a separate mechanism.</p>
     </section>
 
@@ -569,6 +569,7 @@ singleserver storage disable &lt;app&gt; [--delete] [--no-deploy] [--non-interac
             <li><strong>Builder</strong><span class="default">Local Docker builder, server architecture.</span> No cross-compilation, no remote builders.</li>
             <li><strong>Proxy</strong><span class="default"><code>ssl: false</code>, forwarded headers on, bound to loopback.</span> Cloudflare terminates TLS at the edge, and the tunnel delivers plain HTTP to Kamal's proxy, which is not reachable from the public internet.</li>
             <li><strong>Healthcheck</strong><span class="default">Poll the healthcheck path every second, 1s timeout.</span> Tight intervals keep zero-downtime swaps fast for small apps.</li>
+            <li><strong>Hooks</strong><span class="default"><code>.singleserver-generated/hooks</code>.</span> Repo-tracked Kamal hooks such as <code>pre-deploy</code> and <code>post-deploy</code> are detected automatically, copied there, and run by Kamal.</li>
             <li><strong>Timeouts</strong><span class="default">Deploy 10s, drain 1s.</span> Tuned for small containers that boot fast. A repo-level <code>config/deploy.yml</code> is the escape hatch for apps that need different numbers.</li>
         </ul>
     </section>

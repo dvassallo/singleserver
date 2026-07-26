@@ -451,13 +451,22 @@ func removeCloudflaredRoute(configPath string, hostname string) error {
 
 func staleCloudflaredHosts(routes map[string]string, expected map[string]bool) []string {
 	hosts := []string{}
-	for host := range routes {
+	for host, service := range routes {
+		if isDaemonCloudflaredService(service) {
+			continue
+		}
 		if !expected[strings.ToLower(host)] {
 			hosts = append(hosts, host)
 		}
 	}
 	sort.Strings(hosts)
 	return hosts
+}
+
+func isDaemonCloudflaredService(service string) bool {
+	service = strings.TrimRight(strings.ToLower(strings.TrimSpace(service)), "/")
+	port := strings.TrimSpace(envDefault("SINGLESERVER_PORT", "8787"))
+	return service == "http://127.0.0.1:"+port
 }
 
 func pruneStaleCloudflareRoutes(client *CloudflareClient, state *CloudflareState, w io.Writer) error {
