@@ -53,6 +53,8 @@
             <a href="#deploys">What a push does</a>
             <a href="#commands">Commands</a>
             <a href="#config">Configuration</a>
+            <a href="#private-tunnels">Private apps</a>
+            <a href="#funnel">Public paths through Funnel</a>
             <a href="#contract">The app contract</a>
             <a href="#files">Files on your server</a>
             <a href="#troubleshooting">When something breaks</a>
@@ -130,7 +132,7 @@
             </div>
             <div>
                 <strong>Tailscale is the private way in.</strong>
-                <p>Tailscale SSH gets you into the box without exposing SSH to the public internet. Tailscale Funnel gives GitHub a public URL to reach the daemon's webhook endpoint, so the server itself never needs a domain name or a DNS record.</p>
+                <p>Tailscale SSH gets you into the box without exposing SSH to the public internet. Tailscale Funnel gives GitHub a public URL to reach the daemon's webhook endpoint, so the server itself never needs a domain name or a DNS record. And apps added with <code>--tunnel private</code> are served only to your tailnet, each as its own Tailscale Service — see <a href="#private-tunnels">Private apps on Tailscale</a>.</p>
             </div>
             <div>
                 <strong>Cloudflare is the public way in.</strong>
@@ -247,20 +249,23 @@ curl -fsSL <span class="accent">https://singleserver.com/install.sh</span> | SIN
                     <li><code>CLOUDFLARE_API_TOKEN</code><span>Set for unattended installs so Cloudflare connects without a prompt. The token needs DNS and tunnel permissions.</span></li>
                     <li><code>SINGLESERVER_INSTALL_SKIP_FIRST_RUN=1</code><span>Install the software but skip the guided setup, for when you want to run the connect commands yourself.</span></li>
                     <li><code>SINGLESERVER_CHANNEL=edge</code><span>Install the latest build of <code>main</code> (the edge channel) instead of the latest release. The default, stable, installs the latest tagged release and verifies its checksum.</span></li>
+                    <li><code>SINGLESERVER_LOCAL_BINARY=&lt;path&gt;</code><span>Install an already-built binary from this path instead of downloading one. Nothing is verified against a checksum, so point it at a file only root can write &mdash; never one under <code>/tmp</code> or another world-writable directory.</span></li>
                 </ul>
             </div>
 
             <div class="command" id="cmd-connect">
-                <h4>Connect Tailscale, Cloudflare, or GitHub</h4>
+                <h4>Connect Tailscale, Cloudflare, GitHub, or PostHog</h4>
                 <div class="code-wrapper">
-                    <pre class="code-block">singleserver connect tailscale [--auth-key &lt;key&gt;] [--hostname &lt;name&gt;]
+                    <pre class="code-block">singleserver connect tailscale [--auth-key &lt;key&gt;] [--hostname &lt;name&gt;] [--oauth-client-id &lt;id&gt; --oauth-client-secret &lt;secret&gt;]
 singleserver connect cloudflare [--account &lt;id&gt;] [--tunnel &lt;name&gt;]
-singleserver connect github</pre>
+singleserver connect github
+singleserver connect posthog [--token &lt;token&gt;] [--endpoint &lt;url&gt;] [--disconnect]</pre>
                 </div>
-                <p>One command wires up each outside service, and rerunning it repairs that service without touching the others. The installer runs all three for you, so you only need them again if a connection breaks or you skipped a step.</p>
+                <p>One command wires up each outside service, and rerunning it repairs that service without touching the others. The installer runs the first three for you, so you only need them again if a connection breaks or you skipped a step.</p>
                 <p><code>connect tailscale</code> brings up Tailscale, enables Tailscale SSH, and starts Tailscale Funnel for the daemon's local port. The resulting <code>https://&lt;host&gt;.&lt;tailnet&gt;.ts.net</code> URL becomes the public address GitHub uses for the setup page and webhooks.</p>
                 <ul class="option-list">
                     <li><code>--auth-key &lt;key&gt;</code><span>Use a Tailscale auth key instead of browser login. For unattended installs, make it a tagged key so the node never expires (see below).</span></li>
+                    <li><code>--oauth-client-id, --oauth-client-secret</code><span>Store the tailnet OAuth client used to manage <a href="#private-tunnels">private app services</a>. Validated against the API before storing.</span></li>
                     <li><code>--hostname &lt;name&gt;</code><span>Set the Tailscale machine name. Defaults to the server hostname.</span></li>
                     <li><code>--non-interactive</code><span>Never prompt. Missing provider input is reported as pending or failed.</span></li>
                 </ul>
@@ -272,6 +277,12 @@ singleserver connect github</pre>
                     <li><code>--non-interactive</code><span>Never prompt. Use with <code>CLOUDFLARE_API_TOKEN</code> for unattended repair.</span></li>
                 </ul>
                 <p><code>connect github</code> prints the one-time GitHub App setup URL, served by your own daemon through Tailscale Funnel. Opening it in a browser creates the GitHub App with one click and stores its credentials on the server. The app asks for the minimum it needs: repository contents read, commit statuses write, and push events. Install it on all repositories and let <code>apps.yml</code> decide what actually deploys.</p>
+                <p><code>connect posthog</code> ships logs to <a href="https://posthog.com/docs/logs">PostHog Logs</a>. It runs a <a href="https://vector.dev">Vector</a> service that forwards every app's container logs, plus the deploy daemon's, from journald. Each app shows up as its own service, and the daemon as <code>singleserver</code>. JSON log lines are unpacked: <code>message</code> or <code>msg</code> becomes the body, <code>severity</code> or <code>level</code> the severity, and the remaining keys attributes. Plain lines get their severity from the stream: stderr is an error, stdout is info. Only new lines are shipped, and apps added later ship automatically. <code>doctor</code> checks that the service is running.</p>
+                <ul class="option-list">
+                    <li><code>--token &lt;token&gt;</code><span>PostHog project token (<code>phc_…</code>). Required the first time, stored after that.</span></li>
+                    <li><code>--endpoint &lt;url&gt;</code><span>OTLP/HTTP logs endpoint. Defaults to PostHog US; use <code>https://eu.i.posthog.com/i/v1/logs</code> for EU, or any other OTLP logs backend.</span></li>
+                    <li><code>--disconnect</code><span>Stop shipping logs and remove the service, config, and stored token.</span></li>
+                </ul>
             </div>
 
             <div class="command" id="cmd-upgrade">
@@ -305,7 +316,8 @@ singleserver connect github</pre>
                 </div>
                 <p>Adds a repository, verifies the GitHub App can reach it, writes the entry to <code>apps.yml</code>, wires up any domains, stores any environment variables you set, deploys the current branch tip, and runs doctor. In an interactive session it asks only the questions it cannot answer itself, then prints the equivalent flag-based command with <code>--non-interactive</code>. Environment variables are written before that first deploy, so an app that reads a required secret at boot starts cleanly the first time.</p>
                 <ul class="option-list">
-                    <li><code>--domain &lt;host&gt;</code><span>Public hostname for the app, like <code>app.example.com</code>. Repeat the flag for more than one.</span></li>
+                    <li><code>--domain &lt;host&gt;</code><span>Public hostname for the app, like <code>app.example.com</code>. Repeat the flag for more than one. For private apps, a tailnet hostname like <code>app.tailnet-name.ts.net</code>, at most one.</span></li>
+                    <li><code>--tunnel public|private</code> <span class="opt-badge">Default: public</span><span>Where the app is reachable: <code>public</code> serves it to the internet through Cloudflare, <code>private</code> serves it only to your tailnet through Tailscale. See <a href="#private-tunnels">Private apps on Tailscale</a>.</span></li>
                     <li><code>--branch &lt;name&gt;</code> <span class="opt-badge">Default: repo default branch</span><span>Deploy only pushes to this branch.</span></li>
                     <li><code>--name &lt;app&gt;</code> <span class="opt-badge">Default: repo name, lowercased</span><span>Override the app name. Names must be unique on the server.</span></li>
                     <li><code>--runtime static|node|bun</code> <span class="opt-badge req">Required without a Dockerfile</span><span>Generate a temporary Dockerfile during deploys. Repos with their own Dockerfile must omit this.</span></li>
@@ -318,6 +330,10 @@ singleserver connect github</pre>
                     <li><code>--healthcheck &lt;url&gt;</code><span>Optional public URL checked after each deploy and by status and doctor.</span></li>
                     <li><code>--env KEY=value</code><span>Set an environment variable, stored on the server and injected at deploy. Repeat for more than one.</span></li>
                     <li><code>--deploy-timeout &lt;duration&gt;</code> <span class="opt-badge">Default: 10m</span><span>How long the deploy may run before it is killed, as a Go duration such as <code>20m</code>.</span></li>
+                    <li><code>--stop-timeout &lt;seconds&gt;</code> <span class="opt-badge">Default: 1</span><span>Seconds Kamal waits between SIGTERM and SIGKILL of the old container, a plain integer such as <code>10</code>.</span></li>
+                    <li><code>--drain-timeout &lt;seconds&gt;</code> <span class="opt-badge">Default: 1</span><span>Seconds kamal-proxy keeps routing in-flight requests to the old container, a plain integer such as <code>10</code>.</span></li>
+                    <li><code>--funnel-path &lt;path&gt;</code><span>Private apps only. Publish this path on the internet through Tailscale Funnel, on a separate node name. Repeat for more than one. See <a href="#funnel">Public paths through Funnel</a>.</span></li>
+                    <li><code>--funnel-host &lt;name&gt;</code> <span class="opt-badge">Default: &lt;name&gt;-public</span><span>Tailnet name of the funnel node, a bare label or a <code>.ts.net</code> name.</span></li>
                     <li><code>--no-deploy</code><span>Write the config but wait for the next push or a manual deploy.</span></li>
                     <li><code>--non-interactive</code><span>Never prompt. Required values must be supplied as arguments or flags.</span></li>
                 </ul>
@@ -335,8 +351,12 @@ singleserver connect github</pre>
                     <li><code>--branch &lt;name&gt;</code><span>Change which branch deploys automatically.</span></li>
                     <li><code>--healthcheck-path &lt;path&gt;</code><span>Change the container healthcheck path.</span></li>
                     <li><code>--deploy-timeout &lt;duration&gt;</code> <span class="opt-badge">Default: 10m</span><span>Raise or lower the deploy timeout for this app.</span></li>
+                    <li><code>--stop-timeout &lt;seconds&gt;</code> <span class="opt-badge">Default: 1</span><span>Raise or lower the gap between SIGTERM and SIGKILL of the old container.</span></li>
+                    <li><code>--drain-timeout &lt;seconds&gt;</code> <span class="opt-badge">Default: 1</span><span>Raise or lower how long kamal-proxy keeps routing in-flight requests to the old container.</span></li>
                     <li><code>--healthcheck &lt;url&gt;</code><span>Set the optional external healthcheck URL.</span></li>
                     <li><code>--no-healthcheck</code><span>Clear the external healthcheck URL. The container healthcheck still runs during deploys.</span></li>
+                    <li><code>--funnel-path &lt;path&gt;</code>, <code>--funnel-host &lt;name&gt;</code><span>Set or change the paths a private app publishes through Tailscale Funnel. Passing paths replaces the list; the host is kept unless given.</span></li>
+                    <li><code>--no-funnel</code><span>Stop publishing paths. The next deploy removes the funnel node.</span></li>
                     <li><code>--no-deploy</code><span>Write the config change without applying it to the running app yet.</span></li>
                     <li><code>--non-interactive</code><span>Never open the editor. Missing settings are an error.</span></li>
                 </ul>
@@ -374,7 +394,7 @@ singleserver connect github</pre>
                 <div class="code-wrapper">
                     <pre class="code-block">singleserver list</pre>
                 </div>
-                <p>One line per app: repo, branch, domains, current state, and healthcheck setting.</p>
+                <p>One line per app: repo, branch, domains, whether the app is served <code>public</code> or <code>private</code>, its current state, and the commit its running container was built from. A stopped app shows no commit, since what it would run next is not what it last ran.</p>
             </div>
 
             <div class="command" id="cmd-status">
@@ -382,7 +402,7 @@ singleserver connect github</pre>
                 <div class="code-wrapper">
                     <pre class="code-block">singleserver status</pre>
                 </div>
-                <p>The quick operational view: daemon health, then each app's running container, last deploy outcome, and external healthcheck result.</p>
+                <p>The quick operational view: daemon health, then each app's running container, whether it is served <code>public</code> or <code>private</code>, the commit it is running, last deploy outcome, and external healthcheck result. Both commands abbreviate the commit; <code>--output json</code> carries the full SHA.</p>
             </div>
 
             <div class="command" id="cmd-logs">
@@ -420,7 +440,7 @@ singleserver domains remove &lt;app&gt; &lt;domain&gt; [--no-deploy] [--non-inte
 singleserver domains list [app]
 singleserver domains verify [app]</pre>
                 </div>
-                <p>Attaches and detaches public hostnames. <code>add</code> finds the Cloudflare zone that owns the hostname, writes a proxied CNAME to your tunnel, adds the tunnel route, and redeploys the app so Kamal routes the new host. <code>remove</code> undoes all of that.</p>
+                <p>Attaches and detaches hostnames. For public apps, <code>add</code> finds the Cloudflare zone that owns the hostname, writes a proxied CNAME to your tunnel, adds the tunnel route, and redeploys the app so Kamal routes the new host. For private apps it provisions a Tailscale Service for the app instead (see <a href="#private-tunnels">Private apps on Tailscale</a>). <code>remove</code> undoes all of that. An app's tunnel is fixed when it is added, so <code>add</code> rejects a <code>.ts.net</code> hostname on a public app.</p>
                 <ul class="option-list">
                     <li><code>--no-deploy</code><span>Update config and DNS without redeploying the app yet.</span></li>
                     <li><code>--non-interactive</code><span>Never prompt. App and domain must be supplied for add/remove.</span></li>
@@ -512,7 +532,8 @@ singleserver storage disable &lt;app&gt; [--delete] [--no-deploy] [--non-interac
             <li><strong><code>name</code></strong><span class="default">Default: the repository name, lowercased.</span> The app's identity on the server: it names the checkout, the Kamal service, the image, the containers, the logs, and the storage path. Must be unique, so set it when two of your repos share a name.</li>
             <li><strong><code>branch</code></strong><span class="default">Default: the repository default branch.</span> Only pushes to this branch deploy automatically. Manual deploys can still target any ref.</li>
             <li><strong><code>path</code></strong><span class="default">Default: <code>/srv/repos/&lt;name&gt;</code>.</span> Where the server keeps the checkout.</li>
-            <li><strong><code>hosts</code></strong><span class="default">Default: none.</span> Public hostnames. Each one becomes a Kamal proxy host, a proxied Cloudflare CNAME, and a tunnel route. A hostname can belong to one app at a time.</li>
+            <li><strong><code>hosts</code></strong><span class="default">Default: none.</span> Public hostnames. Each one becomes a Kamal proxy host, a proxied Cloudflare CNAME, and a tunnel route. A hostname can belong to one app at a time. For private apps, at most one <code>.ts.net</code> name or bare label.</li>
+            <li><strong><code>tunnel</code></strong><span class="default">Default: <code>public</code>.</span> Where the app is reachable: <code>public</code> serves it to the internet through Cloudflare, <code>private</code> serves it only to your tailnet as a Tailscale Service. Fixed when the app is added. See <a href="#private-tunnels">Private apps on Tailscale</a>.</li>
             <li><strong><code>runtime</code></strong><span class="default">Default: absent.</span> <code>static</code>, <code>node</code>, or <code>bun</code>. Set only when the repo has no Dockerfile and Single Server should generate one during deploys.</li>
             <li><strong><code>install</code></strong><span class="default">Default: absent.</span> Optional install command for generated Node and Bun Dockerfiles. Exactly what you write is what runs.</li>
             <li><strong><code>build</code></strong><span class="default">Default: absent.</span> Optional build command for generated Node and Bun Dockerfiles, run after <code>install</code>.</li>
@@ -522,7 +543,10 @@ singleserver storage disable &lt;app&gt; [--delete] [--no-deploy] [--non-interac
             <li><strong><code>healthcheck_path</code></strong><span class="default">Default: <code>/</code>, or <code>/up</code> for generated static output.</span> The path Kamal polls before flipping traffic to a new container.</li>
             <li><strong><code>healthcheck</code></strong><span class="default">Default: absent.</span> Optional external URL checked after deploys and by status and doctor. When absent, the external check is reported as assumed rather than failed.</li>
             <li><strong><code>deploy_timeout</code></strong><span class="default">Default: 10m.</span> How long a deploy may run before it is killed and reported as failed. A Go duration such as <code>20m</code> or <code>90s</code>.</li>
+            <li><strong><code>stop_timeout</code></strong><span class="default">Default: 1.</span> Seconds Kamal waits between sending SIGTERM and SIGKILL to the old container during a deploy, giving it a window to shut down gracefully. A plain integer, unlike <code>deploy_timeout</code>, such as <code>10</code>.</li>
+            <li><strong><code>drain_timeout</code></strong><span class="default">Default: 1.</span> Seconds kamal-proxy keeps routing in-flight requests to the old container before it is stopped. A plain integer such as <code>10</code>.</li>
             <li><strong><code>storage</code></strong><span class="default">Default: absent until enabled.</span> Persistent storage mapping, with optional <code>path</code> (host, default <code>/srv/storage/&lt;name&gt;</code>) and <code>mount</code> (container, default <code>/storage</code>).</li>
+            <li><strong><code>funnel</code></strong><span class="default">Default: absent.</span> Private apps only. <code>paths</code> to publish on the internet through Tailscale Funnel, and an optional <code>host</code> (default <code>&lt;name&gt;-public</code>) for the node that serves them. See <a href="#funnel">Public paths through Funnel</a>.</li>
         </ul>
 
         <h3 id="dockerfiles">Generated Dockerfiles</h3>
@@ -562,6 +586,15 @@ singleserver storage disable &lt;app&gt; [--delete] [--no-deploy] [--non-interac
 
         <h3 id="kamal-defaults">Generated Kamal defaults</h3>
         <p>Repos don't need a Kamal config. If a repo tracks <code>config/deploy.yml</code>, that file wins. Otherwise Single Server writes one for the deploy and removes it after Kamal exits. <code>inspect</code> shows you exactly what it generates, and these are the defaults inside it.</p>
+        <p>To tweak the generated config without taking it over, commit <code>.singleserver/deploy.yml</code>. Single Server deep-merges it on top of the defaults: mappings merge key by key, while scalars and lists replace the generated value. It can set anything except <code>service</code>, <code>image</code>, <code>servers</code>, <code>ssh</code>, and <code>registry</code>, which Single Server owns; a deploy with an overlay that sets one of them fails. <code>inspect</code> prints the merged result and <code>doctor</code> validates it.</p>
+        <div class="code-wrapper">
+            <pre class="code-block"># .singleserver/deploy.yml
+proxy:
+  response_timeout: 60
+env:
+  clear:
+    LOG_LEVEL: info</pre>
+        </div>
         <ul class="settings-list">
             <li><strong>Service and image</strong><span class="default">The app name.</span> One name everywhere makes containers, images, and logs easy to find.</li>
             <li><strong>Server</strong><span class="default"><code>127.0.0.1</code>, via the deploy user.</span> Kamal keeps its normal SSH deploy model. It just happens to SSH into the same machine.</li>
@@ -569,8 +602,47 @@ singleserver storage disable &lt;app&gt; [--delete] [--no-deploy] [--non-interac
             <li><strong>Builder</strong><span class="default">Local Docker builder, server architecture.</span> No cross-compilation, no remote builders.</li>
             <li><strong>Proxy</strong><span class="default"><code>ssl: false</code>, forwarded headers on, bound to loopback.</span> Cloudflare terminates TLS at the edge, and the tunnel delivers plain HTTP to Kamal's proxy, which is not reachable from the public internet.</li>
             <li><strong>Healthcheck</strong><span class="default">Poll the healthcheck path every second, 1s timeout.</span> Tight intervals keep zero-downtime swaps fast for small apps.</li>
-            <li><strong>Timeouts</strong><span class="default">Deploy 10s, drain 1s.</span> Tuned for small containers that boot fast. A repo-level <code>config/deploy.yml</code> is the escape hatch for apps that need different numbers.</li>
+            <li><strong>Logging</strong><span class="default">journald, tagged with the app name.</span> Container output lands in the system journal, so <code>journalctl -t &lt;app&gt;</code> follows an app across container versions, and <code>docker logs</code> keeps working.</li>
+            <li><strong>Timeouts</strong><span class="default">Deploy 10s, stop 1s, drain 1s.</span> Tuned for small containers that boot fast and shut down instantly. Apps that need a graceful-shutdown window can raise <code>stop_timeout</code> and <code>drain_timeout</code> in <code>apps.yml</code>; a <code>.singleserver/deploy.yml</code> overlay covers everything else.</li>
         </ul>
+    </section>
+
+    <section id="private-tunnels">
+        <h2>Private apps on Tailscale</h2>
+        <p>Not everything belongs on the internet. An app added with <code>--tunnel private</code> gets real HTTPS at a name only your tailnet can reach: no public DNS, no Cloudflare, no public IP in the path.</p>
+
+        <div class="code-wrapper">
+            <pre class="code-block">singleserver add <span class="accent">https://github.com/owner/app</span> --tunnel private</pre>
+        </div>
+        <p>The app comes up at <code>https://&lt;name&gt;.&lt;tailnet&gt;.ts.net</code>, named after the app, or after the first label of a <code>--domain</code> you pass. Private apps take at most one domain.</p>
+
+        <h3 id="private-tunnels-how">How it works</h3>
+        <p>Each private app is a <a href="https://tailscale.com/docs/features/tailscale-services">Tailscale Service</a>: a stable name and virtual IP on your tailnet, hosted by this server's own node. Single Server creates and tags the service through the Tailscale API and runs <code>tailscale serve --service</code>, so Tailscale terminates HTTPS on the node and hands requests to Kamal's proxy, which routes by hostname to the container. No per-app nodes, no DNS step, and deploys work exactly like public apps.</p>
+        <p>Removing the app or its domain stops serving and deletes the service.</p>
+
+        <h3 id="private-tunnels-prep">One-time tailnet setup</h3>
+        <p>Three things in the <a href="https://login.tailscale.com/admin">Tailscale admin console</a>, once per tailnet &mdash; an interactive <code>add --tunnel private</code> walks you through them. One tag, <code>tag:singleserver</code>, marks both this server and its app services.</p>
+        <ul class="settings-list">
+            <li><strong>Policy entries</strong><span class="default">Access controls &rarr; JSON editor</span> Add two top-level entries to the tailnet policy file: <code>"tagOwners": {"tag:singleserver": ["autogroup:admin"]}</code>, and <code>"autoApprovers": {"services": {"tag:singleserver": ["tag:singleserver"]}}</code> &mdash; services carrying the tag may be hosted, auto-approved, by machines carrying it. (Also check MagicDNS and HTTPS certificates are on, under DNS &mdash; they usually already are.)</li>
+            <li><strong>Tag this server</strong><span class="default">Machines &rarr; &hellip; &rarr; Edit ACL tags</span> Add <code>tag:singleserver</code> to this server's machine. Only tagged machines can host Tailscale Services, and the tag is what the auto-approval keys on. Other tags on the machine are fine.</li>
+            <li><strong>An OAuth client</strong><span class="default">Settings &rarr; Trust credentials</span> Generate an OAuth client with the <em>Services</em> write scope, tagged <code>tag:singleserver</code>. Store it with <code>singleserver connect tailscale --oauth-client-id &lt;id&gt; --oauth-client-secret &lt;secret&gt;</code>. Unlike auth keys, OAuth clients never expire &mdash; this is set up once and forgotten.</li>
+        </ul>
+        <p>If an app comes up unreachable, the usual cause is host approval: check the admin console's Services page, or add the <code>autoApprovers</code> entry above.</p>
+
+        <h3 id="funnel">Public paths through Funnel</h3>
+        <p>Some private apps still need one door open to the internet: a webhook receiver, an OAuth callback, an MCP endpoint that a hosted agent calls. <code>--funnel-path</code> publishes only those paths through <a href="https://tailscale.com/docs/features/tailscale-funnel">Tailscale Funnel</a>, with no Cloudflare and no change to how the rest of the app is served.</p>
+        <div class="code-wrapper">
+            <pre class="code-block">singleserver add <span class="accent">https://github.com/owner/app</span> --tunnel private \
+  --funnel-path /api/webhooks --funnel-host app-hooks</pre>
+        </div>
+        <p>The app stays at <code>https://app.&lt;tailnet&gt;.ts.net</code> for your tailnet. The internet gets <code>https://app-hooks.&lt;tailnet&gt;.ts.net/api/webhooks</code>, and nothing else: every other path on that name is a 404 before it reaches your app.</p>
+        <p><strong>How it works.</strong> Funnel only publishes Tailscale <em>nodes</em>, not Services, so each funnelled app gets a small <code>tailscale/tailscale</code> container as a Kamal accessory: its own node on the tailnet, named after <code>--funnel-host</code>, tagged <code>tag:singleserver</code>, running in userspace mode with no extra privileges. Single Server writes its serve config (one mount per path, Funnel on 443), boots it through Kamal, and lists the funnel name as a second proxy host so Kamal's proxy routes it to the app container. The node's identity lives under <code>/var/lib/singleserver/funnel/&lt;app&gt;</code> and survives deploys and reboots; the container is only recreated when the paths or host change (a host change renames the same node in place), or when a deploy finds it stopped or logged out. Removing the app, or <code>edit --no-funnel</code>, logs the node out and deletes the container and its state. Tailscale keeps a logged-out machine listed until you delete it in the admin console.</p>
+        <p><strong>Two more one-time settings</strong>, on top of the private-app setup above:</p>
+        <ul class="settings-list">
+            <li><strong>Funnel for the tag</strong><span class="default">Access controls &rarr; JSON editor</span> Add <code>"nodeAttrs": [{"target": ["tag:singleserver"], "attr": ["funnel"]}]</code> so nodes carrying the tag may use Funnel.</li>
+            <li><strong>Auth Keys scope</strong><span class="default">Settings &rarr; Trust credentials</span> The stored OAuth client also needs the <em>Auth Keys</em> write scope, tagged <code>tag:singleserver</code>. Single Server mints a single-use, one-hour, pre-authorized key for each node boot; the OAuth secret itself never reaches a container. Recreate the client with both scopes and store it again with <code>singleserver connect tailscale --oauth-client-id ... --oauth-client-secret ...</code>.</li>
+        </ul>
+        <p><code>status</code> shows each app's funnel URL, and <code>doctor</code> checks the container, the node's login state, public DNS, and an HTTPS round trip through the Funnel edge. A brand-new node can take a minute to get its certificate.</p>
     </section>
 
     <section id="contract">
@@ -627,7 +699,7 @@ singleserver storage disable &lt;app&gt; [--delete] [--no-deploy] [--non-interac
             </tr>
             <tr>
                 <td>/etc/singleserver/tailscale.json</td>
-                <td>Tailscale hostname and Funnel URL.</td>
+                <td>Tailscale hostname, Funnel URL, and the tailnet OAuth client for private app services and funnel nodes.</td>
             </tr>
             <tr>
                 <td>/etc/singleserver/cloudflare.json</td>
@@ -644,6 +716,10 @@ singleserver storage disable &lt;app&gt; [--delete] [--no-deploy] [--non-interac
             <tr>
                 <td>/srv/storage/&lt;app&gt;</td>
                 <td>Persistent app storage, mounted into the container.</td>
+            </tr>
+            <tr>
+                <td>/var/lib/singleserver/funnel/&lt;app&gt;</td>
+                <td>Funnel node identity and serve config for private apps that publish paths.</td>
             </tr>
             <tr>
                 <td>/srv/backups/&lt;app&gt;</td>

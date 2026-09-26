@@ -319,37 +319,51 @@ UNIT_EOF
 }
 
 # install_binary fetches the singleserver binary for this host. It supports two
-# channels plus an explicit mirror override:
+# channels plus two explicit overrides:
 #   - stable (default): the latest tagged GitHub release, verified against its
 #     published sha256 checksums.
 #   - edge (SINGLESERVER_CHANNEL=edge): the latest build of main from the site.
 #   - SINGLESERVER_DOWNLOAD_BASE_URL: an explicit <base>/bin mirror, which takes
 #     precedence over the channel (used by the e2e harness and self-host mirrors).
+#   - SINGLESERVER_LOCAL_BINARY: a path to an already-built binary, which takes
+#     precedence over everything else. It is installed as-is with no checksum to
+#     verify against, so it must be a path only root can write; the installer
+#     never picks a binary up implicitly, because a world-writable location like
+#     /tmp would let any local user hand this script the code it runs as root.
 install_binary() {
   channel="${SINGLESERVER_CHANNEL:-stable}"
-  tmp_bin="/tmp/singleserver-linux-${binary_arch}"
+  tmp_dir="$(mktemp -d)"
+  trap 'rm -rf "$tmp_dir"' EXIT
+  tmp_bin="$tmp_dir/singleserver-linux-${binary_arch}"
 
-  if [ -n "${SINGLESERVER_DOWNLOAD_BASE_URL:-}" ]; then
+  if [ -n "${SINGLESERVER_LOCAL_BINARY:-}" ]; then
+    if [ ! -f "${SINGLESERVER_LOCAL_BINARY}" ]; then
+      echo "Single Server: SINGLESERVER_LOCAL_BINARY=${SINGLESERVER_LOCAL_BINARY} is not a file." >&2
+      rm -rf "$tmp_dir"
+      exit 1
+    fi
+    echo "Using local binary ${SINGLESERVER_LOCAL_BINARY}"
+    cp "${SINGLESERVER_LOCAL_BINARY}" "$tmp_bin"
+  elif [ -n "${SINGLESERVER_DOWNLOAD_BASE_URL:-}" ]; then
     curl -fsSL "${SINGLESERVER_DOWNLOAD_BASE_URL%/}/bin/singleserver-linux-${binary_arch}" -o "$tmp_bin"
   elif [ "$channel" = "edge" ]; then
     curl -fsSL "https://singleserver.com/bin/singleserver-linux-${binary_arch}" -o "$tmp_bin"
   else
     release_url="https://github.com/dvassallo/singleserver/releases/latest/download"
-    tmp_sums="/tmp/singleserver-checksums.txt"
+    tmp_sums="$tmp_dir/checksums.txt"
     curl -fsSL "${release_url}/singleserver-linux-${binary_arch}" -o "$tmp_bin"
     curl -fsSL "${release_url}/checksums.txt" -o "$tmp_sums"
     expected="$(grep "singleserver-linux-${binary_arch}" "$tmp_sums" | awk '{print $1}')"
     actual="$(sha256sum "$tmp_bin" | awk '{print $1}')"
     if [ -z "$expected" ] || [ "$expected" != "$actual" ]; then
       echo "Single Server: checksum verification failed for singleserver-linux-${binary_arch}." >&2
-      rm -f "$tmp_bin" "$tmp_sums"
+      rm -rf "$tmp_dir"
       exit 1
     fi
-    rm -f "$tmp_sums"
   fi
 
   install -m 0755 "$tmp_bin" /usr/local/bin/singleserver
-  rm -f "$tmp_bin"
+  rm -rf "$tmp_dir"
 }
 
 detect_arch

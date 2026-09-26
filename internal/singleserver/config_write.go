@@ -52,6 +52,7 @@ func appConfigEntry(app AppConfig) addAppEntry {
 	entry := addAppEntry{
 		repo:            app.Repo,
 		hosts:           app.Hosts,
+		tunnel:          app.Tunnel,
 		healthcheck:     app.Healthcheck,
 		healthcheckPath: "",
 		runtime:         app.Runtime,
@@ -62,7 +63,10 @@ func appConfigEntry(app AppConfig) addAppEntry {
 		appPort:         app.AppPort,
 		appPortSet:      app.AppPortSet || (app.AppPort != 0 && app.AppPort != 80),
 		deployTimeout:   app.DeployTimeout,
+		stopTimeout:     app.StopTimeout,
+		drainTimeout:    app.DrainTimeout,
 		storage:         app.Storage,
+		funnel:          persistedFunnel(app),
 	}
 	repoName := ""
 	if parts := strings.SplitN(app.Repo, "/", 2); len(parts) == 2 {

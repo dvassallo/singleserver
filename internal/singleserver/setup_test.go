@@ -48,12 +48,15 @@ func TestTailscaleConnectStoresHostname(t *testing.T) {
 	originalRun := commandRunFunc
 	originalRunToWriter := commandRunToWriterFunc
 	originalFunnelReady := tailscaleFunnelReadyFunc
+	originalInteractive := addPromptInteractiveFunc
 	t.Cleanup(func() {
 		commandOutputFunc = originalOutput
 		commandRunFunc = originalRun
 		commandRunToWriterFunc = originalRunToWriter
 		tailscaleFunnelReadyFunc = originalFunnelReady
+		addPromptInteractiveFunc = originalInteractive
 	})
+	addPromptInteractiveFunc = func() bool { return false }
 	commandOutputFunc = func(timeout time.Duration, name string, args ...string) (string, error) {
 		if name != "tailscale" {
 			t.Fatalf("unexpected output command: %s %s", name, strings.Join(args, " "))

@@ -50,6 +50,82 @@ func TestCliEditUpdatesHealthcheckSettings(t *testing.T) {
 	}
 }
 
+func TestCliEditUpdatesStopAndDrainTimeout(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "apps.yml")
+	t.Setenv("SINGLESERVER_CONFIG", configPath)
+	if err := os.WriteFile(configPath, []byte(`apps:
+  - repo: acme/scoreboard
+    hosts:
+      - scoreboard.example.com
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	stubEditPrompt(t, false)
+
+	var out bytes.Buffer
+	err := cliEdit([]string{
+		"https://github.com/acme/scoreboard",
+		"--stop-timeout", "10",
+		"--drain-timeout", "5",
+		"--no-deploy",
+	}, &out, log.New(io.Discard, "", 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	config, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := config.Apps[0]
+	if app.StopTimeout != "10" {
+		t.Fatalf("unexpected stop_timeout: %q", app.StopTimeout)
+	}
+	if app.DrainTimeout != "5" {
+		t.Fatalf("unexpected drain_timeout: %q", app.DrainTimeout)
+	}
+	if !strings.Contains(out.String(), "scoreboard\tconfig\tok") {
+		t.Fatalf("expected config output:\n%s", out.String())
+	}
+}
+
+func TestCliEditUpdatesDeployTimeout(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "apps.yml")
+	t.Setenv("SINGLESERVER_CONFIG", configPath)
+	if err := os.WriteFile(configPath, []byte(`apps:
+  - repo: acme/scoreboard
+    hosts:
+      - scoreboard.example.com
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	stubEditPrompt(t, false)
+
+	var out bytes.Buffer
+	err := cliEdit([]string{
+		"https://github.com/acme/scoreboard",
+		"--deploy-timeout", "20m",
+		"--no-deploy",
+	}, &out, log.New(io.Discard, "", 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	config, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := config.Apps[0]
+	if app.DeployTimeout != "20m" {
+		t.Fatalf("unexpected deploy_timeout: %q", app.DeployTimeout)
+	}
+	if !strings.Contains(out.String(), "scoreboard\tconfig\tok") {
+		t.Fatalf("expected config output:\n%s", out.String())
+	}
+}
+
 func TestCliEditSwitchesToRepoDockerfile(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "apps.yml")

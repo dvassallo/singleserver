@@ -118,6 +118,23 @@ func (m *DeployManager) runKamal(req DeployRequest, token string) (DeployTiming,
 		return DeployTiming{}, err
 	}
 
+	executable, err := os.Executable()
+	if err != nil {
+		return DeployTiming{}, err
+	}
+
+	funnelEnv, err := prepareFunnelDeploy(req.App)
+	if err != nil {
+		return DeployTiming{}, err
+	}
+	if !req.App.HasFunnel() && funnelContainerStateFunc(req.App).exists {
+		var notes bytes.Buffer
+		if err := teardownFunnelFunc(req.App, &notes); err != nil {
+			return DeployTiming{}, err
+		}
+		m.logger.Printf("[deploy:%s] %s no longer publishes paths: %s", req.RunID, req.App.Name, strings.TrimSpace(notes.String()))
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), req.App.DeployTimeoutDuration())
 	defer cancel()
 
@@ -132,11 +149,13 @@ func (m *DeployManager) runKamal(req DeployRequest, token string) (DeployTiming,
 		"SINGLESERVER_REPO="+req.Repo,
 		"SINGLESERVER_SHA="+req.SHA,
 		"SINGLESERVER_GITHUB_TOKEN="+token,
-		"SINGLESERVER_GENERATED_DEPLOY_YML="+string(generatedDeployYAML),
+		"SINGLESERVER_BIN="+executable,
+		generatedDeployYAMLEnv+"="+string(generatedDeployYAML),
 		"SINGLESERVER_GENERATED_DOCKERFILE="+generatedDockerfile.Dockerfile,
 		"SINGLESERVER_GENERATED_DOCKERFILE_SOURCE="+generatedDockerfile.Source,
 		"SINGLESERVER_ENV_FILE="+appEnvPath(req.App.Name),
 	)
+	command.Env = append(command.Env, funnelEnv...)
 
 	var combined lockedBuffer
 	command.Stdout = &lineLogger{prefix: "[deploy:" + req.RunID + "] out: ", logger: m.logger, sink: &combined}
@@ -153,10 +172,20 @@ func (m *DeployManager) runKamal(req DeployRequest, token string) (DeployTiming,
 
 	output := combined.String()
 	timingLine := ""
+	funnelBooted := false
 	for _, line := range strings.Split(output, "\n") {
 		if strings.HasPrefix(line, "timing ") {
 			timingLine = line
-			break
+		}
+		if strings.HasPrefix(line, "funnel=") {
+			funnelBooted = true
+		}
+	}
+	if funnelBooted {
+		if err := funnelReadyFunc(req.App.FunnelURL(), 120*time.Second); err != nil {
+			m.logger.Printf("[deploy:%s] funnel not reachable yet: %v (new nodes can take a minute; `singleserver doctor %s` rechecks)", req.RunID, err, req.App.Name)
+		} else {
+			m.logger.Printf("[deploy:%s] funnel serving %s", req.RunID, req.App.FunnelURL())
 		}
 	}
 	totalMS := time.Since(start).Milliseconds()
@@ -174,6 +203,9 @@ func (m *DeployManager) runHealthcheck(app AppConfig, runID string) error {
 	}
 
 	client := healthcheckClient()
+	if app.IsPrivate() || isTailnetURL(app.Healthcheck) {
+		client = &http.Client{Timeout: 5 * time.Second}
+	}
 	deadline := time.Now().Add(2 * time.Minute)
 	var lastErr error
 	for time.Now().Before(deadline) {
@@ -205,17 +237,21 @@ func (m *DeployManager) runHealthcheck(app AppConfig, runID string) error {
 	return fmt.Errorf("healthcheck %s did not become ready", app.Healthcheck)
 }
 
-func healthcheckClient() *http.Client {
-	resolver := &net.Resolver{
+// publicResolver bypasses MagicDNS so tailnet names only pass when published to the internet.
+func publicResolver() *net.Resolver {
+	return &net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
 			dialer := net.Dialer{Timeout: 5 * time.Second}
 			return dialer.DialContext(ctx, network, "1.1.1.1:53")
 		},
 	}
+}
+
+func healthcheckClient() *http.Client {
 	dialer := &net.Dialer{
 		Timeout:  5 * time.Second,
-		Resolver: resolver,
+		Resolver: publicResolver(),
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.DialContext = dialer.DialContext

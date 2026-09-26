@@ -66,9 +66,9 @@ func TestRemoveKeepsConfigWhenCloudflareFails(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	originalSync := syncCloudflareAppDomainFunc
-	t.Cleanup(func() { syncCloudflareAppDomainFunc = originalSync })
-	syncCloudflareAppDomainFunc = func(hostname string, add bool, w io.Writer) error {
+	originalSync := syncAppDomainFunc
+	t.Cleanup(func() { syncAppDomainFunc = originalSync })
+	syncAppDomainFunc = func(app AppConfig, hostname string, add bool, w io.Writer) error {
 		if !add {
 			return errors.New("cloudflare unavailable")
 		}

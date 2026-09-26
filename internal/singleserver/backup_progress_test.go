@@ -34,10 +34,10 @@ func TestBackupProgressDisabledWritesNothing(t *testing.T) {
 func TestBackupProgressRendersBarAndClears(t *testing.T) {
 	var buf bytes.Buffer
 	p := &backupProgress{w: &buf, enabled: true}
-	p.phase("snapshot db", 100)                  // forced render at 0%
-	p.lastRender = time.Now().Add(-time.Second)  // bypass the throttle
-	p.add(100)                                   // render at 100%
-	p.finish()                                   // erase the line
+	p.phase("snapshot db", 100)                 // forced render at 0%
+	p.lastRender = time.Now().Add(-time.Second) // bypass the throttle
+	p.add(100)                                  // render at 100%
+	p.finish()                                  // erase the line
 
 	got := buf.String()
 	for _, want := range []string{"snapshot db", "100%", "\r"} {

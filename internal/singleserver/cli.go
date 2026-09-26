@@ -109,6 +109,9 @@ func runCLI(args []string, logger *log.Logger, stdout io.Writer) error {
 		if name == "--version" {
 			name = "version"
 		}
+		if name == mergeDeployConfigCommand {
+			return cliMergeDeployConfig(args[1:])
+		}
 		cmd := lookupCommand(name)
 		if cmd == nil {
 			return fmt.Errorf("unknown command %q", name)
@@ -208,7 +211,10 @@ func cliList(w io.Writer) error {
 			Name:   app.Name,
 			Repo:   app.Repo,
 			Branch: app.Branch,
-			Hosts:  app.Hosts,
+			Hosts:  app.QualifiedHosts(),
+			Tunnel: app.Tunnel,
+			Funnel: app.FunnelURL(),
+			Commit: deployedCommitForApp(app.Name, containers),
 			State:  listStateWord(appSummaryStatus(app, containers, containerErr, journal)),
 		})
 	}
@@ -255,6 +261,10 @@ func cliStatus(w io.Writer) error {
 			depState, depDetail := lastDeployStatusFromJournal(app.Name, journal)
 			views = append(views, AppView{
 				Name:   app.Name,
+				Hosts:  app.QualifiedHosts(),
+				Tunnel: app.Tunnel,
+				Funnel: app.FunnelURL(),
+				Commit: deployedCommitForApp(app.Name, containers),
 				State:  appRuntimeWord(app, containers, containerErr),
 				Deploy: deployView(depState, depDetail),
 				Health: healthView(app),
@@ -456,7 +466,7 @@ func appLiveURL(app AppConfig) string {
 	if len(app.Hosts) == 0 {
 		return ""
 	}
-	return "https://" + app.Hosts[0]
+	return "https://" + app.QualifiedHost(app.Hosts[0])
 }
 
 func cliInspect(args []string, w io.Writer) error {
@@ -475,7 +485,7 @@ func cliInspect(args []string, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	body, err := GeneratedDeployYAML(renderApp)
+	body, _, err := deployYAMLForCheckout(renderApp)
 	if err != nil {
 		return err
 	}

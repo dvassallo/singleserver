@@ -200,3 +200,104 @@ func TestExtractOutputFlag(t *testing.T) {
 		t.Fatal("expected error for unknown --output value")
 	}
 }
+
+func TestOutputListShowsTunnelColumn(t *testing.T) {
+	var buf bytes.Buffer
+	o := newTextOutput(&buf)
+	o.listApps([]AppView{
+		{Name: "cadim", Repo: "macecchi/cadim", State: "running", Hosts: []string{"cadim.taileaca57.ts.net"}, Tunnel: "private"},
+		{Name: "fullsend", Repo: "dvassallo/fullsend", State: "running", Hosts: []string{"fullsend.game"}, Tunnel: "public"},
+	})
+	if err := o.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	text := buf.String()
+	if !strings.Contains(text, "TUNNEL") {
+		t.Fatalf("expected a TUNNEL header:\n%s", text)
+	}
+	for _, want := range []string{"private", "public"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("expected %q in the table:\n%s", want, text)
+		}
+	}
+}
+
+func TestOutputStatusShowsTunnelLine(t *testing.T) {
+	var buf bytes.Buffer
+	o := newTextOutput(&buf)
+	o.statusReport(DaemonView{State: "ok", Apps: 1}, []AppView{{
+		Name:   "cadim",
+		State:  "running",
+		Tunnel: "private",
+		Deploy: &DeployView{State: "ok", Detail: "deployed in 5.7s"},
+	}})
+	if err := o.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "tunnel") || !strings.Contains(buf.String(), "private") {
+		t.Fatalf("expected a tunnel line:\n%s", buf.String())
+	}
+}
+
+func TestOutputStatusShowsAppAndFunnelURLs(t *testing.T) {
+	var buf bytes.Buffer
+	o := newTextOutput(&buf)
+	o.statusReport(DaemonView{State: "ok", Apps: 1}, []AppView{{
+		Name:   "cadim",
+		State:  "running",
+		Hosts:  []string{"cadim.corp.ts.net"},
+		Tunnel: "private",
+		Funnel: "https://cadim-mcp.corp.ts.net/mcp",
+	}})
+	if err := o.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "private  https://cadim.corp.ts.net") {
+		t.Fatalf("expected the app URL on the tunnel line:\n%s", out)
+	}
+	if !strings.Contains(out, "public   https://cadim-mcp.corp.ts.net/mcp") {
+		t.Fatalf("expected the funnel URL marked public:\n%s", out)
+	}
+}
+
+func TestOutputListShowsShortCommit(t *testing.T) {
+	var buf bytes.Buffer
+	o := newTextOutput(&buf)
+	o.listApps([]AppView{
+		{Name: "cadim", Repo: "macecchi/cadim", State: "running", Tunnel: "private", Commit: "ac8ddaf778db9a16eee02b1f727906419a46af44"},
+		{Name: "idle", Repo: "acme/idle", State: "stopped", Tunnel: "public"},
+	})
+	if err := o.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	text := buf.String()
+	if !strings.Contains(text, "COMMIT") {
+		t.Fatalf("expected a COMMIT header:\n%s", text)
+	}
+	if !strings.Contains(text, "ac8ddaf") {
+		t.Fatalf("expected the short commit:\n%s", text)
+	}
+	if strings.Contains(text, "ac8ddaf778db9a16") {
+		t.Fatalf("the table should abbreviate the sha:\n%s", text)
+	}
+}
+
+func TestOutputJSONKeepsFullCommit(t *testing.T) {
+	var buf bytes.Buffer
+	o := newJSONOutput(&buf)
+	full := "ac8ddaf778db9a16eee02b1f727906419a46af44"
+	o.listApps([]AppView{{Name: "cadim", State: "running", Commit: full}})
+	if err := o.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	var payload struct {
+		Apps []AppView `json:"apps"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &payload); err != nil {
+		t.Fatalf("invalid json: %v\n%s", err, buf.String())
+	}
+	if len(payload.Apps) != 1 || payload.Apps[0].Commit != full {
+		t.Fatalf("json should carry the full sha: %+v", payload.Apps)
+	}
+}

@@ -78,9 +78,9 @@ func TestDomainsAddKeepsConfigWhenCloudflareFails(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	originalSync := syncCloudflareAppDomainFunc
-	t.Cleanup(func() { syncCloudflareAppDomainFunc = originalSync })
-	syncCloudflareAppDomainFunc = func(hostname string, add bool, w io.Writer) error {
+	originalSync := syncAppDomainFunc
+	t.Cleanup(func() { syncAppDomainFunc = originalSync })
+	syncAppDomainFunc = func(app AppConfig, hostname string, add bool, w io.Writer) error {
 		return errors.New("cloudflare unavailable")
 	}
 
@@ -121,10 +121,10 @@ func TestDomainsRemoveRejectsHostNotConfiguredForApp(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	originalSync := syncCloudflareAppDomainFunc
-	t.Cleanup(func() { syncCloudflareAppDomainFunc = originalSync })
+	originalSync := syncAppDomainFunc
+	t.Cleanup(func() { syncAppDomainFunc = originalSync })
 	syncCalled := false
-	syncCloudflareAppDomainFunc = func(hostname string, add bool, w io.Writer) error {
+	syncAppDomainFunc = func(app AppConfig, hostname string, add bool, w io.Writer) error {
 		syncCalled = true
 		return nil
 	}
@@ -362,5 +362,90 @@ func TestDomainsVerifyUsesCommandRunFuncForResolverDNS(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "scoreboard\tdns\tfailed\tapp.example.net\tresolver unavailable") {
 		t.Fatalf("expected resolver DNS failure output, got:\n%s", out.String())
+	}
+}
+
+func TestDomainsRemoveAcceptsQualifiedSpellingOfBareHost(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "apps.yml")
+	t.Setenv("SINGLESERVER_CONFIG", configPath)
+	t.Setenv("SINGLESERVER_STATE_DIR", dir)
+	if err := writeTailscaleState(&TailscaleState{Hostname: "box.corp.ts.net"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, []byte(`apps:
+  - repo: acme/scoreboard
+    tunnel: private
+    hosts:
+      - scoreboard
+    healthcheck: https://scoreboard.corp.ts.net/up
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	originalSync := syncAppDomainFunc
+	t.Cleanup(func() { syncAppDomainFunc = originalSync })
+	syncedHost := ""
+	syncAppDomainFunc = func(app AppConfig, hostname string, add bool, w io.Writer) error {
+		syncedHost = hostname
+		return nil
+	}
+
+	var out bytes.Buffer
+	logger := log.New(io.Discard, "", 0)
+	if err := cliDomains([]string{"remove", "scoreboard", "scoreboard.corp.ts.net", "--no-deploy"}, &out, logger); err != nil {
+		t.Fatal(err)
+	}
+	if syncedHost != "scoreboard" {
+		t.Fatalf("expected the stored spelling synced, got %q", syncedHost)
+	}
+
+	config, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(config.Apps[0].Hosts) != 0 {
+		t.Fatalf("expected the host removed, got %#v", config.Apps[0].Hosts)
+	}
+	if config.Apps[0].Healthcheck != "" {
+		t.Fatalf("expected the qualified healthcheck cleared, got %s", config.Apps[0].Healthcheck)
+	}
+}
+
+func TestDomainsAddRejectsTailnetDomainOnPublicApp(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "apps.yml")
+	t.Setenv("SINGLESERVER_CONFIG", configPath)
+	if err := os.WriteFile(configPath, []byte(`apps:
+  - repo: acme/scoreboard
+    hosts:
+      - play.example.com
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	originalSync := syncAppDomainFunc
+	t.Cleanup(func() { syncAppDomainFunc = originalSync })
+	syncAppDomainFunc = func(app AppConfig, hostname string, add bool, w io.Writer) error {
+		t.Fatalf("expected the domain to be rejected before syncing %s", hostname)
+		return nil
+	}
+
+	var out bytes.Buffer
+	logger := log.New(io.Discard, "", 0)
+	err := cliDomains([]string{"add", "scoreboard", "scores.corp.ts.net", "--no-deploy"}, &out, logger)
+	if err == nil {
+		t.Fatal("expected a tailnet domain on a public app to be rejected")
+	}
+	if !strings.Contains(err.Error(), "tailnet domain") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	config, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(config.Apps[0].Hosts) != 1 {
+		t.Fatalf("expected the config left alone, got %#v", config.Apps[0].Hosts)
 	}
 }

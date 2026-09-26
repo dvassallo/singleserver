@@ -8,17 +8,19 @@ import (
 )
 
 type kamalDeployConfig struct {
-	Service       string                 `yaml:"service"`
-	Image         string                 `yaml:"image"`
-	Servers       map[string]kamalServer `yaml:"servers"`
-	SSH           kamalSSH               `yaml:"ssh"`
-	Registry      kamalRegistry          `yaml:"registry"`
-	Builder       kamalBuilder           `yaml:"builder"`
-	Proxy         kamalProxy             `yaml:"proxy"`
-	Env           *kamalEnv              `yaml:"env,omitempty"`
-	Volumes       []string               `yaml:"volumes,omitempty"`
-	DeployTimeout int                    `yaml:"deploy_timeout"`
-	DrainTimeout  int                    `yaml:"drain_timeout"`
+	Service       string                    `yaml:"service"`
+	Image         string                    `yaml:"image"`
+	Servers       map[string]kamalServer    `yaml:"servers"`
+	SSH           kamalSSH                  `yaml:"ssh"`
+	Registry      kamalRegistry             `yaml:"registry"`
+	Builder       kamalBuilder              `yaml:"builder"`
+	Proxy         kamalProxy                `yaml:"proxy"`
+	Env           *kamalEnv                 `yaml:"env,omitempty"`
+	Volumes       []string                  `yaml:"volumes,omitempty"`
+	Accessories   map[string]kamalAccessory `yaml:"accessories,omitempty"`
+	Logging       kamalLogging              `yaml:"logging"`
+	DeployTimeout int                       `yaml:"deploy_timeout"`
+	DrainTimeout  int                       `yaml:"drain_timeout"`
 }
 
 type kamalServer struct {
@@ -68,6 +70,15 @@ type kamalProxyHealthcheck struct {
 	Timeout  int    `yaml:"timeout"`
 }
 
+type kamalLogging struct {
+	Driver  string              `yaml:"driver"`
+	Options kamalLoggingOptions `yaml:"options"`
+}
+
+type kamalLoggingOptions struct {
+	Tag string `yaml:"tag"`
+}
+
 type kamalEnv struct {
 	Secret []string `yaml:"secret,omitempty"`
 }
@@ -85,7 +96,7 @@ func GeneratedDeployYAML(app AppConfig) ([]byte, error) {
 				Hosts: []string{"127.0.0.1"},
 				Options: kamalServerOptions{
 					Init:        true,
-					StopTimeout: 1,
+					StopTimeout: app.StopTimeoutSeconds(),
 				},
 			},
 		},
@@ -105,7 +116,7 @@ func GeneratedDeployYAML(app AppConfig) ([]byte, error) {
 			Context: ".",
 		},
 		Proxy: kamalProxy{
-			Hosts:          app.Hosts,
+			Hosts:          app.ProxyHosts(),
 			AppPort:        app.AppPort,
 			SSL:            false,
 			ForwardHeaders: true,
@@ -118,14 +129,25 @@ func GeneratedDeployYAML(app AppConfig) ([]byte, error) {
 				BindIPs: []string{"127.0.0.1"},
 			},
 		},
+		Logging: kamalLogging{
+			Driver:  "journald",
+			Options: kamalLoggingOptions{Tag: app.Name},
+		},
 		DeployTimeout: 10,
-		DrainTimeout:  1,
+		DrainTimeout:  app.DrainTimeoutSeconds(),
 	}
 	if len(app.SecretEnvKeys) > 0 {
 		config.Env = &kamalEnv{Secret: app.SecretEnvKeys}
 	}
 	if app.Storage != nil {
 		config.Volumes = []string{app.Storage.Path + ":" + app.Storage.Mount}
+	}
+	if app.HasFunnel() {
+		accessory, err := kamalFunnelAccessory(app)
+		if err != nil {
+			return nil, err
+		}
+		config.Accessories = map[string]kamalAccessory{funnelAccessory: accessory}
 	}
 
 	var buf bytes.Buffer

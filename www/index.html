@@ -125,8 +125,8 @@ singleserver add https://github.com/you/your-app-3</pre>
                 <p>The Go binary that runs the daemon doubles as the CLI you use over SSH. Add, edit, and remove apps. Trigger a deploy, or roll back to an earlier commit. Attach domains, set env vars, enable persistent storage, take and restore backups. Check status, tail logs, and run diagnostics when something looks off.</p>
             </div>
             <div class="how-item">
-                <strong>Cloudflare fronts your apps.</strong>
-                <p>You were likely going to put Cloudflare in front of your apps anyway. Single Server creates the proxied DNS records and a Cloudflare Tunnel for you, so visitors hit Cloudflare's edge for TLS, CDN, and DDoS protection, and traffic reaches your apps through the tunnel. Your server's IP stays hidden, and your apps never have to deal with certificates.</p>
+                <strong>Cloudflare fronts your public apps, Tailscale protects the rest.</strong>
+                <p>You were likely going to put Cloudflare in front of your apps anyway. Single Server creates the proxied DNS records and a Cloudflare Tunnel for you, so visitors hit Cloudflare's edge for TLS, CDN, and DDoS protection, and traffic reaches your apps through the tunnel. Your server's IP stays hidden, and your apps never have to deal with certificates. Apps that shouldn't be public at all go on Tailscale instead, private to your tailnet.</p>
             </div>
             <div class="how-item">
                 <strong>GitHub triggers deploys.</strong>
@@ -134,7 +134,7 @@ singleserver add https://github.com/you/your-app-3</pre>
             </div>
             <div class="how-item">
                 <strong>Tailscale keeps access private.</strong>
-                <p>Tailscale SSH gets you into the box without exposing SSH to the public internet or scattering keys across laptops. Tailscale Funnel gives GitHub a public URL to reach the daemon's webhook endpoint, so the server itself never needs a domain name or a DNS record.</p>
+                <p>Tailscale SSH gets you into the box without exposing SSH to the public internet or scattering keys across laptops. Tailscale Funnel gives GitHub a public URL to reach the daemon's webhook endpoint, so the server itself never needs a domain name or a DNS record. And apps added with <code>--tunnel private</code> are served with HTTPS to your tailnet only.</p>
             </div>
             <div class="how-item">
                 <strong>Docker keeps apps apart.</strong>

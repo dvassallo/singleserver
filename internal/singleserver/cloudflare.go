@@ -549,7 +549,14 @@ func dnsLabelFromAppName(appName string) string {
 	return label
 }
 
-var syncCloudflareAppDomainFunc = syncCloudflareAppDomain
+func syncAppDomain(app AppConfig, hostname string, add bool, w io.Writer) error {
+	if app.IsPrivate() {
+		return syncTailscaleAppDomain(app, hostname, add, w)
+	}
+	return syncCloudflareAppDomain(hostname, add, w)
+}
+
+var syncAppDomainFunc = syncAppDomain
 
 type cloudflareDomainSyncOps struct {
 	upsertRecord func(hostname string) error

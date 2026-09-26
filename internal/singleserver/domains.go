@@ -122,32 +122,38 @@ func updateDomain(appName string, host string, add bool, w io.Writer) (*AppConfi
 		return nil, fmt.Errorf("%s is not configured", appName)
 	}
 
-	if !add && !containsFold(config.Apps[appIndex].Hosts, host) {
-		return nil, fmt.Errorf("%s is not configured for %s", host, config.Apps[appIndex].Name)
+	app := &config.Apps[appIndex]
+	if stored, ok := storedHostFor(*app, host); ok {
+		host = stored
+	} else if !add {
+		return nil, fmt.Errorf("%s is not configured for %s", host, app.Name)
 	}
 
-	app := &config.Apps[appIndex]
+	if add && !app.IsPrivate() && isTailnetHost(host) {
+		return nil, fmt.Errorf("%s is a tailnet domain but %s is a public app; private apps set their domain with `singleserver add --tunnel private`", host, app.Name)
+	}
 	if add {
 		if !containsFold(app.Hosts, host) {
 			app.Hosts = append(app.Hosts, host)
 		}
 	} else {
-		app.Hosts = removeFold(app.Hosts, host)
-		if healthcheckBelongsToHost(app.Healthcheck, host, app.HealthcheckPath) {
+		if healthcheckBelongsToHost(app.Healthcheck, host, app.HealthcheckPath) ||
+			healthcheckBelongsToHost(app.Healthcheck, app.QualifiedHost(host), app.HealthcheckPath) {
 			app.Healthcheck = ""
 		}
+		app.Hosts = removeFold(app.Hosts, host)
 	}
 	if err := config.Normalize(); err != nil {
 		return nil, err
 	}
 	app = &config.Apps[appIndex]
 
-	if err := syncCloudflareAppDomainFunc(host, add, w); err != nil {
+	if err := syncAppDomainFunc(*app, host, add, w); err != nil {
 		return nil, err
 	}
 	if err := writeConfig(configPath, config); err != nil {
-		if rollbackErr := syncCloudflareAppDomainFunc(host, !add, io.Discard); rollbackErr != nil {
-			return nil, fmt.Errorf("%w; rollback cloudflare domain failed: %v", err, rollbackErr)
+		if rollbackErr := syncAppDomainFunc(*app, host, !add, io.Discard); rollbackErr != nil {
+			return nil, fmt.Errorf("%w; rollback domain failed: %v", err, rollbackErr)
 		}
 		return nil, err
 	}
@@ -157,6 +163,16 @@ func updateDomain(appName string, host string, add bool, w io.Writer) (*AppConfi
 		writeCheck(w, app.Name, "domain", "ok", host, "removed")
 	}
 	return app, nil
+}
+
+// storedHostFor resolves a typed host to the spelling the config stores.
+func storedHostFor(app AppConfig, host string) (string, bool) {
+	for _, stored := range app.Hosts {
+		if strings.EqualFold(stored, host) || strings.EqualFold(app.QualifiedHost(stored), host) {
+			return stored, true
+		}
+	}
+	return "", false
 }
 
 func healthcheckBelongsToHost(healthcheck, host, path string) bool {
@@ -190,7 +206,7 @@ func listDomains(args []string, w io.Writer) error {
 			fmt.Fprintf(w, "%s\t-\n", app.Name)
 			continue
 		}
-		for _, host := range app.Hosts {
+		for _, host := range app.QualifiedHosts() {
 			fmt.Fprintf(w, "%s\t%s\n", app.Name, host)
 		}
 	}
@@ -232,15 +248,18 @@ func verifyDomains(args []string, w io.Writer) error {
 				cloudflareClient = client
 			}
 		}
-	} else if appsHaveHosts(apps) {
+	} else if publicAppsHaveHosts(apps) {
 		writeCheck(w, "cloudflare", "setup", "skipped", "-", "connect Cloudflare with `singleserver connect cloudflare` to verify DNS and tunnel routes")
 	}
 
 	verifyResolverDNS := cloudflareClient == nil
 	for _, app := range apps {
-		for _, host := range app.Hosts {
-			if verifyResolverDNS && !doctorHostResolves(w, app.Name, "dns", host) {
+		for _, host := range app.QualifiedHosts() {
+			if (verifyResolverDNS || app.IsPrivate()) && !doctorHostResolves(w, app.Name, "dns", host) {
 				failed = true
+			}
+			if app.IsPrivate() {
+				continue
 			}
 			if cloudflareClient != nil {
 				target, err := verifyCloudflareDNSRecordFunc(host, state, cloudflareClient)

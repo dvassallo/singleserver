@@ -52,6 +52,10 @@ var appSettingsFlagHelp = []flagSpec{
 	{"--static-dir <dir>", "Static output directory for the generated Dockerfile"},
 	{"--app-port <port>", "Container app port for the generated Kamal config"},
 	{"--deploy-timeout <dur>", "Deploy timeout as a Go duration like 20m"},
+	{"--stop-timeout <seconds>", "Seconds Kamal waits between SIGTERM and SIGKILL of the old container, e.g. 10"},
+	{"--drain-timeout <seconds>", "Seconds kamal-proxy keeps routing in-flight requests to the old container, e.g. 10"},
+	{"--funnel-path <path>", "Publish this path of a private app on the internet through Tailscale Funnel; repeat for several"},
+	{"--funnel-host <name>", "Tailnet name of the funnel node (default <name>-public)"},
 }
 
 // cliCommands is the registry. Adding a command here wires up both its dispatch
@@ -70,8 +74,8 @@ var cliCommands = []*command{
 		Name:    "connect",
 		Group:   "Setup",
 		Summary: "Connect or repair a provider",
-		Usage:   "<tailscale|cloudflare|github> [options]",
-		Long:    "Connect or repair the Tailscale, Cloudflare, or GitHub integration. It is safe to rerun and repairs whatever is missing.",
+		Usage:   "<tailscale|cloudflare|github|posthog> [options]",
+		Long:    "Connect or repair the Tailscale, Cloudflare, GitHub, or PostHog integration. It is safe to rerun and repairs whatever is missing.",
 		Children: []*command{
 			{
 				Name:    "tailscale",
@@ -80,6 +84,8 @@ var cliCommands = []*command{
 				Flags: []flagSpec{
 					{"--auth-key <key>", "Auth key for an unattended join"},
 					{"--hostname <name>", "Hostname to register on the tailnet"},
+					{"--oauth-client-id <id>", "Tailnet OAuth client for private app services (with --oauth-client-secret)"},
+					{"--oauth-client-secret <secret>", "Secret of the tailnet OAuth client"},
 				},
 			},
 			{
@@ -96,6 +102,17 @@ var cliCommands = []*command{
 				Summary: "Print the GitHub App setup URL",
 				Long:    "Ensures the base files exist and prints the URL to create and install the GitHub App, then restarts the service.",
 			},
+			{
+				Name:    "posthog",
+				Summary: "Ship app and deploy logs to PostHog Logs",
+				Usage:   "[options]",
+				Long:    "Run a Vector service that forwards every app's container logs and the deploy daemon's logs from journald to PostHog Logs, or any OTLP/HTTP logs endpoint. Each app is its own service, and JSON log lines are unpacked into body, severity, and attributes. Rerunning reuses the stored token.",
+				Flags: []flagSpec{
+					{"--token <token>", "PostHog phc_ project token (required the first time)"},
+					{"--endpoint <url>", "OTLP/HTTP logs endpoint (default " + defaultPostHogLogsEndpoint + ")"},
+					{"--disconnect", "Stop shipping logs and remove the service and config"},
+				},
+			},
 		},
 		Run: func(args []string, w io.Writer, logger *log.Logger) error {
 			if len(args) >= 1 {
@@ -106,9 +123,11 @@ var cliCommands = []*command{
 					return cliCloudflareConnect(args[1:], w)
 				case "github":
 					return cliGitHubConnect(args[1:], w)
+				case "posthog":
+					return cliPostHogConnect(args[1:], w)
 				}
 			}
-			return errors.New("usage: singleserver connect <tailscale|cloudflare|github> [options]")
+			return errors.New("usage: singleserver connect <tailscale|cloudflare|github|posthog> [options]")
 		},
 	},
 	{
@@ -143,6 +162,7 @@ var cliCommands = []*command{
 		Flags: append([]flagSpec{
 			{"--name <name>", "App name override (default derived from the repo)"},
 			{"--domain <host>", "Public domain to route to the app; repeat for several"},
+			{"--tunnel <public|private>", "Serve publicly through Cloudflare (default) or only to your tailnet"},
 			{"--env <KEY=value>", "Environment variable stored on the server and injected at deploy; repeat for several"},
 		}, append(appSettingsFlagHelp, flagSpec{"--no-deploy", "Configure without deploying immediately"})...),
 		Run: func(args []string, w io.Writer, logger *log.Logger) error {
@@ -158,6 +178,7 @@ var cliCommands = []*command{
 		Args:    []argSpec{{"<app>", "App name, owner/repo, or GitHub URL"}},
 		Flags: append([]flagSpec{
 			{"--no-healthcheck", "Clear the external healthcheck URL"},
+			{"--no-funnel", "Stop publishing paths through Tailscale Funnel"},
 			{"--dockerfile", "Use the repository Dockerfile and clear generated runtime settings"},
 		}, append(appSettingsFlagHelp, flagSpec{"--no-deploy", "Update config without deploying"})...),
 		Run: func(args []string, w io.Writer, logger *log.Logger) error {
@@ -260,7 +281,7 @@ var cliCommands = []*command{
 				Name:    "add",
 				Summary: "Route a domain to an app",
 				Usage:   "<app> <domain> [--no-deploy]",
-				Args:    []argSpec{{"<app>", "App to route to"}, {"<domain>", "Hostname to route, like app.example.com"}},
+				Args:    []argSpec{{"<app>", "App to route to"}, {"<domain>", "Hostname to route, like app.example.com (a .ts.net name for private apps)"}},
 				Flags:   []flagSpec{{"--no-deploy", "Update config and DNS without deploying"}},
 			},
 			{

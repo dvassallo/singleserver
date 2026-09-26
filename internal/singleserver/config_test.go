@@ -345,3 +345,259 @@ func TestNormalizeRejectsInvalidDeployTimeout(t *testing.T) {
 		})
 	}
 }
+
+func TestStopTimeoutSecondsDefaultsAndOverrides(t *testing.T) {
+	tests := []struct {
+		name string
+		app  AppConfig
+		want int
+	}{
+		{name: "default", app: AppConfig{Repo: "acme/scoreboard"}, want: defaultStopTimeout},
+		{name: "custom", app: AppConfig{Repo: "acme/scoreboard", StopTimeout: "10"}, want: 10},
+		{name: "invalid falls back", app: AppConfig{Repo: "acme/scoreboard", StopTimeout: "soon"}, want: defaultStopTimeout},
+		{name: "zero falls back", app: AppConfig{Repo: "acme/scoreboard", StopTimeout: "0"}, want: defaultStopTimeout},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := test.app.StopTimeoutSeconds(); got != test.want {
+				t.Fatalf("StopTimeoutSeconds() = %d, want %d", got, test.want)
+			}
+		})
+	}
+}
+
+func TestDrainTimeoutSecondsDefaultsAndOverrides(t *testing.T) {
+	tests := []struct {
+		name string
+		app  AppConfig
+		want int
+	}{
+		{name: "default", app: AppConfig{Repo: "acme/scoreboard"}, want: defaultDrainTimeout},
+		{name: "custom", app: AppConfig{Repo: "acme/scoreboard", DrainTimeout: "10"}, want: 10},
+		{name: "invalid falls back", app: AppConfig{Repo: "acme/scoreboard", DrainTimeout: "soon"}, want: defaultDrainTimeout},
+		{name: "zero falls back", app: AppConfig{Repo: "acme/scoreboard", DrainTimeout: "0"}, want: defaultDrainTimeout},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := test.app.DrainTimeoutSeconds(); got != test.want {
+				t.Fatalf("DrainTimeoutSeconds() = %d, want %d", got, test.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeRejectsInvalidStopTimeout(t *testing.T) {
+	tests := []struct {
+		name    string
+		timeout string
+		want    string
+	}{
+		{name: "invalid", timeout: "soon", want: "invalid stop_timeout"},
+		{name: "duration suffix", timeout: "10s", want: "invalid stop_timeout"},
+		{name: "zero", timeout: "0", want: "must be positive"},
+		{name: "negative", timeout: "-1", want: "must be positive"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			app := AppConfig{Repo: "acme/scoreboard", StopTimeout: test.timeout}
+			err := app.Normalize()
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("expected %q error, got %v", test.want, err)
+			}
+		})
+	}
+}
+
+func TestNormalizeRejectsInvalidDrainTimeout(t *testing.T) {
+	tests := []struct {
+		name    string
+		timeout string
+		want    string
+	}{
+		{name: "invalid", timeout: "soon", want: "invalid drain_timeout"},
+		{name: "duration suffix", timeout: "10s", want: "invalid drain_timeout"},
+		{name: "zero", timeout: "0", want: "must be positive"},
+		{name: "negative", timeout: "-1", want: "must be positive"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			app := AppConfig{Repo: "acme/scoreboard", DrainTimeout: test.timeout}
+			err := app.Normalize()
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("expected %q error, got %v", test.want, err)
+			}
+		})
+	}
+}
+
+func TestLoadConfigParsesStopAndDrainTimeout(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "apps.yml")
+	body := []byte(`apps:
+  - repo: acme/scoreboard
+    stop_timeout: 10
+    drain_timeout: 5
+`)
+	if err := os.WriteFile(path, body, 0600); err != nil {
+		t.Fatal(err)
+	}
+	config, err := LoadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := config.Apps[0]
+	if app.StopTimeout != "10" {
+		t.Fatalf("unexpected stop_timeout: %q", app.StopTimeout)
+	}
+	if app.DrainTimeout != "5" {
+		t.Fatalf("unexpected drain_timeout: %q", app.DrainTimeout)
+	}
+	if app.StopTimeoutSeconds() != 10 {
+		t.Fatalf("unexpected StopTimeoutSeconds: %d", app.StopTimeoutSeconds())
+	}
+	if app.DrainTimeoutSeconds() != 5 {
+		t.Fatalf("unexpected DrainTimeoutSeconds: %d", app.DrainTimeoutSeconds())
+	}
+}
+
+func TestLoadConfigRejectsPrivateAppsSharingAServiceName(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "apps.yml")
+	body := []byte(`apps:
+  - repo: alice/homepage
+    tunnel: private
+    hosts:
+      - notes.alice.ts.net
+  - repo: bob/notes
+    tunnel: private
+    hosts:
+      - notes.bob.ts.net
+`)
+	if err := os.WriteFile(path, body, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadConfig(path)
+	if err == nil {
+		t.Fatal("expected duplicate tailscale service error")
+	}
+	if !strings.Contains(err.Error(), "duplicate tailscale service in config") || !strings.Contains(err.Error(), "svc:notes") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadConfigAllowsPrivateAppsWithDistinctServiceNames(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "apps.yml")
+	body := []byte(`apps:
+  - repo: alice/homepage
+    tunnel: private
+    hosts:
+      - notes.alice.ts.net
+  - repo: bob/game
+    tunnel: private
+    hosts:
+      - scores.bob.ts.net
+`)
+	if err := os.WriteFile(path, body, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := LoadConfig(path); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNormalizeRejectsUnknownTunnel(t *testing.T) {
+	app := AppConfig{Repo: "acme/scoreboard", Tunnel: "vpn"}
+	err := app.Normalize()
+	if err == nil {
+		t.Fatal("expected unknown tunnel to be rejected")
+	}
+	if !strings.Contains(err.Error(), "invalid tunnel") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestNormalizeInfersTunnelFromHosts(t *testing.T) {
+	cases := []struct {
+		name string
+		app  AppConfig
+		want Tunnel
+	}{
+		{"tailnet host", AppConfig{Repo: "acme/scoreboard", Hosts: []string{"scores.corp.ts.net"}}, TunnelPrivate},
+		{"public host", AppConfig{Repo: "acme/scoreboard", Hosts: []string{"scores.example.com"}}, TunnelPublic},
+		{"no host", AppConfig{Repo: "acme/scoreboard"}, TunnelPublic},
+		{"explicit wins over host", AppConfig{Repo: "acme/scoreboard", Tunnel: " PUBLIC ", Hosts: []string{"scores.corp.ts.net"}}, TunnelPublic},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			app := tc.app
+			if err := app.Normalize(); err != nil {
+				t.Fatal(err)
+			}
+			if app.Tunnel != tc.want {
+				t.Fatalf("got %q, want %q", app.Tunnel, tc.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeRejectsPublicDomainOnPrivateApp(t *testing.T) {
+	app := AppConfig{Repo: "acme/scoreboard", Tunnel: TunnelPrivate, Hosts: []string{"scores.example.com"}}
+	err := app.Normalize()
+	if err == nil {
+		t.Fatal("expected a public domain on a private app to be rejected")
+	}
+	if !strings.Contains(err.Error(), ".ts.net") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, host := range []string{"scores", "scores.corp.ts.net"} {
+		app := AppConfig{Repo: "acme/scoreboard", Tunnel: TunnelPrivate, Hosts: []string{host}}
+		if err := app.Normalize(); err != nil {
+			t.Fatalf("%s should be a valid private host: %v", host, err)
+		}
+	}
+}
+
+func TestNormalizeCapsPrivateAppsAfterDeduplicatingHosts(t *testing.T) {
+	app := AppConfig{Repo: "acme/scoreboard", Tunnel: TunnelPrivate, Hosts: []string{"scores.corp.ts.net", "scores.corp.ts.net"}}
+	if err := app.Normalize(); err != nil {
+		t.Fatalf("duplicate hosts collapse to one domain, so this is not over the cap: %v", err)
+	}
+	if len(app.Hosts) != 1 {
+		t.Fatalf("unexpected hosts: %#v", app.Hosts)
+	}
+
+	app = AppConfig{Repo: "acme/scoreboard", Tunnel: TunnelPrivate, Hosts: []string{"scores.corp.ts.net", "notes.corp.ts.net"}}
+	if err := app.Normalize(); err == nil {
+		t.Fatal("expected two distinct domains to be rejected")
+	}
+}
+
+func TestQualifiedHostsExpandBareLabelsForPrivateAppsOnly(t *testing.T) {
+	t.Setenv("SINGLESERVER_STATE_DIR", t.TempDir())
+	if err := writeTailscaleState(&TailscaleState{Hostname: "box.corp.ts.net"}); err != nil {
+		t.Fatal(err)
+	}
+
+	private := AppConfig{Name: "scoreboard", Tunnel: TunnelPrivate, Hosts: []string{"scores"}}
+	if got := private.QualifiedHosts(); len(got) != 1 || got[0] != "scores.corp.ts.net" {
+		t.Fatalf("expected the bare label expanded, got %#v", got)
+	}
+
+	qualified := AppConfig{Name: "scoreboard", Tunnel: TunnelPrivate, Hosts: []string{"scores.corp.ts.net"}}
+	if got := qualified.QualifiedHosts(); got[0] != "scores.corp.ts.net" {
+		t.Fatalf("expected an already-qualified host left alone, got %#v", got)
+	}
+
+	public := AppConfig{Name: "scoreboard", Tunnel: TunnelPublic, Hosts: []string{"scores"}}
+	if got := public.QualifiedHosts(); got[0] != "scores" {
+		t.Fatalf("expected a public host left alone, got %#v", got)
+	}
+}

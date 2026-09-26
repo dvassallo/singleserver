@@ -89,19 +89,28 @@ func cliRemove(args []string, w io.Writer) error {
 
 	removedHosts := []string{}
 	for _, host := range app.Hosts {
-		if err := syncCloudflareAppDomainFunc(host, false, w); err != nil {
+		if err := syncAppDomainFunc(app, host, false, w); err != nil {
 			for _, removedHost := range removedHosts {
-				_ = syncCloudflareAppDomainFunc(removedHost, true, io.Discard)
+				_ = syncAppDomainFunc(app, removedHost, true, io.Discard)
 			}
 			return err
 		}
 		removedHosts = append(removedHosts, host)
 	}
 
+	if app.HasFunnel() || funnelContainerStateFunc(app).exists {
+		if err := teardownFunnelFunc(app, w); err != nil {
+			for _, removedHost := range removedHosts {
+				_ = syncAppDomainFunc(app, removedHost, true, io.Discard)
+			}
+			return fmt.Errorf("funnel teardown failed, config left unchanged: %w", err)
+		}
+	}
+
 	config.Apps = append(config.Apps[:index], config.Apps[index+1:]...)
 	if err := writeConfig(configPath, config); err != nil {
 		for _, removedHost := range removedHosts {
-			_ = syncCloudflareAppDomainFunc(removedHost, true, io.Discard)
+			_ = syncAppDomainFunc(app, removedHost, true, io.Discard)
 		}
 		return err
 	}

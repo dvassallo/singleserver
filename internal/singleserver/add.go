@@ -28,6 +28,7 @@ type addOptions struct {
 	name           string
 	hosts          []string
 	env            map[string]string
+	tunnel         string
 	noDeploy       bool
 	nonInteractive bool
 	hostsSet       bool
@@ -84,6 +85,7 @@ type addAppEntry struct {
 	branch          string
 	repoDir         string
 	hosts           []string
+	tunnel          Tunnel
 	healthcheck     string
 	healthcheckPath string
 	runtime         string
@@ -94,7 +96,10 @@ type addAppEntry struct {
 	appPort         int
 	appPortSet      bool
 	deployTimeout   string
+	stopTimeout     string
+	drainTimeout    string
 	storage         *StorageConfig
+	funnel          *FunnelConfig
 }
 
 func cliAdd(args []string, w io.Writer, logger *log.Logger) error {
@@ -163,6 +168,21 @@ func cliAdd(args []string, w io.Writer, logger *log.Logger) error {
 	if existing, exists := config.AppByName(app.Name); exists {
 		return fmt.Errorf("app name %s is already used by %s; rerun with --name <unique-name>", app.Name, existing.Repo)
 	}
+	if app.IsPrivate() {
+		service := tailscaleServiceName(app)
+		for _, existing := range config.Apps {
+			if !existing.IsPrivate() || tailscaleServiceName(existing) != service {
+				continue
+			}
+			return fmt.Errorf("svc:%s is already served by %s; private apps are named after the first label of their domain, so rerun with a --domain whose first label is unique", service, existing.Repo)
+		}
+		if err := ensureTailscaleServicesReady(w); err != nil {
+			return err
+		}
+		if err := checkFunnelHost(app, config); err != nil {
+			return err
+		}
+	}
 	if _, err := GeneratedDeployYAML(app); err != nil {
 		return err
 	}
@@ -195,20 +215,14 @@ func cliAdd(args []string, w io.Writer, logger *log.Logger) error {
 
 	syncedHosts := []string{}
 	for _, host := range app.Hosts {
-		if err := syncCloudflareAppDomainFunc(host, true, w); err != nil {
-			for _, syncedHost := range syncedHosts {
-				_ = syncCloudflareAppDomainFunc(syncedHost, false, io.Discard)
-			}
-			return err
+		if err := syncAppDomainFunc(app, host, true, w); err != nil {
+			return errors.Join(err, rollbackSyncedHosts(app, syncedHosts))
 		}
 		syncedHosts = append(syncedHosts, host)
 	}
 
 	if err := writeFileAtomic(configPath, updated); err != nil {
-		for _, syncedHost := range syncedHosts {
-			_ = syncCloudflareAppDomainFunc(syncedHost, false, io.Discard)
-		}
-		return err
+		return errors.Join(err, rollbackSyncedHosts(app, syncedHosts))
 	}
 	writeCheck(w, app.Name, "config", "ok", configPath, "added")
 
@@ -264,6 +278,7 @@ func parseAddArgs(args []string, w io.Writer) (addOptions, error) {
 	fs.Var((*stringListFlag)(&opts.hosts), "domain", "app domain")
 	opts.env = map[string]string{}
 	fs.Var(envMapFlag(opts.env), "env", "environment variable KEY=value (repeatable)")
+	fs.StringVar(&opts.tunnel, "tunnel", "", "tunnel type: public (default) or private")
 	fs.BoolVar(&opts.noDeploy, "no-deploy", false, "configure without deploying immediately")
 
 	appPort := bindAppSettingsFlags(fs, &opts.appSettings)
@@ -306,7 +321,7 @@ type flushWriter interface {
 }
 
 func promptAddOptions(opts addOptions, input io.Reader, w io.Writer, ctx addPromptContext) (addOptions, error) {
-	p := addPrompter{reader: bufio.NewReader(input), w: w}
+	p := addPrompter{reader: promptReaderFor(input), w: w}
 	fmt.Fprintf(w, "Interactive setup for %s on %s.\n", opts.repo, ctx.targetBranch)
 	if ctx.hasDockerfile {
 		fmt.Fprintln(w, "Dockerfile found. Single Server will use it as-is.")
@@ -328,14 +343,42 @@ func promptAddOptions(opts addOptions, input io.Reader, w io.Writer, ctx addProm
 		}
 	}
 
+	if opts.tunnel == "" {
+		tunnel, err := p.askChoiceDefault("Tunnel type", []string{string(TunnelPublic), string(TunnelPrivate)}, string(TunnelPublic))
+		if err != nil {
+			return addOptions{}, err
+		}
+		opts.tunnel = tunnel
+	}
+
 	if len(opts.hosts) == 0 {
-		value, err := p.askOptional("App domain (optional)")
+		label := "App domain (optional)"
+		if Tunnel(opts.tunnel).IsPrivate() {
+			label = "Tailscale domain (optional, e.g. scoreboard.tailnet-name.ts.net; defaults to the app name on your tailnet)"
+		}
+		value, err := p.askOptional(label)
 		if err != nil {
 			return addOptions{}, err
 		}
 		if value != "" {
 			opts.hosts = []string{value}
 			opts.hostsSet = true
+		}
+	}
+	if Tunnel(opts.tunnel).IsPrivate() && !opts.funnelPathsSet {
+		value, err := p.askOptional("Paths to publish on the internet through Tailscale Funnel (optional, comma-separated, e.g. /api/webhooks)")
+		if err != nil {
+			return addOptions{}, err
+		}
+		if value != "" {
+			opts.funnelPaths = splitFunnelPaths(value)
+			opts.funnelPathsSet = true
+			host, err := p.askDefault("Funnel node name", defaultFunnelLabel(opts))
+			if err != nil {
+				return addOptions{}, err
+			}
+			opts.funnelHost = host
+			opts.funnelHostSet = true
 		}
 	}
 	if !opts.healthcheckPathSet {
@@ -574,6 +617,7 @@ func addEquivalentCommand(opts addOptions) string {
 	for _, host := range opts.hosts {
 		appendFlagValue("--domain", host)
 	}
+	appendFlagValue("--tunnel", opts.tunnel)
 	parts = appendAppSettingsFlags(parts, opts.appSettings, false)
 	for _, key := range sortedEnvKeys(opts.env) {
 		parts = append(parts, "--env", shellQuote(key+"="+opts.env[key]))
@@ -620,6 +664,7 @@ func (o addOptions) app() (AppConfig, addAppEntry, error) {
 		Name:            o.name,
 		Branch:          o.branch,
 		Hosts:           o.hosts,
+		Tunnel:          Tunnel(o.tunnel),
 		Healthcheck:     o.healthcheck,
 		HealthcheckPath: o.healthcheckPath,
 		Runtime:         o.runtime,
@@ -628,17 +673,26 @@ func (o addOptions) app() (AppConfig, addAppEntry, error) {
 		StartCommand:    o.startCommand,
 		StaticDir:       o.staticDir,
 		DeployTimeout:   o.deployTimeout,
+		StopTimeout:     o.stopTimeout,
+		DrainTimeout:    o.drainTimeout,
 		AppPortSet:      o.appPortSet,
 	}
 	if o.appPortSet {
 		app.AppPort = o.appPort
 	}
+	if o.funnelPathsSet || o.funnelHostSet {
+		app.Funnel = &FunnelConfig{Host: o.funnelHost, Paths: o.funnelPaths}
+	}
 	if err := app.Normalize(); err != nil {
 		return AppConfig{}, addAppEntry{}, err
+	}
+	if app.IsPrivate() && len(app.Hosts) == 0 {
+		app.Hosts = []string{app.Name}
 	}
 	entry := addAppEntry{
 		repo:            app.Repo,
 		hosts:           app.Hosts,
+		tunnel:          app.Tunnel,
 		healthcheck:     app.Healthcheck,
 		healthcheckPath: "",
 		runtime:         app.Runtime,
@@ -649,6 +703,9 @@ func (o addOptions) app() (AppConfig, addAppEntry, error) {
 		appPort:         app.AppPort,
 		appPortSet:      o.appPortSet,
 		deployTimeout:   app.DeployTimeout,
+		stopTimeout:     app.StopTimeout,
+		drainTimeout:    app.DrainTimeout,
+		funnel:          persistedFunnel(app),
 	}
 	if strings.TrimSpace(o.name) != "" {
 		entry.name = app.Name
@@ -745,6 +802,9 @@ func (e addAppEntry) yamlNode() *yaml.Node {
 		}
 		appendNodePair(node, "hosts", hostNode)
 	}
+	if e.tunnel.IsPrivate() {
+		appendScalarPair(node, "tunnel", string(e.tunnel))
+	}
 	if e.healthcheck != "" {
 		appendScalarPair(node, "healthcheck", e.healthcheck)
 	}
@@ -772,6 +832,12 @@ func (e addAppEntry) yamlNode() *yaml.Node {
 	if e.deployTimeout != "" {
 		appendScalarPair(node, "deploy_timeout", e.deployTimeout)
 	}
+	if e.stopTimeout != "" {
+		appendScalarPair(node, "stop_timeout", e.stopTimeout)
+	}
+	if e.drainTimeout != "" {
+		appendScalarPair(node, "drain_timeout", e.drainTimeout)
+	}
 	if e.storage != nil {
 		storageNode := &yaml.Node{Kind: yaml.MappingNode}
 		if e.storage.Path != "" {
@@ -782,6 +848,18 @@ func (e addAppEntry) yamlNode() *yaml.Node {
 		}
 		appendNodePair(node, "storage", storageNode)
 	}
+	if e.funnel != nil && len(e.funnel.Paths) > 0 {
+		funnelNode := &yaml.Node{Kind: yaml.MappingNode}
+		if e.funnel.Host != "" {
+			appendScalarPair(funnelNode, "host", e.funnel.Host)
+		}
+		pathsNode := &yaml.Node{Kind: yaml.SequenceNode}
+		for _, p := range e.funnel.Paths {
+			pathsNode.Content = append(pathsNode.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: p})
+		}
+		appendNodePair(funnelNode, "paths", pathsNode)
+		appendNodePair(node, "funnel", funnelNode)
+	}
 	return node
 }
 
@@ -790,6 +868,7 @@ func (e addAppEntry) isScalar() bool {
 		e.branch == "" &&
 		e.repoDir == "" &&
 		len(e.hosts) == 0 &&
+		!e.tunnel.IsPrivate() &&
 		e.healthcheck == "" &&
 		e.healthcheckPath == "" &&
 		e.runtime == "" &&
@@ -799,7 +878,63 @@ func (e addAppEntry) isScalar() bool {
 		!shouldWriteStaticDir(e.runtime, e.staticDir) &&
 		!e.appPortSet &&
 		e.deployTimeout == "" &&
-		e.storage == nil
+		e.stopTimeout == "" &&
+		e.drainTimeout == "" &&
+		e.storage == nil &&
+		e.funnel == nil
+}
+
+func persistedFunnel(app AppConfig) *FunnelConfig {
+	if !app.HasFunnel() {
+		return nil
+	}
+	funnel := *app.Funnel
+	if funnel.Host == app.Name+"-public" {
+		funnel.Host = ""
+	}
+	return &funnel
+}
+
+func splitFunnelPaths(value string) []string {
+	paths := []string{}
+	for _, p := range strings.FieldsFunc(value, func(r rune) bool { return r == ',' || r == ' ' }) {
+		if p = strings.TrimSpace(p); p != "" {
+			paths = append(paths, p)
+		}
+	}
+	return paths
+}
+
+func defaultFunnelLabel(opts addOptions) string {
+	name := strings.ToLower(strings.TrimSpace(opts.name))
+	if name == "" {
+		if _, repoName, ok := strings.Cut(opts.repo, "/"); ok {
+			name = strings.ToLower(repoName)
+		}
+	}
+	return name + "-public"
+}
+
+// The funnel node joins the same MagicDNS namespace as this server and every service on it.
+func checkFunnelHost(app AppConfig, config *Config) error {
+	if !app.HasFunnel() {
+		return nil
+	}
+	label := app.FunnelLabel()
+	if state, err := loadTailscaleState(); err == nil && state.Hostname != "" {
+		if serverLabel, _, _ := strings.Cut(strings.ToLower(state.Hostname), "."); serverLabel == label {
+			return fmt.Errorf("funnel host %s is this server's own machine name; pick another with --funnel-host", label)
+		}
+	}
+	for _, existing := range config.Apps {
+		if existing.IsPrivate() && tailscaleServiceName(existing) == label {
+			return fmt.Errorf("funnel host %s is already the name of %s; pick another with --funnel-host", label, existing.Repo)
+		}
+		if existing.HasFunnel() && existing.FunnelLabel() == label {
+			return fmt.Errorf("funnel host %s is already used by %s; pick another with --funnel-host", label, existing.Repo)
+		}
+	}
+	return nil
 }
 
 func shouldWriteStaticDir(runtime, staticDir string) bool {
@@ -851,6 +986,16 @@ func writeFileAtomic(path string, body []byte) error {
 	return os.Rename(tmpPath, path)
 }
 
+func rollbackSyncedHosts(app AppConfig, hosts []string) error {
+	var errs []error
+	for _, host := range hosts {
+		if err := syncAppDomainFunc(app, host, false, io.Discard); err != nil {
+			errs = append(errs, fmt.Errorf("rollback of %s failed: %w", host, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
 func normalizeAddArgs(args []string) []string {
 	return normalizeFlagArgs(args, addFlagTakesValue)
 }
@@ -861,7 +1006,7 @@ func addFlagTakesValue(arg string) bool {
 		name = before
 	}
 	switch name {
-	case "name", "domain", "env":
+	case "name", "domain", "env", "tunnel":
 		return true
 	default:
 		return appSettingsFlagTakesValue(arg)

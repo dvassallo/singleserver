@@ -16,7 +16,11 @@ type appSettings struct {
 	startCommand    string
 	staticDir       string
 	deployTimeout   string
+	stopTimeout     string
+	drainTimeout    string
 	appPort         int
+	funnelHost      string
+	funnelPaths     []string
 
 	branchSet          bool
 	healthcheckSet     bool
@@ -27,7 +31,11 @@ type appSettings struct {
 	startSet           bool
 	staticDirSet       bool
 	deployTimeoutSet   bool
+	stopTimeoutSet     bool
+	drainTimeoutSet    bool
 	appPortSet         bool
+	funnelHostSet      bool
+	funnelPathsSet     bool
 }
 
 func bindAppSettingsFlags(fs *flag.FlagSet, settings *appSettings) *int {
@@ -40,6 +48,10 @@ func bindAppSettingsFlags(fs *flag.FlagSet, settings *appSettings) *int {
 	fs.StringVar(&settings.startCommand, "start", "", "start command for generated Node/Bun Dockerfile")
 	fs.StringVar(&settings.staticDir, "static-dir", "", "static output directory for generated Dockerfile")
 	fs.StringVar(&settings.deployTimeout, "deploy-timeout", "", "deploy timeout, a Go duration like 20m")
+	fs.StringVar(&settings.stopTimeout, "stop-timeout", "", "seconds Kamal waits between SIGTERM and SIGKILL of the old container")
+	fs.StringVar(&settings.drainTimeout, "drain-timeout", "", "seconds kamal-proxy keeps routing in-flight requests to the old container")
+	fs.Var((*stringListFlag)(&settings.funnelPaths), "funnel-path", "path of a private app to publish through Tailscale Funnel (repeatable)")
+	fs.StringVar(&settings.funnelHost, "funnel-host", "", "tailnet name of the funnel node (default <name>-public)")
 	return fs.Int("app-port", 0, "container app port for generated Kamal config")
 }
 
@@ -63,8 +75,16 @@ func noteAppSettingsFlag(settings *appSettings, name string) {
 		settings.staticDirSet = true
 	case "deploy-timeout":
 		settings.deployTimeoutSet = true
+	case "stop-timeout":
+		settings.stopTimeoutSet = true
+	case "drain-timeout":
+		settings.drainTimeoutSet = true
 	case "app-port":
 		settings.appPortSet = true
+	case "funnel-path":
+		settings.funnelPathsSet = true
+	case "funnel-host":
+		settings.funnelHostSet = true
 	}
 }
 
@@ -74,7 +94,7 @@ func appSettingsFlagTakesValue(arg string) bool {
 		name = before
 	}
 	switch name {
-	case "branch", "healthcheck", "healthcheck-path", "runtime", "install", "build", "start", "static-dir", "deploy-timeout", "app-port":
+	case "branch", "healthcheck", "healthcheck-path", "runtime", "install", "build", "start", "static-dir", "deploy-timeout", "stop-timeout", "drain-timeout", "app-port", "funnel-path", "funnel-host":
 		return true
 	default:
 		return false
@@ -112,18 +132,48 @@ func appendAppSettingsFlags(parts []string, settings appSettings, onlySet bool) 
 	if !onlySet || settings.deployTimeoutSet {
 		appendFlagValue("--deploy-timeout", settings.deployTimeout)
 	}
+	if !onlySet || settings.stopTimeoutSet {
+		appendFlagValue("--stop-timeout", settings.stopTimeout)
+	}
+	if !onlySet || settings.drainTimeoutSet {
+		appendFlagValue("--drain-timeout", settings.drainTimeout)
+	}
 	if settings.healthcheckPathSet {
 		appendFlagValue("--healthcheck-path", settings.healthcheckPath)
 	}
 	if !onlySet || settings.healthcheckSet {
 		appendFlagValue("--healthcheck", settings.healthcheck)
 	}
+	if !onlySet || settings.funnelPathsSet {
+		for _, p := range settings.funnelPaths {
+			appendFlagValue("--funnel-path", p)
+		}
+	}
+	if !onlySet || settings.funnelHostSet {
+		appendFlagValue("--funnel-host", settings.funnelHost)
+	}
 	return parts
 }
 
-func applyAppSettings(app AppConfig, settings appSettings, dockerfile bool, noHealthcheck bool) (AppConfig, error) {
+func applyAppSettings(app AppConfig, settings appSettings, dockerfile bool, noHealthcheck bool, noFunnel bool) (AppConfig, error) {
 	if settings.branchSet {
 		app.Branch = settings.branch
+	}
+	if noFunnel {
+		app.Funnel = nil
+	}
+	if settings.funnelPathsSet || settings.funnelHostSet {
+		if app.Funnel == nil {
+			app.Funnel = &FunnelConfig{}
+		}
+		funnel := *app.Funnel
+		app.Funnel = &funnel
+		if settings.funnelPathsSet {
+			app.Funnel.Paths = settings.funnelPaths
+		}
+		if settings.funnelHostSet {
+			app.Funnel.Host = settings.funnelHost
+		}
 	}
 	if dockerfile {
 		clearGeneratedRuntime(&app)
@@ -163,6 +213,12 @@ func applyAppSettings(app AppConfig, settings appSettings, dockerfile bool, noHe
 	}
 	if settings.deployTimeoutSet {
 		app.DeployTimeout = settings.deployTimeout
+	}
+	if settings.stopTimeoutSet {
+		app.StopTimeout = settings.stopTimeout
+	}
+	if settings.drainTimeoutSet {
+		app.DrainTimeout = settings.drainTimeout
 	}
 	if noHealthcheck {
 		app.Healthcheck = ""

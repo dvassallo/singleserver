@@ -7,6 +7,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,6 +23,15 @@ type Config struct {
 	Apps []AppConfig `yaml:"apps"`
 }
 
+type Tunnel string
+
+const (
+	TunnelPublic  Tunnel = "public"
+	TunnelPrivate Tunnel = "private"
+)
+
+func (t Tunnel) IsPrivate() bool { return t == TunnelPrivate }
+
 type AppConfig struct {
 	Repo            string         `yaml:"repo"`
 	Name            string         `yaml:"name"`
@@ -29,6 +39,7 @@ type AppConfig struct {
 	RepoDir         string         `yaml:"path"`
 	Healthcheck     string         `yaml:"healthcheck"`
 	Hosts           []string       `yaml:"hosts"`
+	Tunnel          Tunnel         `yaml:"tunnel,omitempty"`
 	AppPort         int            `yaml:"app_port"`
 	AppPortSet      bool           `yaml:"-"`
 	HealthcheckPath string         `yaml:"healthcheck_path"`
@@ -38,13 +49,22 @@ type AppConfig struct {
 	StartCommand    string         `yaml:"start,omitempty"`
 	StaticDir       string         `yaml:"static_dir,omitempty"`
 	DeployTimeout   string         `yaml:"deploy_timeout,omitempty"`
+	StopTimeout     string         `yaml:"stop_timeout,omitempty"`
+	DrainTimeout    string         `yaml:"drain_timeout,omitempty"`
 	Storage         *StorageConfig `yaml:"storage,omitempty"`
+	Funnel          *FunnelConfig  `yaml:"funnel,omitempty"`
 	SecretEnvKeys   []string       `yaml:"-"`
 }
 
 type StorageConfig struct {
 	Path  string `yaml:"path,omitempty"`
 	Mount string `yaml:"mount,omitempty"`
+}
+
+// Paths of a private app published to the internet through Tailscale Funnel, on their own node name.
+type FunnelConfig struct {
+	Host  string   `yaml:"host,omitempty"`
+	Paths []string `yaml:"paths"`
 }
 
 func (a *AppConfig) UnmarshalYAML(value *yaml.Node) error {
@@ -101,6 +121,26 @@ func (a *AppConfig) Normalize() error {
 			return fmt.Errorf("deploy_timeout for %s must be positive: %q", a.Repo, a.DeployTimeout)
 		}
 	}
+	a.StopTimeout = strings.TrimSpace(a.StopTimeout)
+	if a.StopTimeout != "" {
+		parsed, err := strconv.Atoi(a.StopTimeout)
+		if err != nil {
+			return fmt.Errorf("invalid stop_timeout for %s: %q", a.Repo, a.StopTimeout)
+		}
+		if parsed <= 0 {
+			return fmt.Errorf("stop_timeout for %s must be positive: %q", a.Repo, a.StopTimeout)
+		}
+	}
+	a.DrainTimeout = strings.TrimSpace(a.DrainTimeout)
+	if a.DrainTimeout != "" {
+		parsed, err := strconv.Atoi(a.DrainTimeout)
+		if err != nil {
+			return fmt.Errorf("invalid drain_timeout for %s: %q", a.Repo, a.DrainTimeout)
+		}
+		if parsed <= 0 {
+			return fmt.Errorf("drain_timeout for %s must be positive: %q", a.Repo, a.DrainTimeout)
+		}
+	}
 	if a.AppPort == 0 {
 		a.AppPort = 80
 	}
@@ -126,6 +166,30 @@ func (a *AppConfig) Normalize() error {
 		hosts = append(hosts, host)
 	}
 	a.Hosts = hosts
+
+	a.Tunnel = Tunnel(strings.ToLower(strings.TrimSpace(string(a.Tunnel))))
+	if a.Tunnel == "" {
+		a.Tunnel = TunnelPublic
+		for _, host := range a.Hosts {
+			if isTailnetHost(host) {
+				a.Tunnel = TunnelPrivate
+				break
+			}
+		}
+	}
+	if a.Tunnel != TunnelPublic && a.Tunnel != TunnelPrivate {
+		return fmt.Errorf("invalid tunnel for %s: %q (expected %s or %s)", a.Repo, a.Tunnel, TunnelPublic, TunnelPrivate)
+	}
+	if a.IsPrivate() {
+		if len(a.Hosts) > 1 {
+			return fmt.Errorf("private tailscale tunnel for %s supports at most one domain: %v", a.Repo, a.Hosts)
+		}
+		for _, host := range a.Hosts {
+			if strings.Contains(host, ".") && !isTailnetHost(host) {
+				return fmt.Errorf("private tailscale tunnel for %s requires a .ts.net domain or a bare name, got %q", a.Repo, host)
+			}
+		}
+	}
 
 	a.HealthcheckPath = strings.TrimSpace(a.HealthcheckPath)
 	if a.HealthcheckPath == "" {
@@ -153,6 +217,56 @@ func (a *AppConfig) Normalize() error {
 			return fmt.Errorf("storage mount for %s must be absolute: %q", a.Repo, a.Storage.Mount)
 		}
 	}
+	return a.normalizeFunnel()
+}
+
+func (a *AppConfig) normalizeFunnel() error {
+	if a.Funnel == nil {
+		return nil
+	}
+	if !a.IsPrivate() {
+		return fmt.Errorf("funnel for %s requires tunnel: private; public apps are already on the internet through Cloudflare", a.Repo)
+	}
+	a.Funnel.Host = strings.ToLower(strings.TrimSpace(a.Funnel.Host))
+	if a.Funnel.Host == "" {
+		a.Funnel.Host = a.Name + "-public"
+	}
+	if strings.Contains(a.Funnel.Host, "://") || strings.Contains(a.Funnel.Host, "/") {
+		return fmt.Errorf("invalid funnel host for %s: %q", a.Repo, a.Funnel.Host)
+	}
+	if strings.Contains(a.Funnel.Host, ".") && !isTailnetHost(a.Funnel.Host) {
+		return fmt.Errorf("funnel host for %s must be a .ts.net name or a bare label, got %q", a.Repo, a.Funnel.Host)
+	}
+	if !namePattern.MatchString(a.FunnelLabel()) {
+		return fmt.Errorf("invalid funnel host for %s: %q", a.Repo, a.Funnel.Host)
+	}
+	if a.FunnelLabel() == tailscaleServiceName(*a) {
+		return fmt.Errorf("funnel host for %s must differ from the app's own name %s; the funnel is a separate node on the tailnet", a.Repo, a.FunnelLabel())
+	}
+
+	paths := make([]string, 0, len(a.Funnel.Paths))
+	seen := map[string]bool{}
+	for _, p := range a.Funnel.Paths {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		if p != "/" {
+			p = strings.TrimRight(p, "/")
+		}
+		if !strings.HasPrefix(p, "/") || strings.ContainsAny(p, "?# \t") || path.Clean(p) != p {
+			return fmt.Errorf("invalid funnel path for %s: %q (a clean absolute path with no query or spaces)", a.Repo, p)
+		}
+		if seen[p] {
+			continue
+		}
+		seen[p] = true
+		paths = append(paths, p)
+	}
+	if len(paths) == 0 {
+		return fmt.Errorf("funnel for %s needs at least one path", a.Repo)
+	}
+	a.Funnel.Paths = paths
 	return nil
 }
 
@@ -165,12 +279,86 @@ func (a AppConfig) DeployTimeoutDuration() time.Duration {
 	return defaultDeployTimeout
 }
 
+const defaultStopTimeout = 1
+
+func (a AppConfig) StopTimeoutSeconds() int {
+	if parsed, err := strconv.Atoi(a.StopTimeout); err == nil && parsed > 0 {
+		return parsed
+	}
+	return defaultStopTimeout
+}
+
+const defaultDrainTimeout = 1
+
+func (a AppConfig) DrainTimeoutSeconds() int {
+	if parsed, err := strconv.Atoi(a.DrainTimeout); err == nil && parsed > 0 {
+		return parsed
+	}
+	return defaultDrainTimeout
+}
+
 func reposRoot() string {
 	return envDefault("SINGLESERVER_REPOS_ROOT", "/srv/repos")
 }
 
 func storageRoot() string {
 	return envDefault("SINGLESERVER_STORAGE_ROOT", "/srv/storage")
+}
+
+func (a AppConfig) IsPrivate() bool { return a.Tunnel.IsPrivate() }
+
+// QualifiedHost expands a private app's bare label into its MagicDNS name.
+func (a AppConfig) QualifiedHost(host string) string {
+	if !a.IsPrivate() || strings.Contains(host, ".") {
+		return host
+	}
+	domain := tailnetDomain()
+	if domain == "" {
+		return host
+	}
+	return host + "." + domain
+}
+
+func (a AppConfig) QualifiedHosts() []string {
+	hosts := make([]string, len(a.Hosts))
+	for i, host := range a.Hosts {
+		hosts[i] = a.QualifiedHost(host)
+	}
+	return hosts
+}
+
+func (a AppConfig) HasFunnel() bool { return a.Funnel != nil && len(a.Funnel.Paths) > 0 }
+
+// FunnelLabel is the funnel node's machine name, the first label of its host.
+func (a AppConfig) FunnelLabel() string {
+	if a.Funnel == nil {
+		return ""
+	}
+	label, _, _ := strings.Cut(a.Funnel.Host, ".")
+	return label
+}
+
+func (a AppConfig) FunnelHost() string {
+	if a.Funnel == nil {
+		return ""
+	}
+	return a.QualifiedHost(a.Funnel.Host)
+}
+
+func (a AppConfig) FunnelURL() string {
+	if !a.HasFunnel() {
+		return ""
+	}
+	return "https://" + a.FunnelHost() + a.Funnel.Paths[0]
+}
+
+// ProxyHosts is every hostname Kamal's proxy must route to this app.
+func (a AppConfig) ProxyHosts() []string {
+	hosts := a.QualifiedHosts()
+	if a.HasFunnel() {
+		hosts = append(hosts, a.FunnelHost())
+	}
+	return hosts
 }
 
 func defaultHealthcheckPath(app AppConfig) string {
@@ -317,6 +505,7 @@ func (c *Config) Normalize() error {
 	seenRepos := map[string]bool{}
 	seenNames := map[string]string{}
 	seenHosts := map[string]string{}
+	seenServices := map[string]string{}
 	for i := range c.Apps {
 		if err := c.Apps[i].Normalize(); err != nil {
 			return err
@@ -340,6 +529,26 @@ func (c *Config) Normalize() error {
 			}
 			seenHosts[hostKey] = c.Apps[i].Repo
 		}
+
+		// Distinct hosts can still collapse to one service name, its first label.
+		if c.Apps[i].IsPrivate() {
+			serviceKey := tailscaleServiceName(c.Apps[i])
+			if existingRepo := seenServices[serviceKey]; existingRepo != "" {
+				return fmt.Errorf("duplicate tailscale service in config: %s and %s both resolve to svc:%s; give them distinct first domain labels", existingRepo, c.Apps[i].Repo, serviceKey)
+			}
+			seenServices[serviceKey] = c.Apps[i].Repo
+		}
+	}
+	// Funnel nodes share the MagicDNS namespace with services, so check them after every service is known.
+	for i := range c.Apps {
+		if !c.Apps[i].HasFunnel() {
+			continue
+		}
+		label := c.Apps[i].FunnelLabel()
+		if existingRepo := seenServices[label]; existingRepo != "" {
+			return fmt.Errorf("duplicate tailscale name in config: the funnel host of %s collides with %s on %s; pick another funnel host", c.Apps[i].Repo, existingRepo, label)
+		}
+		seenServices[label] = c.Apps[i].Repo
 	}
 	return nil
 }

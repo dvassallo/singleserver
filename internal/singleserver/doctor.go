@@ -54,10 +54,20 @@ func cliDoctor(args []string, w io.Writer) error {
 	if !doctorDisk(w) {
 		failed = true
 	}
-	if !doctorTailscale(w, len(config.Apps)) {
+	hasPrivateApps := false
+	for _, app := range config.Apps {
+		if app.IsPrivate() {
+			hasPrivateApps = true
+			break
+		}
+	}
+	if !doctorTailscale(w, len(config.Apps), hasPrivateApps) {
 		failed = true
 	}
 	if !doctorCloudflare(w, config.Apps, apps) {
+		failed = true
+	}
+	if !doctorPostHog(w) {
 		failed = true
 	}
 
@@ -82,6 +92,9 @@ func cliDoctor(args []string, w io.Writer) error {
 			failed = true
 		}
 		if !doctorHealthcheck(w, app) {
+			failed = true
+		}
+		if !doctorFunnel(w, app) {
 			failed = true
 		}
 	}
@@ -197,7 +210,7 @@ func doctorCloudflare(w io.Writer, allApps []AppConfig, selectedApps []AppConfig
 	token := cloudflareTokenFromEnvOrState(state)
 	cloudflareConfigured := state.TunnelID != "" || token != ""
 	if !cloudflareConfigured {
-		if appsHaveHosts(selectedApps) {
+		if publicAppsHaveHosts(selectedApps) {
 			writeCheck(w, "cloudflare", "setup", "skipped", "-", "connect Cloudflare with `singleserver connect cloudflare` to verify DNS and tunnel routes")
 		} else {
 			writeCheck(w, "cloudflare", "setup", "skipped", "-", "no DNS provider configured")
@@ -262,6 +275,9 @@ func doctorCloudflare(w io.Writer, allApps []AppConfig, selectedApps []AppConfig
 	}
 
 	for _, app := range selectedApps {
+		if app.IsPrivate() {
+			continue
+		}
 		for _, host := range app.Hosts {
 			if !tunnelMode && !doctorHostResolves(w, app.Name, "dns", host) {
 				failed = true
@@ -438,18 +454,19 @@ func doctorDeployConfig(w io.Writer, app AppConfig) bool {
 		writeCheck(w, app.Name, "deploy_config", "failed", err.Error())
 		return false
 	}
-	if _, err := GeneratedDeployYAML(renderApp); err != nil {
+	_, source, err := deployYAMLForCheckout(renderApp)
+	if err != nil {
 		writeCheck(w, app.Name, "deploy_config", "failed", err.Error())
 		return false
 	}
 
 	if _, err := os.Stat(filepath.Join(app.RepoDir, ".git")); err == nil {
-		if err := gitRun(app.RepoDir, "ls-files", "--error-unmatch", "config/deploy.yml"); err == nil {
-			writeCheck(w, app.Name, "deploy_config", "ok", "repo config/deploy.yml")
+		if err := gitRun(app.RepoDir, "ls-files", "--error-unmatch", repoDeployConfigPath); err == nil {
+			writeCheck(w, app.Name, "deploy_config", "ok", "repo "+repoDeployConfigPath)
 			return true
 		}
 	}
-	writeCheck(w, app.Name, "deploy_config", "ok", "generated from conventions")
+	writeCheck(w, app.Name, "deploy_config", "ok", source)
 	return true
 }
 
@@ -571,9 +588,21 @@ func appsHaveHosts(apps []AppConfig) bool {
 	return false
 }
 
+func publicAppsHaveHosts(apps []AppConfig) bool {
+	for _, app := range apps {
+		if !app.IsPrivate() && len(app.Hosts) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 func expectedCloudflaredHosts(apps []AppConfig) map[string]bool {
 	hosts := map[string]bool{}
 	for _, app := range apps {
+		if app.IsPrivate() {
+			continue
+		}
 		for _, host := range app.Hosts {
 			host = strings.TrimSpace(host)
 			if host != "" {

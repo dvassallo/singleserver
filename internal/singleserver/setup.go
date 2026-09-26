@@ -214,7 +214,7 @@ func publicURLValue(env map[string]string) string {
 
 func hasTailscalePublicURL(env map[string]string) bool {
 	url := publicURLValue(env)
-	return strings.HasPrefix(url, "https://") && strings.Contains(url, ".ts.net")
+	return strings.HasPrefix(url, "https://") && isTailnetURL(url)
 }
 
 func tailscaleAlreadyRunning() bool {
