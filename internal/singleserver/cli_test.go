@@ -2,6 +2,8 @@ package singleserver
 
 import (
 	"bytes"
+	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -396,4 +398,27 @@ type errTestDockerUnavailable struct{}
 
 func (errTestDockerUnavailable) Error() string {
 	return "docker unavailable"
+}
+
+func TestDeployRejectsAmbiguousRepoBeforeGitHub(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "apps.yml")
+	t.Setenv("SINGLESERVER_CONFIG", configPath)
+	t.Setenv("SINGLESERVER_STATE_DIR", dir)
+	if err := os.WriteFile(configPath, []byte(`apps:
+  - repo: acme/scoreboard
+    name: scoreboard-dev
+    branch: main
+  - repo: acme/scoreboard
+    name: scoreboard-prod
+    branch: production
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	err := cliDeploy([]string{"acme/scoreboard"}, &out, log.New(io.Discard, "", 0))
+	if err == nil || !strings.Contains(err.Error(), "use the app name") {
+		t.Fatalf("expected ambiguous repo error, got %v", err)
+	}
 }

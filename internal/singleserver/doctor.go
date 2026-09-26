@@ -369,10 +369,8 @@ func doctorApps(apps []AppConfig, args []string) ([]AppConfig, error) {
 	if filter == "" {
 		return nil, errors.New("usage: singleserver doctor [app]")
 	}
-	for _, app := range apps {
-		if appMatches(app, filter) {
-			return []AppConfig{app}, nil
-		}
+	if matches := appsMatching(apps, filter); len(matches) > 0 {
+		return matches, nil
 	}
 	return nil, fmt.Errorf("%s is not configured", filter)
 }

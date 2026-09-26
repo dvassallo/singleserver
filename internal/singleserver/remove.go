@@ -48,18 +48,11 @@ func cliRemove(args []string, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	index := -1
-	var app AppConfig
-	for i := range config.Apps {
-		if appMatches(config.Apps[i], appName) {
-			index = i
-			app = config.Apps[i]
-			break
-		}
+	index, err := config.AppIndex(appName)
+	if err != nil {
+		return err
 	}
-	if index < 0 {
-		return fmt.Errorf("%s is not configured", appName)
-	}
+	app := config.Apps[index]
 
 	if prompting {
 		fmt.Fprintf(w, "Remove %s (%s).\n", app.Name, app.Repo)

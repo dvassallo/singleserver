@@ -12,10 +12,11 @@ func configuredApp(appName string) (*AppConfig, error) {
 	if err != nil {
 		return nil, err
 	}
-	if app, ok := config.AppByNameOrRepo(appName); ok {
-		return app, nil
+	index, err := config.AppIndex(appName)
+	if err != nil {
+		return nil, err
 	}
-	return nil, fmt.Errorf("%s is not configured", appName)
+	return &config.Apps[index], nil
 }
 
 func promptConfiguredAppName(p addPrompter, label string) (string, error) {
@@ -41,10 +42,8 @@ func promptConfiguredAppName(p addPrompter, label string) (string, error) {
 		if n, parseErr := strconv.Atoi(value); parseErr == nil && n >= 1 && n <= len(config.Apps) {
 			return config.Apps[n-1].Name, nil
 		}
-		for _, app := range config.Apps {
-			if appMatches(app, value) {
-				return app.Name, nil
-			}
+		if index, err := config.AppIndex(value); err == nil {
+			return config.Apps[index].Name, nil
 		}
 		fmt.Fprintln(p.w, "Enter an app name, repo, or number from the list.")
 	}
@@ -56,21 +55,30 @@ func updateConfiguredApp(appName string, mutate func(app *AppConfig) error) erro
 	if err != nil {
 		return err
 	}
-	for i := range config.Apps {
-		if !appMatches(config.Apps[i], appName) {
-			continue
-		}
-		if err := mutate(&config.Apps[i]); err != nil {
-			return err
-		}
-		if err := config.Apps[i].Normalize(); err != nil {
-			return err
-		}
-		return writeConfigFunc(configPath, config)
+	index, err := config.AppIndex(appName)
+	if err != nil {
+		return err
 	}
-	return fmt.Errorf("%s is not configured", appName)
+	if err := mutate(&config.Apps[index]); err != nil {
+		return err
+	}
+	if err := config.Apps[index].Normalize(); err != nil {
+		return err
+	}
+	return writeConfigFunc(configPath, config)
 }
 
 func appMatches(app AppConfig, value string) bool {
 	return strings.EqualFold(app.Name, value) || strings.EqualFold(app.Repo, value)
+}
+
+// appsMatching returns every app whose name or repo equals value.
+func appsMatching(apps []AppConfig, value string) []AppConfig {
+	var matches []AppConfig
+	for _, app := range apps {
+		if appMatches(app, value) {
+			matches = append(matches, app)
+		}
+	}
+	return matches
 }

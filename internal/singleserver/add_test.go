@@ -3,6 +3,7 @@ package singleserver
 import (
 	"bytes"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -396,6 +397,108 @@ func TestEscapeContentPath(t *testing.T) {
 	got := escapeContentPath("config/deploy.yml")
 	if got != "config/deploy.yml" {
 		t.Fatalf("unexpected path: %s", got)
+	}
+}
+
+func writeSingleAppConfig(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "apps.yml")
+	t.Setenv("SINGLESERVER_CONFIG", configPath)
+	t.Setenv("SINGLESERVER_STATE_DIR", dir)
+	if err := os.WriteFile(configPath, []byte(`apps:
+  - repo: acme/scoreboard
+    name: scoreboard-dev
+    branch: main
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	return configPath
+}
+
+func TestAddRequiresBranchForConfiguredRepo(t *testing.T) {
+	writeSingleAppConfig(t)
+
+	var out bytes.Buffer
+	err := cliAdd([]string{"https://github.com/acme/scoreboard", "--non-interactive"}, &out, log.New(io.Discard, "", 0))
+	if err == nil || !strings.Contains(err.Error(), "acme/scoreboard is already configured as scoreboard-dev; rerun with --branch <branch> --name <name> to add an app for another branch") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestAddWithBranchPassesConfiguredRepoCheck(t *testing.T) {
+	writeSingleAppConfig(t)
+
+	var out bytes.Buffer
+	err := cliAdd([]string{"https://github.com/acme/scoreboard", "--branch", "production", "--name", "scoreboard-prod", "--non-interactive"}, &out, log.New(io.Discard, "", 0))
+	if err == nil {
+		t.Fatal("expected the GitHub setup check to stop the test run")
+	}
+	if strings.Contains(err.Error(), "already configured") {
+		t.Fatalf("configured repo check should pass with --branch: %v", err)
+	}
+	if !strings.Contains(err.Error(), "GitHub is not connected yet") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestAddRequiresBranchOnExistingDefaultBranchApp(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "apps.yml")
+	t.Setenv("SINGLESERVER_CONFIG", configPath)
+	t.Setenv("SINGLESERVER_STATE_DIR", dir)
+	if err := os.WriteFile(configPath, []byte(`apps:
+  - acme/scoreboard
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	err := cliAdd([]string{"https://github.com/acme/scoreboard", "--branch", "production", "--name", "scoreboard-prod", "--non-interactive"}, &out, log.New(io.Discard, "", 0))
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if !strings.Contains(err.Error(), "acme/scoreboard is already configured as scoreboard on its default branch") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(err.Error(), "singleserver edit scoreboard --branch <its-branch> --no-deploy") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(err.Error(), "GitHub is not connected yet") {
+		t.Fatalf("expected the check to stop before any GitHub call: %v", err)
+	}
+}
+
+func TestAddRejectsBranchAlreadyUsed(t *testing.T) {
+	writeSingleAppConfig(t)
+
+	var out bytes.Buffer
+	err := cliAdd([]string{"https://github.com/acme/scoreboard", "--branch", "main", "--name", "scoreboard-other", "--non-interactive"}, &out, log.New(io.Discard, "", 0))
+	if err == nil || !strings.Contains(err.Error(), "acme/scoreboard branch main is already used by scoreboard-dev") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestAppendAppToConfigYAMLAllowsSameRepoOnAnotherBranch(t *testing.T) {
+	body := []byte(`apps:
+  - repo: acme/scoreboard
+    name: scoreboard-dev
+    branch: main
+`)
+	if _, err := appendAppToConfigYAML(body, addAppEntry{repo: "acme/scoreboard", name: "scoreboard-prod", branch: "production"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestAppendAppToConfigYAMLRejectsSameRepoAndBranch(t *testing.T) {
+	body := []byte(`apps:
+  - repo: acme/scoreboard
+    name: scoreboard-dev
+    branch: main
+`)
+	_, err := appendAppToConfigYAML(body, addAppEntry{repo: "acme/scoreboard", name: "scoreboard-prod", branch: "main"})
+	if err == nil || !strings.Contains(err.Error(), "duplicate repo and branch in config") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

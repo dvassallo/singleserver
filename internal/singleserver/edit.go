@@ -47,15 +47,9 @@ func cliEdit(args []string, w io.Writer, logger *log.Logger) error {
 	if err != nil {
 		return err
 	}
-	appIndex := -1
-	for i := range config.Apps {
-		if appMatches(config.Apps[i], opts.appName) {
-			appIndex = i
-			break
-		}
-	}
-	if appIndex < 0 {
-		return fmt.Errorf("%s is not configured", opts.appName)
+	appIndex, err := config.AppIndex(opts.appName)
+	if err != nil {
+		return err
 	}
 
 	original := config.Apps[appIndex]
@@ -87,11 +81,11 @@ func cliEdit(args []string, w io.Writer, logger *log.Logger) error {
 	writeCheck(w, app.Name, "config", "ok", configPath, "updated")
 
 	if opts.noDeploy {
-		writeCheck(w, app.Name, "next", "pending", "deploy with `singleserver deploy "+app.Repo+"`")
+		writeCheck(w, app.Name, "next", "pending", "deploy with `singleserver deploy "+app.Name+"`")
 		return nil
 	}
 	writeCheck(w, app.Name, "deploy", "start", "applying config change")
-	if err := cliDeploy([]string{app.Repo}, w, logger); err != nil {
+	if err := cliDeploy([]string{app.Name}, w, logger); err != nil {
 		return err
 	}
 	return cliDoctor([]string{app.Name}, w)

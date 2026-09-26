@@ -54,6 +54,26 @@ func TestDoctorAppsFiltersByNameOrRepo(t *testing.T) {
 	}
 }
 
+func TestDoctorAppsKeepsEveryAppOfSharedRepo(t *testing.T) {
+	apps := twoBranchConfig().Apps
+
+	byRepo, err := doctorApps(apps, []string{"acme/scoreboard"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(byRepo) != 2 || byRepo[0].Name != "scoreboard-dev" || byRepo[1].Name != "scoreboard-prod" {
+		t.Fatalf("expected both apps of the shared repo, got %#v", byRepo)
+	}
+
+	byName, err := doctorApps(apps, []string{"scoreboard-prod"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(byName) != 1 || byName[0].Name != "scoreboard-prod" {
+		t.Fatalf("expected exactly scoreboard-prod, got %#v", byName)
+	}
+}
+
 func TestDoctorAppsRejectsUnknownAndExtraArgs(t *testing.T) {
 	apps := []AppConfig{{Repo: "acme/scoreboard", Name: "scoreboard"}}
 

@@ -193,3 +193,33 @@ func TestRemoveDeleteStorageWithExplicitFlags(t *testing.T) {
 		t.Fatalf("expected app config removed, got %#v", config.Apps)
 	}
 }
+
+func TestRemoveRejectsAmbiguousRepo(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "apps.yml")
+	t.Setenv("SINGLESERVER_CONFIG", configPath)
+	t.Setenv("SINGLESERVER_STATE_DIR", dir)
+	if err := os.WriteFile(configPath, []byte(`apps:
+  - repo: acme/scoreboard
+    name: scoreboard-dev
+    branch: main
+  - repo: acme/scoreboard
+    name: scoreboard-prod
+    branch: production
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	err := cliRemove([]string{"acme/scoreboard"}, &out)
+	if err == nil || !strings.Contains(err.Error(), "has more than one app (scoreboard-dev, scoreboard-prod)") {
+		t.Fatalf("expected ambiguous repo error, got %v", err)
+	}
+	config, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(config.Apps) != 2 {
+		t.Fatalf("expected both apps kept, got %d", len(config.Apps))
+	}
+}

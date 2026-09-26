@@ -73,15 +73,9 @@ func cliStorageEnable(args []string, w io.Writer, logger *log.Logger) error {
 	if err != nil {
 		return err
 	}
-	appIndex := -1
-	for i := range config.Apps {
-		if appMatches(config.Apps[i], appName) {
-			appIndex = i
-			break
-		}
-	}
-	if appIndex == -1 {
-		return fmt.Errorf("%s is not configured", appName)
+	appIndex, err := config.AppIndex(appName)
+	if err != nil {
+		return err
 	}
 
 	if prompting {
@@ -145,11 +139,11 @@ func cliStorageEnable(args []string, w io.Writer, logger *log.Logger) error {
 		return err
 	}
 	if *noDeploy {
-		writeCheck(w, app.Name, "next", "pending", "deploy with `singleserver deploy "+app.Repo+"`")
+		writeCheck(w, app.Name, "next", "pending", "deploy with `singleserver deploy "+app.Name+"`")
 		return nil
 	}
 	writeCheck(w, app.Name, "deploy", "start", "applying storage change")
-	if err := cliDeploy([]string{app.Repo}, w, logger); err != nil {
+	if err := cliDeploy([]string{app.Name}, w, logger); err != nil {
 		return err
 	}
 	return cliDoctor([]string{app.Name}, w)
@@ -192,15 +186,9 @@ func cliStorageDisable(args []string, w io.Writer, logger *log.Logger) error {
 	if err != nil {
 		return err
 	}
-	appIndex := -1
-	for i := range config.Apps {
-		if appMatches(config.Apps[i], appName) {
-			appIndex = i
-			break
-		}
-	}
-	if appIndex == -1 {
-		return fmt.Errorf("%s is not configured", appName)
+	appIndex, err := config.AppIndex(appName)
+	if err != nil {
+		return err
 	}
 	app := &config.Apps[appIndex]
 	if app.Storage == nil {
@@ -239,10 +227,10 @@ func cliStorageDisable(args []string, w io.Writer, logger *log.Logger) error {
 		return err
 	}
 	if *noDeploy {
-		writeCheck(w, app.Name, "next", "pending", "deploy with `singleserver deploy "+app.Repo+"`")
+		writeCheck(w, app.Name, "next", "pending", "deploy with `singleserver deploy "+app.Name+"`")
 	} else {
 		writeCheck(w, app.Name, "deploy", "start", "applying storage change")
-		if err := cliDeploy([]string{app.Repo}, w, logger); err != nil {
+		if err := cliDeploy([]string{app.Name}, w, logger); err != nil {
 			return err
 		}
 	}

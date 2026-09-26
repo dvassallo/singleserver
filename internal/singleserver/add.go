@@ -114,8 +114,8 @@ func cliAdd(args []string, w io.Writer, logger *log.Logger) error {
 		}
 		config = &Config{}
 	}
-	if _, exists := config.AppByRepo(opts.repo); exists {
-		return fmt.Errorf("%s is already configured", opts.repo)
+	if err := checkAddAgainstSharedRepo(config, opts); err != nil {
+		return err
 	}
 
 	github := NewGitHubClient(envDefault("SINGLESERVER_STATE_DIR", "/etc/singleserver"))
@@ -230,13 +230,50 @@ func cliAdd(args []string, w io.Writer, logger *log.Logger) error {
 
 	if !opts.noDeploy {
 		writeCheck(w, app.Name, "deploy", "start", targetBranch)
-		if err := cliDeploy([]string{opts.repo, targetBranch}, w, logger); err != nil {
+		if err := cliDeploy([]string{app.Name, targetBranch}, w, logger); err != nil {
 			return err
 		}
 		return cliDoctor(nil, w)
 	}
 
-	writeCheck(w, app.Name, "next", "pending", "deploy with `singleserver deploy "+opts.repo+"`", "or push to "+targetBranch)
+	writeCheck(w, app.Name, "next", "pending", "deploy with `singleserver deploy "+app.Name+"`", "or push to "+targetBranch)
+	return nil
+}
+
+// checkAddAgainstSharedRepo rejects an add command early, before any GitHub
+// call, when the repo is already configured and the new --branch would not
+// resolve to a valid shared-repo config (config.Normalize enforces the final
+// rule once the app is appended).
+func checkAddAgainstSharedRepo(config *Config, opts addOptions) error {
+	var matches []AppConfig
+	for _, app := range config.Apps {
+		if strings.EqualFold(app.Repo, opts.repo) {
+			matches = append(matches, app)
+		}
+	}
+	if len(matches) == 0 {
+		return nil
+	}
+
+	branch := strings.TrimSpace(opts.branch)
+	if branch == "" {
+		names := make([]string, len(matches))
+		for i, app := range matches {
+			names[i] = app.Name
+		}
+		return fmt.Errorf("%s is already configured as %s; rerun with --branch <branch> --name <name> to add an app for another branch", opts.repo, strings.Join(names, ", "))
+	}
+
+	for _, app := range matches {
+		if app.Branch == "" {
+			return fmt.Errorf("%s is already configured as %s on its default branch; set its branch first with `singleserver edit %s --branch <its-branch> --no-deploy`, then rerun this command", opts.repo, app.Name, app.Name)
+		}
+	}
+	for _, app := range matches {
+		if app.Branch == branch {
+			return fmt.Errorf("%s branch %s is already used by %s; choose another --branch", opts.repo, branch, app.Name)
+		}
+	}
 	return nil
 }
 

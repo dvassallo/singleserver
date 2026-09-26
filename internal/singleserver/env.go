@@ -67,7 +67,7 @@ func cliEnv(args []string, w io.Writer) error {
 			return err
 		}
 		writeCheck(w, app.Name, "env", "ok", key, "set")
-		writeCheck(w, app.Name, "next", "pending", "deploy with `singleserver deploy "+app.Repo+"`")
+		writeCheck(w, app.Name, "next", "pending", "deploy with `singleserver deploy "+app.Name+"`")
 	case "list":
 		if len(args) != 2 {
 			return errors.New("usage: singleserver env list <app>")
@@ -103,7 +103,7 @@ func cliEnv(args []string, w io.Writer) error {
 			return err
 		}
 		writeCheck(w, app.Name, "env", "ok", key, "unset")
-		writeCheck(w, app.Name, "next", "pending", "deploy with `singleserver deploy "+app.Repo+"`")
+		writeCheck(w, app.Name, "next", "pending", "deploy with `singleserver deploy "+app.Name+"`")
 	default:
 		return fmt.Errorf("unknown env command %q", command)
 	}

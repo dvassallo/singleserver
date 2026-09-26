@@ -115,23 +115,38 @@ func TestAppByNameIsCaseInsensitive(t *testing.T) {
 	}
 }
 
-func TestAppByNameOrRepoMatchesEitherIdentifier(t *testing.T) {
+func TestAppIndexMatchesEitherIdentifier(t *testing.T) {
 	config := &Config{Apps: []AppConfig{{Repo: "acme/scoreboard", Name: "scoreboard"}}}
 
-	byName, ok := config.AppByNameOrRepo("SCOREBOARD")
-	if !ok {
-		t.Fatal("expected app by name")
-	}
-	if byName.Repo != "acme/scoreboard" {
-		t.Fatalf("unexpected app by name: %s", byName.Repo)
+	byName, err := config.AppIndex("SCOREBOARD")
+	if err != nil || byName != 0 {
+		t.Fatalf("expected app by name, got %d, %v", byName, err)
 	}
 
-	byRepo, ok := config.AppByNameOrRepo("ACME/SCOREBOARD")
-	if !ok {
-		t.Fatal("expected app by repo")
+	byRepo, err := config.AppIndex("ACME/SCOREBOARD")
+	if err != nil || byRepo != 0 {
+		t.Fatalf("expected app by repo, got %d, %v", byRepo, err)
 	}
-	if byRepo.Name != "scoreboard" {
-		t.Fatalf("unexpected app by repo: %s", byRepo.Name)
+}
+
+func TestAppIndexPrefersName(t *testing.T) {
+	index, err := twoBranchConfig().AppIndex("scoreboard-prod")
+	if err != nil || index != 1 {
+		t.Fatalf("expected scoreboard-prod, got %d, %v", index, err)
+	}
+}
+
+func TestAppIndexRejectsAmbiguousRepo(t *testing.T) {
+	_, err := twoBranchConfig().AppIndex("acme/scoreboard")
+	if err == nil || err.Error() != "acme/scoreboard has more than one app (scoreboard-dev, scoreboard-prod); use the app name" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestAppIndexReportsMissingApp(t *testing.T) {
+	_, err := twoBranchConfig().AppIndex("nope")
+	if err == nil || err.Error() != "nope is not configured" {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -343,5 +358,198 @@ func TestNormalizeRejectsInvalidDeployTimeout(t *testing.T) {
 				t.Fatalf("expected %q error, got %v", test.want, err)
 			}
 		})
+	}
+}
+
+func loadConfigBody(t *testing.T, body string) (*Config, error) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "apps.yml")
+	if err := os.WriteFile(path, []byte(body), 0600); err != nil {
+		t.Fatal(err)
+	}
+	return LoadConfig(path)
+}
+
+func TestLoadConfigAllowsSameRepoOnDifferentBranches(t *testing.T) {
+	config, err := loadConfigBody(t, `apps:
+  - repo: acme/scoreboard
+    name: scoreboard-dev
+    branch: main
+  - repo: acme/scoreboard
+    name: scoreboard-prod
+    branch: production
+`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(config.Apps) != 2 {
+		t.Fatalf("expected 2 apps, got %d", len(config.Apps))
+	}
+}
+
+func TestLoadConfigRejectsDuplicateRepoAndBranch(t *testing.T) {
+	_, err := loadConfigBody(t, `apps:
+  - repo: acme/scoreboard
+    name: scoreboard-dev
+    branch: main
+  - repo: acme/scoreboard
+    name: scoreboard-prod
+    branch: main
+`)
+	if err == nil || !strings.Contains(err.Error(), "duplicate repo and branch in config: acme/scoreboard@main is used by scoreboard-dev and scoreboard-prod") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadConfigRejectsDuplicateRepoWithoutBranches(t *testing.T) {
+	_, err := loadConfigBody(t, `apps:
+  - repo: acme/scoreboard
+    name: scoreboard-dev
+  - repo: acme/scoreboard
+    name: scoreboard-prod
+`)
+	if err == nil || !strings.Contains(err.Error(), "duplicate repo in config: acme/scoreboard") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadConfigRequiresBranchWhenRepoIsShared(t *testing.T) {
+	_, err := loadConfigBody(t, `apps:
+  - repo: acme/scoreboard
+    name: scoreboard-dev
+  - repo: acme/scoreboard
+    name: scoreboard-prod
+    branch: production
+`)
+	if err == nil || !strings.Contains(err.Error(), "acme/scoreboard has more than one app, so app scoreboard-dev must set a branch") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadConfigComparesSharedReposWithoutCase(t *testing.T) {
+	_, err := loadConfigBody(t, `apps:
+  - repo: Acme/Scoreboard
+    name: scoreboard-dev
+    branch: main
+  - repo: acme/scoreboard
+    name: scoreboard-prod
+    branch: main
+`)
+	if err == nil || !strings.Contains(err.Error(), "duplicate repo and branch in config") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadConfigKeepsSingleAppReposWithoutBranch(t *testing.T) {
+	config, err := loadConfigBody(t, `apps:
+  - acme/arcade-games
+  - acme/scoreboard
+`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if config.Apps[0].Branch != "" || config.Apps[1].Branch != "" {
+		t.Fatalf("expected no branches, got %q and %q", config.Apps[0].Branch, config.Apps[1].Branch)
+	}
+}
+
+func TestLoadConfigNamesAppsForDuplicateHostInSharedRepo(t *testing.T) {
+	_, err := loadConfigBody(t, `apps:
+  - repo: acme/scoreboard
+    name: scoreboard-dev
+    branch: main
+    hosts:
+      - dev.example.com
+  - repo: acme/scoreboard
+    name: scoreboard-prod
+    branch: production
+    hosts:
+      - dev.example.com
+`)
+	if err == nil {
+		t.Fatal("expected duplicate host error")
+	}
+	want := "duplicate host in config: dev.example.com is used by scoreboard-dev and scoreboard-prod"
+	if err.Error() != want {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadConfigAsksForNameInSharedRepo(t *testing.T) {
+	_, err := loadConfigBody(t, `apps:
+  - repo: acme/scoreboard
+    branch: main
+  - repo: acme/scoreboard
+    branch: production
+`)
+	if err == nil {
+		t.Fatal("expected duplicate app name error")
+	}
+	want := "duplicate app name in config: scoreboard is used twice by acme/scoreboard; give each app of this repo its own name"
+	if err.Error() != want {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestAppsMatchingReturnsEveryMatch(t *testing.T) {
+	apps := twoBranchConfig().Apps
+
+	byRepo := appsMatching(apps, "acme/scoreboard")
+	if len(byRepo) != 2 || byRepo[0].Name != "scoreboard-dev" || byRepo[1].Name != "scoreboard-prod" {
+		t.Fatalf("expected both apps by repo, got %#v", byRepo)
+	}
+
+	byName := appsMatching(apps, "scoreboard-prod")
+	if len(byName) != 1 || byName[0].Name != "scoreboard-prod" {
+		t.Fatalf("expected exactly scoreboard-prod, got %#v", byName)
+	}
+
+	if got := appsMatching(apps, "nope"); got != nil {
+		t.Fatalf("expected nil for no match, got %#v", got)
+	}
+}
+
+func twoBranchConfig() *Config {
+	return &Config{Apps: []AppConfig{
+		{Repo: "acme/scoreboard", Name: "scoreboard-dev", Branch: "main"},
+		{Repo: "acme/scoreboard", Name: "scoreboard-prod", Branch: "production"},
+	}}
+}
+
+func pushTo(branch string) *PushPayload {
+	return &PushPayload{
+		Ref:   "refs/heads/" + branch,
+		After: "abc123",
+		Repository: Repo{
+			FullName:      "acme/scoreboard",
+			DefaultBranch: "main",
+		},
+	}
+}
+
+func TestAppForPushPicksAppByBranch(t *testing.T) {
+	config := twoBranchConfig()
+
+	app, _, reason := config.AppForPush(pushTo("production"))
+	if app == nil || app.Name != "scoreboard-prod" {
+		t.Fatalf("expected scoreboard-prod, got %v (%s)", app, reason)
+	}
+
+	app, _, reason = config.AppForPush(pushTo("main"))
+	if app == nil || app.Name != "scoreboard-dev" {
+		t.Fatalf("expected scoreboard-dev, got %v (%s)", app, reason)
+	}
+}
+
+func TestAppForPushIgnoresBranchWithoutApp(t *testing.T) {
+	app, branch, reason := twoBranchConfig().AppForPush(pushTo("feature"))
+	if app != nil {
+		t.Fatalf("did not expect app %s", app.Name)
+	}
+	if branch != "feature" {
+		t.Fatalf("unexpected branch: %s", branch)
+	}
+	if !strings.Contains(reason, "does not match") {
+		t.Fatalf("unexpected reason: %s", reason)
 	}
 }

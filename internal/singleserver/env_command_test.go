@@ -21,7 +21,7 @@ func TestEnvCommandWritesServerSideEnv(t *testing.T) {
 	if err := cliEnv([]string{"set", "scoreboard", "DATABASE_URL=sqlite:///storage/app.db"}, &out); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "scoreboard\tnext\tpending\tdeploy with `singleserver deploy acme/scoreboard`") {
+	if !strings.Contains(out.String(), "scoreboard\tnext\tpending\tdeploy with `singleserver deploy scoreboard`") {
 		t.Fatalf("expected next deploy message, got:\n%s", out.String())
 	}
 	values, err := loadAppEnv("scoreboard")

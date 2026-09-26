@@ -91,11 +91,11 @@ func cliDomainChange(args []string, add bool, w io.Writer, logger *log.Logger) e
 		return err
 	}
 	if *noDeploy {
-		writeCheck(w, app.Name, "next", "pending", "deploy with `singleserver deploy "+app.Repo+"`")
+		writeCheck(w, app.Name, "next", "pending", "deploy with `singleserver deploy "+app.Name+"`")
 		return nil
 	}
 	writeCheck(w, app.Name, "deploy", "start", "applying domain change")
-	if err := cliDeploy([]string{app.Repo}, w, logger); err != nil {
+	if err := cliDeploy([]string{app.Name}, w, logger); err != nil {
 		return err
 	}
 	return cliDoctor([]string{app.Name}, w)
@@ -111,15 +111,9 @@ func updateDomain(appName string, host string, add bool, w io.Writer) (*AppConfi
 	if err != nil {
 		return nil, err
 	}
-	appIndex := -1
-	for i := range config.Apps {
-		if appMatches(config.Apps[i], appName) {
-			appIndex = i
-			break
-		}
-	}
-	if appIndex < 0 {
-		return nil, fmt.Errorf("%s is not configured", appName)
+	appIndex, err := config.AppIndex(appName)
+	if err != nil {
+		return nil, err
 	}
 
 	if !add && !containsFold(config.Apps[appIndex].Hosts, host) {
@@ -204,13 +198,7 @@ func verifyDomains(args []string, w io.Writer) error {
 	}
 	apps := config.Apps
 	if len(args) == 1 {
-		apps = nil
-		for _, app := range config.Apps {
-			if appMatches(app, args[0]) {
-				apps = []AppConfig{app}
-				break
-			}
-		}
+		apps = appsMatching(config.Apps, args[0])
 		if len(apps) == 0 {
 			return fmt.Errorf("%s is not configured", args[0])
 		}

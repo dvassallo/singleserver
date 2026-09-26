@@ -313,32 +313,57 @@ func LoadConfig(path string) (*Config, error) {
 	return &config, nil
 }
 
+// sharedRepoApp remembers the repo and name of an app already seen while
+// checking for duplicates, so the error for two apps of the same repo can
+// name the apps instead of printing the same repo twice.
+type sharedRepoApp struct {
+	repo string
+	name string
+}
+
 func (c *Config) Normalize() error {
-	seenRepos := map[string]bool{}
-	seenNames := map[string]string{}
-	seenHosts := map[string]string{}
+	seenRepoBranches := map[string]string{}
+	appsPerRepo := map[string]int{}
+	seenNames := map[string]sharedRepoApp{}
+	seenHosts := map[string]sharedRepoApp{}
 	for i := range c.Apps {
 		if err := c.Apps[i].Normalize(); err != nil {
 			return err
 		}
 		repoKey := strings.ToLower(c.Apps[i].Repo)
-		if seenRepos[repoKey] {
-			return fmt.Errorf("duplicate repo in config: %s", c.Apps[i].Repo)
+		appsPerRepo[repoKey]++
+		repoBranchKey := repoKey + "@" + c.Apps[i].Branch
+		if existingApp := seenRepoBranches[repoBranchKey]; existingApp != "" {
+			if c.Apps[i].Branch == "" {
+				return fmt.Errorf("duplicate repo in config: %s; give each app of this repo its own branch", c.Apps[i].Repo)
+			}
+			return fmt.Errorf("duplicate repo and branch in config: %s@%s is used by %s and %s", c.Apps[i].Repo, c.Apps[i].Branch, existingApp, c.Apps[i].Name)
 		}
-		seenRepos[repoKey] = true
+		seenRepoBranches[repoBranchKey] = c.Apps[i].Name
 
 		nameKey := strings.ToLower(c.Apps[i].Name)
-		if existingRepo := seenNames[nameKey]; existingRepo != "" {
-			return fmt.Errorf("duplicate app name in config: %s is used by %s and %s", c.Apps[i].Name, existingRepo, c.Apps[i].Repo)
+		if existing, seen := seenNames[nameKey]; seen {
+			if strings.EqualFold(existing.repo, c.Apps[i].Repo) {
+				return fmt.Errorf("duplicate app name in config: %s is used twice by %s; give each app of this repo its own name", c.Apps[i].Name, c.Apps[i].Repo)
+			}
+			return fmt.Errorf("duplicate app name in config: %s is used by %s and %s", c.Apps[i].Name, existing.repo, c.Apps[i].Repo)
 		}
-		seenNames[nameKey] = c.Apps[i].Repo
+		seenNames[nameKey] = sharedRepoApp{repo: c.Apps[i].Repo, name: c.Apps[i].Name}
 
 		for _, host := range c.Apps[i].Hosts {
 			hostKey := strings.ToLower(host)
-			if existingRepo := seenHosts[hostKey]; existingRepo != "" {
-				return fmt.Errorf("duplicate host in config: %s is used by %s and %s", host, existingRepo, c.Apps[i].Repo)
+			if existing, seen := seenHosts[hostKey]; seen {
+				if strings.EqualFold(existing.repo, c.Apps[i].Repo) {
+					return fmt.Errorf("duplicate host in config: %s is used by %s and %s", host, existing.name, c.Apps[i].Name)
+				}
+				return fmt.Errorf("duplicate host in config: %s is used by %s and %s", host, existing.repo, c.Apps[i].Repo)
 			}
-			seenHosts[hostKey] = c.Apps[i].Repo
+			seenHosts[hostKey] = sharedRepoApp{repo: c.Apps[i].Repo, name: c.Apps[i].Name}
+		}
+	}
+	for _, app := range c.Apps {
+		if app.Branch == "" && appsPerRepo[strings.ToLower(app.Repo)] > 1 {
+			return fmt.Errorf("%s has more than one app, so app %s must set a branch", app.Repo, app.Name)
 		}
 	}
 	return nil
@@ -362,13 +387,29 @@ func (c *Config) AppByName(name string) (*AppConfig, bool) {
 	return nil, false
 }
 
-func (c *Config) AppByNameOrRepo(value string) (*AppConfig, bool) {
+// AppIndex finds an app by name, or by repo when exactly one app uses that repo.
+func (c *Config) AppIndex(value string) (int, error) {
 	for i := range c.Apps {
-		if appMatches(c.Apps[i], value) {
-			return &c.Apps[i], true
+		if strings.EqualFold(c.Apps[i].Name, value) {
+			return i, nil
 		}
 	}
-	return nil, false
+	matches := []string{}
+	index := -1
+	for i := range c.Apps {
+		if strings.EqualFold(c.Apps[i].Repo, value) {
+			matches = append(matches, c.Apps[i].Name)
+			index = i
+		}
+	}
+	switch len(matches) {
+	case 0:
+		return -1, fmt.Errorf("%s is not configured", value)
+	case 1:
+		return index, nil
+	default:
+		return -1, fmt.Errorf("%s has more than one app (%s); use the app name", value, strings.Join(matches, ", "))
+	}
 }
 
 func (c *Config) AppForPush(payload *PushPayload) (*AppConfig, string, string) {
@@ -379,6 +420,7 @@ func (c *Config) AppForPush(payload *PushPayload) (*AppConfig, string, string) {
 	if branch == "" {
 		return nil, "", "unsupported push ref"
 	}
+	reason := payload.Repository.FullName + " is not configured"
 	for i := range c.Apps {
 		app := &c.Apps[i]
 		if !strings.EqualFold(app.Repo, payload.Repository.FullName) {
@@ -389,14 +431,16 @@ func (c *Config) AppForPush(payload *PushPayload) (*AppConfig, string, string) {
 			targetBranch = strings.TrimSpace(payload.Repository.DefaultBranch)
 		}
 		if targetBranch == "" {
-			return nil, branch, app.Repo + " default branch is missing"
+			reason = app.Repo + " default branch is missing"
+			continue
 		}
 		if branch != targetBranch {
-			return nil, branch, fmt.Sprintf("%s:%s does not match %s", app.Repo, branch, targetBranch)
+			reason = fmt.Sprintf("%s:%s does not match %s", app.Repo, branch, targetBranch)
+			continue
 		}
 		return app, branch, ""
 	}
-	return nil, branch, payload.Repository.FullName + " is not configured"
+	return nil, branch, reason
 }
 
 func branchFromRef(ref string) string {

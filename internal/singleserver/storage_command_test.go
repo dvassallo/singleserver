@@ -30,7 +30,7 @@ func TestDomainsAndStorageCommandsUpdateConfig(t *testing.T) {
 	if err := cliStorage([]string{"enable", "scoreboard", "--path", storagePath, "--mount", "/data", "--no-deploy"}, &out, logger); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "scoreboard\tnext\tpending\tdeploy with `singleserver deploy acme/scoreboard`") {
+	if !strings.Contains(out.String(), "scoreboard\tnext\tpending\tdeploy with `singleserver deploy scoreboard`") {
 		t.Fatalf("expected staged deploy message, got:\n%s", out.String())
 	}
 
