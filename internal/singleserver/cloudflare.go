@@ -22,6 +22,13 @@ import (
 
 const cloudflareAPI = "https://api.cloudflare.com/client/v4"
 
+// cloudflarePageSize is the page size for Cloudflare list calls. 50 is the
+// maximum that GET /zones accepts; the default is 20.
+const cloudflarePageSize = 50
+
+// cloudflareMaxPages stops a list call that never reaches its last page.
+const cloudflareMaxPages = 1000
+
 type CloudflareState struct {
 	APIToken        string `json:"api_token"`
 	AccountID       string `json:"account_id"`
@@ -35,6 +42,7 @@ type CloudflareState struct {
 
 type CloudflareClient struct {
 	token      string
+	baseURL    string
 	httpClient *http.Client
 
 	zonesOnce sync.Once
@@ -82,6 +90,7 @@ func newCloudflareClient(token string) (*CloudflareClient, error) {
 	}
 	return &CloudflareClient{
 		token:      token,
+		baseURL:    cloudflareAPI,
 		httpClient: &http.Client{Timeout: 30 * time.Second},
 	}, nil
 }
@@ -125,17 +134,53 @@ func cloudflareTokenFromEnvOrState(state *CloudflareState) string {
 }
 
 func (c *CloudflareClient) zones(name string) ([]cloudflareZone, error) {
-	path := "/zones"
+	query := url.Values{}
 	if strings.TrimSpace(name) != "" {
-		path += "?name=" + urlQueryEscape(name)
+		query.Set("name", name)
 	}
-	var out struct {
-		Result []cloudflareZone `json:"result"`
+	return cloudflareList[cloudflareZone](c, "/zones", query)
+}
+
+// cloudflareList runs a Cloudflare list call and follows its pages. A list
+// call returns one page only (20 items by default), so a single request
+// misses every item after the first page.
+func cloudflareList[T any](c *CloudflareClient, path string, query url.Values) ([]T, error) {
+	var all []T
+	for page := 1; page <= cloudflareMaxPages; page++ {
+		pageQuery := url.Values{}
+		for key, values := range query {
+			pageQuery[key] = values
+		}
+		pageQuery.Set("page", fmt.Sprint(page))
+		pageQuery.Set("per_page", fmt.Sprint(cloudflarePageSize))
+		var out struct {
+			Result     []T `json:"result"`
+			ResultInfo struct {
+				TotalPages int `json:"total_pages"`
+				TotalCount int `json:"total_count"`
+			} `json:"result_info"`
+		}
+		if err := c.request("GET", path+"?"+pageQuery.Encode(), nil, &out); err != nil {
+			return nil, err
+		}
+		all = append(all, out.Result...)
+		info := out.ResultInfo
+		switch {
+		case len(out.Result) == 0:
+			return all, nil
+		case info.TotalPages > 0:
+			if page >= info.TotalPages {
+				return all, nil
+			}
+		case info.TotalCount > 0:
+			if len(all) >= info.TotalCount {
+				return all, nil
+			}
+		case len(out.Result) < cloudflarePageSize:
+			return all, nil
+		}
 	}
-	if err := c.request("GET", path, nil, &out); err != nil {
-		return nil, err
-	}
-	return out.Result, nil
+	return nil, fmt.Errorf("Cloudflare API GET %s returned more than %d pages", path, cloudflareMaxPages)
 }
 
 func (c *CloudflareClient) allZones() ([]cloudflareZone, error) {
@@ -182,14 +227,14 @@ func zoneForHostnameFromList(hostname string, zones []cloudflareZone) (*cloudfla
 }
 
 func (c *CloudflareClient) findTunnel(accountID string, name string) (*cloudflareTunnel, error) {
-	var out struct {
-		Result []cloudflareTunnel `json:"result"`
-	}
-	path := fmt.Sprintf("/accounts/%s/cfd_tunnel?is_deleted=false&name=%s", accountID, urlQueryEscape(name))
-	if err := c.request("GET", path, nil, &out); err != nil {
+	query := url.Values{}
+	query.Set("is_deleted", "false")
+	query.Set("name", name)
+	tunnels, err := cloudflareList[cloudflareTunnel](c, "/accounts/"+accountID+"/cfd_tunnel", query)
+	if err != nil {
 		return nil, err
 	}
-	for _, tunnel := range out.Result {
+	for _, tunnel := range tunnels {
 		if strings.EqualFold(tunnel.Name, name) {
 			return &tunnel, nil
 		}
@@ -269,14 +314,10 @@ func conflictingCNAMERecord(records []cloudflareDNSRecord, target string) *cloud
 }
 
 func (c *CloudflareClient) dnsRecords(zoneID string, hostname string, recordType string) ([]cloudflareDNSRecord, error) {
-	var out struct {
-		Result []cloudflareDNSRecord `json:"result"`
-	}
-	path := fmt.Sprintf("/zones/%s/dns_records?type=%s&name=%s", zoneID, urlQueryEscape(recordType), urlQueryEscape(hostname))
-	if err := c.request("GET", path, nil, &out); err != nil {
-		return nil, err
-	}
-	return out.Result, nil
+	query := url.Values{}
+	query.Set("type", recordType)
+	query.Set("name", hostname)
+	return cloudflareList[cloudflareDNSRecord](c, "/zones/"+zoneID+"/dns_records", query)
 }
 
 func (c *CloudflareClient) request(method string, path string, body any, output any) error {
@@ -288,7 +329,7 @@ func (c *CloudflareClient) request(method string, path string, body any, output 
 		}
 		reader = bytes.NewReader(encoded)
 	}
-	req, err := http.NewRequest(method, cloudflareAPI+path, reader)
+	req, err := http.NewRequest(method, c.baseURL+path, reader)
 	if err != nil {
 		return err
 	}
@@ -504,10 +545,6 @@ func randomTunnelSecret() (string, error) {
 		return "", err
 	}
 	return base64.StdEncoding.EncodeToString(secret), nil
-}
-
-func urlQueryEscape(value string) string {
-	return url.QueryEscape(value)
 }
 
 func writeCloudflaredCredentials(path string, state *CloudflareState) error {
