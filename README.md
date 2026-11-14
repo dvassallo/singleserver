@@ -30,6 +30,10 @@ singleserver add https://github.com/you/your-app
 
 Every push to the configured branch deploys from then on. The [docs](https://singleserver.com/docs/) cover everything else.
 
+## One-Click Deploy
+
+[![Deploy on RepoCloud](https://d16t0pc4846x52.cloudfront.net/deploylobe.svg)](https://repocloud.io/details/Single%20Server/)
+
 ## Repository layout
 
 - `cmd/singleserverd` — entry point for the one Go binary, which runs as both the deploy daemon and the CLI.
