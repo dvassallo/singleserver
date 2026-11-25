@@ -95,6 +95,9 @@ func (m *DeployManager) run(req DeployRequest) (DeployTiming, error) {
 
 	_ = m.github.CreateCommitStatus(req.Repo, req.SHA, token, "success", fmt.Sprintf("Single Server deployed in %dms", timing.TotalMS))
 	m.logger.Printf("[deploy:%s] success total_ms=%d", req.RunID, timing.TotalMS)
+	if req.App.CleanupAfterDeploy {
+		m.cleanupAfterDeploy(req.App, req.RunID)
+	}
 	return timing, nil
 }
 

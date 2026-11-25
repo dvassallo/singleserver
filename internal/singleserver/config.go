@@ -39,7 +39,13 @@ type AppConfig struct {
 	StaticDir       string         `yaml:"static_dir,omitempty"`
 	DeployTimeout   string         `yaml:"deploy_timeout,omitempty"`
 	Storage         *StorageConfig `yaml:"storage,omitempty"`
-	SecretEnvKeys   []string       `yaml:"-"`
+	// CleanupAfterDeploy prunes stopped containers, their unused images and
+	// old build cache after a successful deploy. Off by default.
+	CleanupAfterDeploy bool `yaml:"cleanup_after_deploy,omitempty"`
+	// RetainContainers is how many app containers Kamal keeps when pruning.
+	// Defaults to 2 (current + previous for rollback) when cleanup is on.
+	RetainContainers int      `yaml:"retain_containers,omitempty"`
+	SecretEnvKeys    []string `yaml:"-"`
 }
 
 type StorageConfig struct {
@@ -101,6 +107,12 @@ func (a *AppConfig) Normalize() error {
 			return fmt.Errorf("deploy_timeout for %s must be positive: %q", a.Repo, a.DeployTimeout)
 		}
 	}
+	if a.RetainContainers < 0 {
+		return fmt.Errorf("retain_containers for %s must be at least 1: %d", a.Repo, a.RetainContainers)
+	}
+	if a.CleanupAfterDeploy && a.RetainContainers == 0 {
+		a.RetainContainers = defaultRetainContainers
+	}
 	if a.AppPort == 0 {
 		a.AppPort = 80
 	}
@@ -157,6 +169,8 @@ func (a *AppConfig) Normalize() error {
 }
 
 const defaultDeployTimeout = 10 * time.Minute
+
+const defaultRetainContainers = 2
 
 func (a AppConfig) DeployTimeoutDuration() time.Duration {
 	if parsed, err := time.ParseDuration(a.DeployTimeout); err == nil && parsed > 0 {

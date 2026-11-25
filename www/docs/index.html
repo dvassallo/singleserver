@@ -181,6 +181,7 @@
         </div>
 
         <p>Deploys for the same app run one at a time, in order, so rapid pushes queue up. The first deploy of an app runs <code>kamal setup</code>, and every deploy after that runs <code>kamal redeploy</code>. A deploy that runs past its timeout, 10 minutes by default, is killed and reported as failed. Apps with heavier builds can raise <code>deploy_timeout</code>. And if the app has an external healthcheck URL configured, Single Server polls it after the rollout and fails the deploy if it never comes up.</p>
+        <p><code>kamal redeploy</code> does not prune, so old containers, images, and build cache pile up over time. Set <code>cleanup_after_deploy: true</code> on an app to clean up after each successful deploy.</p>
         <p>Manual deploys go through exactly the same path. <code>singleserver deploy</code> exists for redeploys, rollbacks, and staged changes, not as a separate mechanism.</p>
     </section>
 
@@ -523,6 +524,8 @@ singleserver storage disable &lt;app&gt; [--delete] [--no-deploy] [--non-interac
             <li><strong><code>healthcheck</code></strong><span class="default">Default: absent.</span> Optional external URL checked after deploys and by status and doctor. When absent, the external check is reported as assumed rather than failed.</li>
             <li><strong><code>deploy_timeout</code></strong><span class="default">Default: 10m.</span> How long a deploy may run before it is killed and reported as failed. A Go duration such as <code>20m</code> or <code>90s</code>.</li>
             <li><strong><code>storage</code></strong><span class="default">Default: absent until enabled.</span> Persistent storage mapping, with optional <code>path</code> (host, default <code>/srv/storage/&lt;name&gt;</code>) and <code>mount</code> (container, default <code>/storage</code>).</li>
+            <li><strong><code>cleanup_after_deploy</code></strong><span class="default">Default: <code>false</code>.</span> After a successful deploy and healthcheck, run <code>kamal prune all</code> and <code>docker builder prune -f --filter until=24h</code>. This removes stopped app containers beyond <code>retain_containers</code>, the images only they used, and build cache unused for a day. It never removes Docker volumes, local registry contents, or anything under <code>/srv/storage</code>. A cleanup failure is logged and the deploy still counts as successful.</li>
+            <li><strong><code>retain_containers</code></strong><span class="default">Default: <code>2</code> when cleanup is on.</span> How many app containers Kamal keeps when pruning: the current one plus the previous one for rollback. Applies to the generated Kamal config only; a repo with its own <code>config/deploy.yml</code> keeps its own retention.</li>
         </ul>
 
         <h3 id="dockerfiles">Generated Dockerfiles</h3>

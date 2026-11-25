@@ -19,6 +19,9 @@ type kamalDeployConfig struct {
 	Volumes       []string               `yaml:"volumes,omitempty"`
 	DeployTimeout int                    `yaml:"deploy_timeout"`
 	DrainTimeout  int                    `yaml:"drain_timeout"`
+	// RetainContainers is only set when post-deploy cleanup is on, so apps
+	// without it keep Kamal's default retention.
+	RetainContainers int `yaml:"retain_containers,omitempty"`
 }
 
 type kamalServer struct {
@@ -123,6 +126,9 @@ func GeneratedDeployYAML(app AppConfig) ([]byte, error) {
 	}
 	if len(app.SecretEnvKeys) > 0 {
 		config.Env = &kamalEnv{Secret: app.SecretEnvKeys}
+	}
+	if app.CleanupAfterDeploy {
+		config.RetainContainers = app.RetainContainers
 	}
 	if app.Storage != nil {
 		config.Volumes = []string{app.Storage.Path + ":" + app.Storage.Mount}

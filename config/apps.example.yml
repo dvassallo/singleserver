@@ -3,6 +3,9 @@ apps:
   - repo: acme/scoreboard
     branch: master
     healthcheck: https://scoreboard.example.com/up
+    # Prune old containers, images and build cache after each successful
+    # deploy. Never touches volumes. Keeps 2 containers unless set.
+    cleanup_after_deploy: true
   - repo: acme/marketing-site
     branch: master
     hosts:

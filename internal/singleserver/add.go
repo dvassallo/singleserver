@@ -95,6 +95,8 @@ type addAppEntry struct {
 	appPortSet      bool
 	deployTimeout   string
 	storage         *StorageConfig
+	cleanup         bool
+	retain          int
 }
 
 func cliAdd(args []string, w io.Writer, logger *log.Logger) error {
@@ -782,6 +784,12 @@ func (e addAppEntry) yamlNode() *yaml.Node {
 		}
 		appendNodePair(node, "storage", storageNode)
 	}
+	if e.cleanup {
+		appendScalarPair(node, "cleanup_after_deploy", "true")
+	}
+	if e.retain != 0 && !(e.cleanup && e.retain == defaultRetainContainers) {
+		appendScalarPair(node, "retain_containers", strconv.Itoa(e.retain))
+	}
 	return node
 }
 
@@ -799,7 +807,9 @@ func (e addAppEntry) isScalar() bool {
 		!shouldWriteStaticDir(e.runtime, e.staticDir) &&
 		!e.appPortSet &&
 		e.deployTimeout == "" &&
-		e.storage == nil
+		e.storage == nil &&
+		!e.cleanup &&
+		e.retain == 0
 }
 
 func shouldWriteStaticDir(runtime, staticDir string) bool {
